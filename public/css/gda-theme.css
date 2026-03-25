@@ -1,0 +1,487 @@
+/**
+ * Gda Money — charte couleur
+ * Principale #FF6A3A | Second #381419 | #303030 | #b26440 | #ffffff
+ */
+:root,
+[data-bs-theme="light"] {
+    --gda-orange: #ff6a3a;
+    --gda-burgundy: #381419;
+    --gda-charcoal: #303030;
+    --gda-terracotta: #b26440;
+    --gda-white: #ffffff;
+
+    --bs-primary: #ff6a3a;
+    --bs-primary-rgb: 255, 106, 58;
+    --bs-link-color: #b26440;
+    --bs-link-hover-color: #ff6a3a;
+    --bs-focus-ring-color: rgba(255, 106, 58, 0.35);
+    --bs-body-bg: #f4f2f1;
+    --bs-body-color: #303030;
+    --bs-border-radius: 0.75rem;
+    --bs-border-radius-lg: 1rem;
+    --bs-border-radius-xl: 1.25rem;
+}
+
+body.gda-app {
+    font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+    font-optical-sizing: auto;
+    min-height: 100vh;
+    background:
+        radial-gradient(ellipse 120% 80% at 100% -20%, rgba(255, 106, 58, 0.12) 0%, transparent 50%),
+        radial-gradient(ellipse 80% 60% at 0% 100%, rgba(56, 20, 25, 0.08) 0%, transparent 45%),
+        linear-gradient(180deg, #ebe8e6 0%, #f4f2f1 35%, #efedeb 100%);
+    background-attachment: fixed;
+}
+
+body.gda-app main.container {
+    padding-bottom: 3rem;
+}
+
+body.gda-app main h4 {
+    font-family: "Syne", sans-serif;
+    font-weight: 700;
+    color: #381419;
+    letter-spacing: -0.02em;
+}
+
+/* ---------- Navbar ---------- */
+.navbar.gda-navbar.gda-navbar-split {
+    padding: 0;
+    align-items: stretch;
+}
+
+.navbar.gda-navbar {
+    background: linear-gradient(135deg, #381419 0%, #303030 55%, #2a2224 100%) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    border-bottom: 3px solid var(--gda-orange);
+}
+
+.gda-navbar-row {
+    min-height: 5.5rem;
+}
+
+.gda-navbar-end {
+    min-width: 0;
+}
+
+.navbar.gda-navbar .navbar-toggler {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.navbar.gda-navbar .navbar-toggler-icon {
+    filter: invert(1);
+}
+
+.gda-brand {
+    font-family: "Syne", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-decoration: none !important;
+}
+
+.gda-brand:hover {
+    opacity: 0.98;
+}
+
+.gda-brand-zone {
+    margin: 0;
+    padding: 0;
+    flex: 0 0 auto;
+    align-self: stretch;
+    max-width: 100%;
+}
+
+.gda-brand:hover .gda-brand-wrap {
+    background: linear-gradient(
+        90deg,
+        #ffffff 0%,
+        rgba(255, 255, 255, 0.94) 28%,
+        rgba(255, 255, 255, 0.35) 58%,
+        rgba(255, 255, 255, 0.08) 78%,
+        rgba(56, 20, 25, 0) 100%
+    );
+}
+
+/* Dégradé blanc : fusion douce avec le fond nav (sans bordure / ombre visibles) */
+.gda-brand-wrap {
+    margin: 0;
+    padding: 1rem 3rem 1rem max(0.75rem, env(safe-area-inset-left, 0px));
+    border-radius: 0;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    min-height: 100%;
+    min-width: min(58vw, 520px);
+    box-sizing: border-box;
+    background: linear-gradient(
+        90deg,
+        #ffffff 0%,
+        rgba(255, 255, 255, 0.97) 15%,
+        rgba(255, 255, 255, 0.75) 32%,
+        rgba(255, 255, 255, 0.35) 52%,
+        rgba(255, 255, 255, 0.12) 68%,
+        rgba(255, 255, 255, 0.03) 82%,
+        rgba(48, 48, 48, 0) 96%,
+        transparent 100%
+    );
+}
+
+@media (max-width: 991.98px) {
+    .gda-brand-wrap {
+        min-width: 0;
+        flex: 1 1 auto;
+        padding-right: 1.5rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .gda-brand-wrap {
+        padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+        padding-right: 0.75rem;
+        gap: 0.65rem !important;
+    }
+
+    .gda-navbar-row {
+        min-height: 4.75rem;
+    }
+}
+
+.gda-logo-img {
+    height: 72px;
+    width: auto;
+    max-width: 200px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 8px rgba(48, 48, 48, 0.15));
+}
+
+.gda-brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.gda-brand-wrap .gda-brand-title {
+    font-size: 1.55rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #381419 0%, #b26440 45%, #ff6a3a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.gda-brand-wrap .gda-brand-tagline {
+    font-family: "DM Sans", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: #303030;
+    opacity: 0.72;
+}
+
+.navbar.gda-navbar .nav-link {
+    font-weight: 500;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.85rem !important;
+    transition: color 0.2s, background 0.2s;
+}
+
+.navbar.gda-navbar .nav-link:hover,
+.navbar.gda-navbar .nav-link:focus {
+    color: #ff6a3a !important;
+    background: rgba(255, 106, 58, 0.1);
+}
+
+.navbar.gda-navbar .btn-link.nav-link {
+    border: none;
+    text-decoration: none;
+}
+
+.navbar.gda-navbar .dropdown-menu {
+    border: 1px solid rgba(255, 106, 58, 0.2);
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 40px rgba(48, 48, 48, 0.18);
+    overflow: hidden;
+}
+
+.navbar.gda-navbar .dropdown-item:hover,
+.navbar.gda-navbar .dropdown-item:focus {
+    background: rgba(255, 106, 58, 0.12);
+    color: #381419;
+}
+
+/* ---------- Titres de page ---------- */
+.gda-page-title {
+    font-family: "Syne", sans-serif;
+    font-weight: 700;
+    color: #381419;
+    letter-spacing: -0.03em;
+}
+
+/* ---------- Cartes ---------- */
+body.gda-app .card {
+    border: 1px solid rgba(48, 48, 48, 0.06);
+    border-radius: 1rem;
+    box-shadow: 0 4px 24px rgba(48, 48, 48, 0.07);
+    overflow: hidden;
+}
+
+body.gda-app .card.shadow-sm {
+    box-shadow: 0 4px 20px rgba(48, 48, 48, 0.08) !important;
+}
+
+body.gda-app .card-header:not(.bg-primary) {
+    background: linear-gradient(180deg, #fafafa 0%, #f3f1f0 100%);
+    border-bottom: 1px solid rgba(48, 48, 48, 0.08);
+    font-weight: 600;
+    color: #381419;
+}
+
+/* En-têtes de cartes orange */
+body.gda-app .card-header.bg-primary.text-white {
+    background: linear-gradient(135deg, #ff6a3a 0%, #b26440 100%) !important;
+    border: none;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Cartes stat primaires */
+body.gda-app .card.bg-primary.text-white {
+    background: linear-gradient(135deg, #ff6a3a 0%, #b26440 100%) !important;
+    border: none !important;
+    box-shadow: 0 8px 28px rgba(255, 106, 58, 0.35);
+}
+
+body.gda-app .card.bg-primary.text-white .card-body h6 {
+    opacity: 0.92;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+}
+
+/* Cartes succès / secondaires stats */
+body.gda-app .card.bg-success.text-white {
+    background: linear-gradient(135deg, #b26440 0%, #8a4a32 100%) !important;
+    border: none !important;
+    box-shadow: 0 8px 24px rgba(178, 100, 64, 0.3);
+}
+
+/* Bloc campagne / hero dashboard */
+.gda-card-hero {
+    background: linear-gradient(135deg, #381419 0%, #303030 100%) !important;
+    border: none !important;
+    border-left: 4px solid #ff6a3a !important;
+    box-shadow: 0 12px 40px rgba(56, 20, 25, 0.35);
+}
+
+/* Bandeau utilisateur */
+.gda-user-strip {
+    background: linear-gradient(90deg, rgba(255, 106, 58, 0.1) 0%, #fff 55%, #faf9f9 100%);
+    border-left: 4px solid #ff6a3a !important;
+}
+
+.gda-user-strip .text-muted {
+    color: #6c5c5e !important;
+}
+
+/* ---------- Boutons ---------- */
+body.gda-app .btn-primary {
+    background: linear-gradient(135deg, #ff6a3a 0%, #e85a2e 100%);
+    border: none;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(255, 106, 58, 0.35);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+body.gda-app .btn-primary:hover {
+    background: linear-gradient(135deg, #ff7d52 0%, #ff6a3a 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 22px rgba(255, 106, 58, 0.45);
+}
+
+body.gda-app .btn-primary:active {
+    transform: translateY(0);
+}
+
+body.gda-app .btn-outline-primary {
+    border-width: 2px;
+    border-color: #ff6a3a;
+    color: #b26440;
+    font-weight: 600;
+}
+
+body.gda-app .btn-outline-primary:hover {
+    background: #ff6a3a;
+    border-color: #ff6a3a;
+    color: #fff;
+}
+
+body.gda-app .btn-outline-secondary {
+    border-color: rgba(48, 48, 48, 0.25);
+    color: #303030;
+    font-weight: 500;
+}
+
+body.gda-app .btn-outline-secondary:hover {
+    background: #303030;
+    border-color: #303030;
+    color: #fff;
+}
+
+/* ---------- Badges & alertes ---------- */
+body.gda-app .badge.bg-primary {
+    background: linear-gradient(135deg, #ff6a3a 0%, #b26440 100%) !important;
+}
+
+body.gda-app .alert {
+    border: none;
+    border-radius: 0.75rem;
+    border-left: 4px solid;
+}
+
+body.gda-app .alert-success {
+    border-left-color: #198754;
+    background: rgba(25, 135, 84, 0.08);
+}
+
+body.gda-app .alert-danger {
+    border-left-color: #dc3545;
+    background: rgba(220, 53, 69, 0.08);
+}
+
+body.gda-app .alert-warning {
+    border-left-color: #b26440;
+    background: rgba(178, 100, 64, 0.12);
+    color: #381419;
+}
+
+body.gda-app .alert-info {
+    border-left-color: #ff6a3a;
+    background: rgba(255, 106, 58, 0.1);
+    color: #381419;
+}
+
+/* ---------- Tables ---------- */
+body.gda-app .table thead.table-light th {
+    background: linear-gradient(180deg, #fafafa 0%, #f0eeed 100%) !important;
+    color: #381419;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 2px solid rgba(255, 106, 58, 0.35);
+}
+
+body.gda-app .table-hover tbody tr:hover {
+    background-color: rgba(255, 106, 58, 0.06);
+}
+
+/* ---------- Formulaires ---------- */
+body.gda-app .form-control:focus,
+body.gda-app .form-select:focus {
+    border-color: #ff6a3a;
+    box-shadow: 0 0 0 0.2rem rgba(255, 106, 58, 0.2);
+}
+
+body.gda-app .form-check-input:checked {
+    background-color: #ff6a3a;
+    border-color: #ff6a3a;
+}
+
+/* ---------- Pagination ---------- */
+body.gda-app .pagination .page-link {
+    color: #b26440;
+    border-radius: 0.5rem;
+    margin: 0 0.15rem;
+    border: 1px solid rgba(48, 48, 48, 0.12);
+}
+
+body.gda-app .pagination .page-item.active .page-link {
+    background: linear-gradient(135deg, #ff6a3a 0%, #b26440 100%);
+    border-color: #ff6a3a;
+}
+
+/* ---------- List group ---------- */
+body.gda-app .list-group-item {
+    border-color: rgba(48, 48, 48, 0.06);
+}
+
+/* ---------- PWA / petits écrans / encoches ---------- */
+html {
+    height: 100%;
+}
+
+body.gda-app .gda-main {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 575.98px) {
+    body.gda-app .container {
+        padding-left: max(calc(var(--bs-gutter-x) * 0.5), env(safe-area-inset-left, 0px));
+        padding-right: max(calc(var(--bs-gutter-x) * 0.5), env(safe-area-inset-right, 0px));
+    }
+
+    body.gda-app main .table {
+        font-size: 0.8125rem;
+    }
+
+    body.gda-app .gda-brand-wrap .gda-brand-title {
+        font-size: 1.2rem;
+    }
+
+    body.gda-app .gda-logo-img {
+        height: 56px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    body.gda-app main .card-body {
+        padding-left: max(1rem, env(safe-area-inset-left, 0px));
+        padding-right: max(1rem, env(safe-area-inset-right, 0px));
+    }
+
+    body.gda-app main .card-header.d-flex.justify-content-between {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 0.75rem;
+    }
+
+    body.gda-app main .card-header.d-flex.justify-content-between .btn {
+        width: 100%;
+    }
+
+    body.gda-app main .row.g-3 > [class*="col-"] {
+        min-width: 0;
+    }
+
+    /* Défilement horizontal doux pour tableaux dans les cartes */
+    body.gda-app main .card-body:has(> .table:not(.table-borderless)),
+    body.gda-app main .card-body:has(.table-responsive) {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+body.gda-app main .table-responsive {
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 991.98px) {
+    .navbar.gda-navbar .navbar-collapse {
+        padding-top: 0.5rem;
+        padding-bottom: 1rem;
+    }
+
+    .navbar.gda-navbar .navbar-nav .nav-link,
+    .navbar.gda-navbar .navbar-nav .btn-link.nav-link {
+        padding: 0.55rem 0.75rem !important;
+    }
+
+    .navbar.gda-navbar .dropdown-menu {
+        width: 100%;
+        min-width: 100%;
+    }
+}
