@@ -32,13 +32,23 @@
                 <input type="email" name="email" class="form-control" value="{{ old('email', $user->email) }}" autocomplete="email">
             </div>
             <div class="mb-3">
-                <label class="form-label">Nouveau mot de passe</label>
-                <input type="password" name="password" class="form-control" autocomplete="new-password">
+                <label class="form-label" for="password">Nouveau mot de passe</label>
+                @include('layouts.partials.password-input-group', [
+                    'name' => 'password',
+                    'id' => 'password',
+                    'required' => false,
+                    'autocomplete' => 'new-password',
+                ])
                 <small class="text-muted">Laisser vide pour conserver l'actuel</small>
             </div>
             <div class="mb-3">
-                <label class="form-label">Confirmer mot de passe</label>
-                <input type="password" name="password_confirmation" class="form-control">
+                <label class="form-label" for="password_confirmation">Confirmer mot de passe</label>
+                @include('layouts.partials.password-input-group', [
+                    'name' => 'password_confirmation',
+                    'id' => 'password_confirmation',
+                    'required' => false,
+                    'autocomplete' => 'new-password',
+                ])
             </div>
             <div class="mb-3">
                 <label class="form-label">Rôle *</label>

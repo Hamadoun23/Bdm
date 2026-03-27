@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/gda-theme.css') }}?v=5" rel="stylesheet">
+    <link href="{{ asset('css/gda-theme.css') }}?v=6" rel="stylesheet">
     <style>
         .gda-login-page {
             min-height: 100vh;
@@ -126,7 +126,14 @@
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label fw-semibold">Mot de passe</label>
-                        <input id="password" type="password" name="password" class="form-control" required autocomplete="current-password" placeholder="••••••••">
+                        @include('layouts.partials.password-input-group', [
+                            'name' => 'password',
+                            'id' => 'password',
+                            'required' => true,
+                            'autocomplete' => 'current-password',
+                            'placeholder' => '••••••••',
+                            'inputClass' => '',
+                        ])
                     </div>
                     <div class="mb-4">
                         <div class="form-check">
@@ -142,6 +149,7 @@
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    @include('layouts.partials.password-toggle-script')
     @include('layouts.partials.register-sw')
 </body>
 </html>

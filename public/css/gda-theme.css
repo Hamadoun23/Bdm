@@ -469,6 +469,15 @@ body.gda-app main .table-responsive {
     -webkit-overflow-scrolling: touch;
 }
 
+/* Mot de passe : bouton afficher/masquer (identique en local et en production) */
+.gda-password-field .gda-pw-toggle {
+    flex-shrink: 0;
+}
+.gda-password-field .gda-pw-toggle:focus-visible {
+    z-index: 3;
+    box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.35);
+}
+
 @media (max-width: 991.98px) {
     .navbar.gda-navbar .navbar-collapse {
         padding-top: 0.5rem;

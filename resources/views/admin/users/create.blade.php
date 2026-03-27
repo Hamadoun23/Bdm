@@ -36,15 +36,27 @@
             </div>
             <div class="row">
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Mot de passe *</label>
-                    <input type="password" name="password" class="form-control @error('password') is-invalid @enderror" autocomplete="new-password">
+                    <label class="form-label" for="password">Mot de passe *</label>
+                    @include('layouts.partials.password-input-group', [
+                        'name' => 'password',
+                        'id' => 'password',
+                        'required' => true,
+                        'autocomplete' => 'new-password',
+                        'inputClass' => $errors->has('password') ? 'is-invalid' : '',
+                    ])
                     @error('password')
                         <div class="invalid-feedback d-block text-danger small">{{ $message }}</div>
                     @enderror
                 </div>
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Confirmer mot de passe *</label>
-                    <input type="password" name="password_confirmation" class="form-control @error('password_confirmation') is-invalid @enderror {{ $passwordConfirmMismatch ? 'is-invalid' : '' }}" autocomplete="new-password">
+                    <label class="form-label" for="password_confirmation">Confirmer mot de passe *</label>
+                    @include('layouts.partials.password-input-group', [
+                        'name' => 'password_confirmation',
+                        'id' => 'password_confirmation',
+                        'required' => true,
+                        'autocomplete' => 'new-password',
+                        'inputClass' => ($errors->has('password_confirmation') || $passwordConfirmMismatch) ? 'is-invalid' : '',
+                    ])
                     @error('password_confirmation')
                         <div class="invalid-feedback d-block text-danger small">{{ $message }}</div>
                     @enderror

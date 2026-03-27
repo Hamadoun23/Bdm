@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/gda-theme.css') }}?v=5" rel="stylesheet">
+    <link href="{{ asset('css/gda-theme.css') }}?v=6" rel="stylesheet">
 </head>
 <body class="gda-app">
     <nav class="navbar navbar-expand-lg navbar-dark gda-navbar gda-navbar-split">
@@ -97,6 +97,7 @@
 
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    @include('layouts.partials.password-toggle-script')
     @stack('scripts')
     @include('layouts.partials.register-sw')
 </body>
