@@ -3,8 +3,11 @@
 @section('title', 'Gestion des utilisateurs')
 
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4>Commerciaux & Chefs d'agence</h4>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0">Commerciaux & Chefs d'agence</h4>
+        <p class="text-muted small mb-0 mt-1">Connexion : <strong>numéro de téléphone</strong> (e-mail optionnel). Les administrateurs se connectent avec leur <strong>nom</strong>.</p>
+    </div>
     <a href="{{ route('admin.users.create') }}" class="btn btn-primary">Nouvel utilisateur</a>
 </div>
 
@@ -23,7 +26,7 @@
             <thead class="table-light">
                 <tr>
                     <th>Nom</th>
-                    <th>Email / Téléphone</th>
+                    <th>Téléphone / e-mail</th>
                     <th>Rôle</th>
                     <th>Statut</th>
                     <th>Agence</th>
@@ -34,7 +37,12 @@
                 @foreach($users as $u)
                 <tr>
                     <td>{{ $u->prenom ? trim($u->prenom . ' ' . $u->name) : $u->name }}</td>
-                    <td>{{ $u->email ?? $u->telephone ?? '-' }}</td>
+                    <td>
+                        @if($u->telephone)<span class="text-nowrap">{{ $u->telephone }}</span>@endif
+                        @if($u->telephone && $u->email)<br>@endif
+                        @if($u->email)<span class="text-muted small">{{ $u->email }}</span>@endif
+                        @if(!$u->telephone && !$u->email)-@endif
+                    </td>
                     <td><span class="badge bg-{{ $u->role === 'chef_agence' ? 'info' : 'success' }}">{{ $u->role }}</span></td>
                     <td>
                         @if($u->actif)

@@ -45,10 +45,16 @@ class LoginRequest extends FormRequest
         $this->ensureIsNotRateLimited();
 
         $identifier = trim((string) $this->input('email', ''));
+        $identifierLower = Str::lower($identifier);
 
         $user = User::query()
-            ->where(function ($q) use ($identifier) {
-                $q->where('email', $identifier)->orWhere('telephone', $identifier);
+            ->where(function ($q) use ($identifier, $identifierLower) {
+                $q->where('email', $identifier)
+                    ->orWhere('telephone', $identifier)
+                    ->orWhere(function ($q2) use ($identifierLower) {
+                        $q2->where('role', 'admin')
+                            ->whereRaw('LOWER(TRIM(name)) = ?', [$identifierLower]);
+                    });
             })
             ->first();
 

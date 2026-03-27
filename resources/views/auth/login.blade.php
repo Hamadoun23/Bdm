@@ -121,8 +121,8 @@
                 <form method="POST" action="{{ route('login') }}">
                     @csrf
                     <div class="mb-3">
-                        <label for="email" class="form-label fw-semibold">Email ou n° téléphone</label>
-                        <input id="email" type="text" name="email" class="form-control" value="{{ old('email') }}" required autofocus autocomplete="username" placeholder="ex. votre@email.com ou 83757033">
+                        <label for="email" class="form-label fw-semibold">Identifiant</label>
+                        <input id="email" type="text" name="email" class="form-control" value="{{ old('email') }}" required autofocus autocomplete="username" placeholder="Admin : nom (ex. Sylla) · Commercial / chef : n° téléphone">
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label fw-semibold">Mot de passe</label>

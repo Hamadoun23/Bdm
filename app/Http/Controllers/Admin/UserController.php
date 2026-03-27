@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
 
@@ -34,8 +35,8 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'prenom' => 'nullable|string|max:100',
-            'email' => 'required_without:telephone|nullable|email|unique:users,email',
-            'telephone' => 'required_without:email|nullable|string|max:20',
+            'email' => 'nullable|email|unique:users,email',
+            'telephone' => ['required', 'string', 'max:20', Rule::unique('users', 'telephone')],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role' => 'required|in:commercial,chef_agence',
             'agence_id' => 'required_if:role,commercial|required_if:role,chef_agence|nullable|exists:agences,id',
@@ -75,8 +76,8 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'prenom' => 'nullable|string|max:100',
-            'email' => 'required_without:telephone|nullable|email|unique:users,email,' . $user->id,
-            'telephone' => 'required_without:email|nullable|string|max:20',
+            'email' => 'nullable|email|unique:users,email,'.$user->id,
+            'telephone' => ['required', 'string', 'max:20', Rule::unique('users', 'telephone')->ignore($user->id)],
             'role' => 'required|in:commercial,chef_agence',
             'agence_id' => 'required_if:role,commercial|required_if:role,chef_agence|nullable|exists:agences,id',
             'actif' => 'boolean',

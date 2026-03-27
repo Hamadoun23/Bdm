@@ -9,13 +9,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Vide la base applicative et ne conserve qu’un compte administrateur.
+ * Vide la base applicative et recrée uniquement une équipe d’administrateurs.
+ * Connexion admin : saisir le nom (ex. Sylla) comme identifiant — pas d’e-mail ni de téléphone.
  */
 class SoloAdminSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->command->info('Vidage complet — un seul compte administrateur sera recréé (téléphone 83757033).');
+        $this->command->info('Vidage complet — recréation des comptes administrateurs (login par nom).');
 
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
 
@@ -67,17 +68,32 @@ class SoloAdminSeeder extends Seeder
 
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
 
-        User::create([
-            'name' => 'Administrateur',
-            'prenom' => null,
-            'email' => null,
-            'password' => Hash::make('BDM@23m'),
-            'telephone' => '83757033',
-            'role' => 'admin',
-            'agence_id' => null,
-            'actif' => true,
-        ]);
+        /** @var list<array{name: string, password: string}> */
+        $admins = [
+            ['name' => 'Sylla', 'password' => 'Sylla@bdm99'],
+            ['name' => 'Dante', 'password' => 'Ami26@bmd'],
+            ['name' => 'Koita', 'password' => 'Koita27@bmd'],
+            ['name' => 'Sacko', 'password' => 'Bdm47@youba'],
+            ['name' => 'Cisse', 'password' => '23m@bdm'],
+            ['name' => 'Yaya', 'password' => 'bdm@26yaya'],
+        ];
 
-        $this->command->info('Terminé : 1 admin — identifiant : 83757033 (téléphone, champ « Email » sur la page de connexion) / mot de passe : BDM@23m');
+        foreach ($admins as $row) {
+            User::create([
+                'name' => $row['name'],
+                'prenom' => null,
+                'email' => null,
+                'password' => Hash::make($row['password']),
+                'telephone' => null,
+                'role' => 'admin',
+                'agence_id' => null,
+                'actif' => true,
+            ]);
+        }
+
+        $this->command->info('Terminé : '.count($admins).' administrateurs.');
+        foreach ($admins as $row) {
+            $this->command->line('  • '.$row['name'].' — connexion avec le nom : '.$row['name']);
+        }
     }
 }

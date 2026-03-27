@@ -21,14 +21,15 @@
                     <input type="text" name="prenom" class="form-control" value="{{ old('prenom', $user->prenom) }}">
                 </div>
                 <div class="col-md-4 mb-3">
-                    <label class="form-label">Téléphone</label>
-                    <input type="text" name="telephone" class="form-control" value="{{ old('telephone', $user->telephone) }}">
+                    <label class="form-label">Téléphone *</label>
+                    <input type="text" name="telephone" class="form-control" value="{{ old('telephone', $user->telephone) }}" required autocomplete="tel">
+                    <small class="text-muted">Identifiant de connexion (numéro unique).</small>
+                    @error('telephone')<div class="text-danger small">{{ $message }}</div>@enderror
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" value="{{ old('email', $user->email) }}">
-                <small class="text-muted">Fournir au moins l'email ou le téléphone</small>
+                <label class="form-label">E-mail <span class="text-muted">(facultatif)</span></label>
+                <input type="email" name="email" class="form-control" value="{{ old('email', $user->email) }}" autocomplete="email">
             </div>
             <div class="mb-3">
                 <label class="form-label">Nouveau mot de passe</label>
