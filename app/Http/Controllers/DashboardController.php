@@ -72,6 +72,11 @@ class DashboardController extends Controller
     private function dashboardCommercial($user): View
     {
         $user->load('agence');
+        Campagne::syncStatuts();
+        $agenceId = $user->agence_id ? (int) $user->agence_id : null;
+        $campagneActive = $agenceId ? Campagne::getActiveForAgence($agenceId) : null;
+        $peutVendre = $agenceId && $campagneActive && $campagneActive->estOuverteAuxVentes($agenceId);
+
         $mesVentes = Vente::where('user_id', $user->id)->whereMonth('created_at', now()->month)->count();
         $stocks = $user->agence_id ? Stock::with('typeCarte')->where('agence_id', $user->agence_id)->get() : collect();
         $classement = $this->primeService->getClassement(now()->format('Y-m'), $user->agence_id);
@@ -79,6 +84,8 @@ class DashboardController extends Controller
             ? $classement->search(fn($c) => $c['user_id'] == $user->id) + 1
             : null;
 
-        return view('dashboard.commercial', compact('user', 'mesVentes', 'stocks', 'classement', 'monRang'));
+        return view('dashboard.commercial', compact(
+            'user', 'mesVentes', 'stocks', 'classement', 'monRang', 'campagneActive', 'peutVendre'
+        ));
     }
 }

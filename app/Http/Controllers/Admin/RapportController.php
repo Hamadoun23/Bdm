@@ -3,38 +3,118 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Campagne;
+use App\Models\Client;
+use App\Models\User;
 use App\Models\Vente;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RapportController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('admin.rapports.index');
+        Campagne::syncStatuts();
+        /** @var User $user */
+        $user = $request->user();
+
+        $query = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id');
+
+        if ($user->isChefAgence() && $user->agence_id) {
+            $aid = (int) $user->agence_id;
+            $query->where(function ($q) use ($aid) {
+                $q->whereHas('ventes', fn ($v) => $v->where('agence_id', $aid))
+                    ->orWhere('toutes_agences', true)
+                    ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $aid));
+            });
+        }
+
+        $campagnes = $query->get();
+
+        foreach ($campagnes as $campagne) {
+            $vq = $campagne->ventes();
+            if ($user->isChefAgence() && $user->agence_id) {
+                $vq->where('agence_id', $user->agence_id);
+            }
+            $campagne->setAttribute('nb_ventes_rapport', $vq->count());
+        }
+
+        return view('rapports.index', compact('campagnes', 'user'));
     }
 
-    public function export(Request $request)
+    public function campagneVentes(Request $request, Campagne $campagne): View
     {
-        $type = $request->query('type', 'mensuel'); // hebdomadaire, mensuel
+        $this->assertUserCanAccessCampagne($request->user(), $campagne);
+
+        $query = Vente::with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+            ->where('campagne_id', $campagne->id)
+            ->orderByDesc('created_at');
+
+        if ($request->user()->isChefAgence() && $request->user()->agence_id) {
+            $query->where('agence_id', $request->user()->agence_id);
+        }
+
+        $ventes = $query->paginate(25);
+
+        return view('rapports.campagne-ventes', compact('campagne', 'ventes'));
+    }
+
+    public function campagneClients(Request $request, Campagne $campagne): View
+    {
+        $this->assertUserCanAccessCampagne($request->user(), $campagne);
+
+        $venteQuery = Vente::query()->where('campagne_id', $campagne->id);
+        if ($request->user()->isChefAgence() && $request->user()->agence_id) {
+            $venteQuery->where('agence_id', $request->user()->agence_id);
+        }
+
+        $clientIds = $venteQuery->distinct()->pluck('client_id')->filter()->values();
+
+        $clients = Client::query()
+            ->with(['user.agence', 'typeCarte'])
+            ->whereIn('id', $clientIds)
+            ->orderBy('nom')
+            ->orderBy('prenom')
+            ->get();
+
+        return view('rapports.campagne-clients', compact('campagne', 'clients'));
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isChefAgence()) {
+            abort(403);
+        }
+
+        $type = $request->query('type', 'mensuel');
         $agenceId = $request->query('agence');
         $date = $request->query('date', now()->format('Y-m'));
 
+        if ($user->isChefAgence() && $user->agence_id) {
+            $agenceId = (string) $user->agence_id;
+        }
+
         if ($type === 'hebdomadaire') {
-            $dateDebut = Carbon::parse($date . '-01')->startOfWeek();
+            $dateDebut = Carbon::parse($date.'-01')->startOfWeek();
             $dateFin = $dateDebut->copy()->endOfWeek();
         } else {
-            $dateDebut = Carbon::parse($date . '-01')->startOfMonth();
+            $dateDebut = Carbon::parse($date.'-01')->startOfMonth();
             $dateFin = $dateDebut->copy()->endOfMonth();
         }
 
-        $ventes = Vente::with(['client', 'user', 'agence', 'typeCarte'])
-            ->whereBetween('created_at', [$dateDebut, $dateFin])
-            ->when($agenceId, fn($q) => $q->where('agence_id', $agenceId))
-            ->orderBy('created_at')
-            ->get();
+        $ventesQuery = Vente::with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+            ->whereBetween('created_at', [$dateDebut, $dateFin]);
+
+        if ($agenceId !== null && $agenceId !== '') {
+            $ventesQuery->where('agence_id', $agenceId);
+        }
+
+        $ventes = $ventesQuery->orderBy('created_at')->get();
 
         $filename = "rapport_ventes_{$type}_{$dateDebut->format('Y-m-d')}.csv";
         $headers = [
@@ -44,11 +124,12 @@ class RapportController extends Controller
 
         $callback = function () use ($ventes) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['Date', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'], ';');
+            fputcsv($file, ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'], ';');
             foreach ($ventes as $v) {
                 fputcsv($file, [
                     $v->created_at->format('d/m/Y H:i'),
-                    $v->client->prenom . ' ' . $v->client->nom,
+                    $v->campagne?->nom ?? '-',
+                    $v->client->prenom.' '.$v->client->nom,
                     $v->client->telephone ?? '',
                     $v->typeCarte?->code ?? '-',
                     $v->montant ?? '',
@@ -61,5 +142,25 @@ class RapportController extends Controller
         };
 
         return Response::stream($callback, 200, $headers);
+    }
+
+    private function assertUserCanAccessCampagne(?User $user, Campagne $campagne): void
+    {
+        if (! $user) {
+            abort(403);
+        }
+        if ($user->isAdmin()) {
+            return;
+        }
+        if ($user->isChefAgence() && $user->agence_id) {
+            $aid = (int) $user->agence_id;
+            if ($campagne->concerneAgence($aid)) {
+                return;
+            }
+            if ($campagne->ventes()->where('agence_id', $aid)->exists()) {
+                return;
+            }
+        }
+        abort(403, 'Accès non autorisé à cette campagne.');
     }
 }

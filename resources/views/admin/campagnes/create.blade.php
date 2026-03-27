@@ -55,10 +55,33 @@
 
             <hr class="my-4">
             <h6 class="text-primary">Remise sur les ventes</h6>
-            <p class="text-muted small">Pendant la campagne active, le prix catalogue des cartes est réduit selon le pourcentage (montant de vente enregistré = prix après remise).</p>
+            <p class="text-muted small">Pendant la campagne active, indiquez un pourcentage de remise puis choisissez si elle s’applique à <strong>tous</strong> les types de cartes ou seulement à une <strong>sélection</strong> (montant de vente enregistré = prix catalogue après remise).</p>
             <div class="mb-3">
                 <label class="form-label">Remise (%)</label>
                 <input type="number" name="remise_pourcentage" class="form-control" value="{{ old('remise_pourcentage') }}" min="0" max="100" step="0.01" placeholder="0 = pas de remise">
+            </div>
+            @php
+                $remiseTousTypes = filter_var(old('remise_tous_types_cartes', true), FILTER_VALIDATE_BOOLEAN);
+                $remiseTypeIds = old('remise_types_cartes', []);
+            @endphp
+            <input type="hidden" name="remise_tous_types_cartes" value="0">
+            <div class="form-check mb-2">
+                <input type="checkbox" name="remise_tous_types_cartes" value="1" class="form-check-input" id="remise_tous_types" {{ $remiseTousTypes ? 'checked' : '' }} onchange="toggleRemiseTypes(this)">
+                <label class="form-check-label" for="remise_tous_types">Appliquer la remise à <strong>tous</strong> les types de cartes</label>
+            </div>
+            <div id="wrap-remise-types" style="display: {{ $remiseTousTypes ? 'none' : 'block' }}">
+                <label class="form-label">Types de cartes concernés par la remise</label>
+                <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
+                    @forelse($typesCartes as $tc)
+                    <div class="form-check">
+                        <input type="checkbox" name="remise_types_cartes[]" value="{{ $tc->id }}" class="form-check-input" id="remtc{{ $tc->id }}" {{ in_array((string) $tc->id, array_map('strval', $remiseTypeIds)) ? 'checked' : '' }}>
+                        <label class="form-check-label" for="remtc{{ $tc->id }}">{{ $tc->code }} — {{ number_format($tc->prix) }} F</label>
+                    </div>
+                    @empty
+                    <p class="text-muted small mb-0">Aucun type de carte. Créez-en dans l’administration.</p>
+                    @endforelse
+                </div>
+                @error('remise_types_cartes')<small class="text-danger d-block">{{ $message }}</small>@enderror
             </div>
 
             @php
@@ -125,6 +148,10 @@ function toggleAideChamps(el) {
 function toggleBeneficiaires(el) {
     document.getElementById('wrap-beneficiaires').style.display = el.checked ? 'none' : 'block';
     if (el.checked) document.querySelectorAll('#wrap-beneficiaires input[type=checkbox]').forEach(c => c.checked = false);
+}
+function toggleRemiseTypes(el) {
+    document.getElementById('wrap-remise-types').style.display = el.checked ? 'none' : 'block';
+    if (el.checked) document.querySelectorAll('#wrap-remise-types input[type=checkbox]').forEach(c => c.checked = false);
 }
 </script>
 @endsection

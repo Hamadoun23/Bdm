@@ -38,6 +38,7 @@ class VenteController extends Controller
             'ville' => 'nullable|string|max:100',
             'quartier' => 'nullable|string|max:100',
             'type_carte_id' => ['required', Rule::exists('types_cartes', 'id')->where('actif', true)],
+            'carte_identite' => 'nullable|file|mimes:jpg,jpeg,png,gif,webp,pdf|max:10240',
         ]);
 
         if ($validator->fails()) {
@@ -48,8 +49,13 @@ class VenteController extends Controller
             ], 422);
         }
 
+        $data = $validator->safe()->except('carte_identite');
+        if ($request->hasFile('carte_identite')) {
+            $data['carte_identite'] = $request->file('carte_identite')->store('cartes-identite', 'public');
+        }
+
         try {
-            $vente = $this->venteService->enregistrerVente($request->all(), $user->id);
+            $vente = $this->venteService->enregistrerVente($data, $user->id);
             return response()->json([
                 'success' => true,
                 'message' => 'Vente enregistrée avec succès.',

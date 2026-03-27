@@ -37,6 +37,8 @@
                                 <li class="nav-item"><a class="nav-link" href="{{ route('dashboard') }}">Dashboard</a></li>
                                 @if(auth()->user()?->isChefAgence())
                                 <li class="nav-item"><a class="nav-link" href="{{ route('ventes.index') }}">Ventes agence</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{{ route('clients.index') }}">Clients</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{{ route('rapports.index') }}">Rapports</a></li>
                                 @endif
                                 @if(auth()->user()?->isAdmin())
                                 <li class="nav-item dropdown">
@@ -48,7 +50,8 @@
                                         <li><a class="dropdown-item" href="{{ route('admin.types-cartes.index') }}">Types de cartes</a></li>
                                         <li><hr class="dropdown-divider"></li>
                                         <li><a class="dropdown-item" href="{{ route('admin.stocks.index') }}">Stocks</a></li>
-                                        <li><a class="dropdown-item" href="{{ route('admin.rapports.index') }}">Rapports</a></li>
+                                        <li><a class="dropdown-item" href="{{ route('rapports.index') }}">Rapports</a></li>
+                                        <li><a class="dropdown-item" href="{{ route('clients.index') }}">Clients</a></li>
                                     </ul>
                                 </li>
                                 @endif

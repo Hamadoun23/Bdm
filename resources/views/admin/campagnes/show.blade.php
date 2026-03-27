@@ -46,7 +46,19 @@
                                         ? number_format($rpRemise, 0, ',', ' ')
                                         : number_format($rpRemise, 2, ',', ' ');
                                 @endphp
-                                {{ $rpRemiseTxt }}&nbsp;% sur les cartes
+                                {{ $rpRemiseTxt }}&nbsp;%
+                                @if($campagne->remise_tous_types_cartes)
+                                    <span class="text-muted"> — tous les types de cartes</span>
+                                @else
+                                    <span class="text-muted"> — types :</span>
+                                    <ul class="small mb-0 mt-1">
+                                        @forelse($campagne->typesCartesRemise as $tc)
+                                        <li>{{ $tc->code }} ({{ number_format($tc->prix) }} F)</li>
+                                        @empty
+                                        <li class="text-warning">Aucun type sélectionné (corrigez la campagne).</li>
+                                        @endforelse
+                                    </ul>
+                                @endif
                             @else
                                 Aucune
                             @endif

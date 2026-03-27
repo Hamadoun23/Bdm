@@ -193,5 +193,6 @@ return array (
     'aide_hebdo_montant' => 'montant aide hebdomadaire',
     'aide_hebdo_carburant' => 'carburant',
     'aide_hebdo_credit_tel' => 'crédit téléphonique',
+    'carte_identite' => 'pièce d’identité',
   ),
 );

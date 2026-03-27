@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\RapportController;
 use App\Http\Controllers\Api\VenteController;
+use App\Http\Controllers\Clients\ClientController as ClientsClientController;
+use App\Http\Controllers\Commercial\ClientController as CommercialClientController;
 use App\Http\Controllers\Commercial\VenteController as CommercialVenteController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +47,32 @@ Route::middleware('auth')->group(function () {
     Route::get('/ventes/create', [CommercialVenteController::class, 'create'])->name('ventes.create')->middleware('role:commercial');
     Route::post('/api/ventes', [VenteController::class, 'store'])->name('api.ventes.store')->middleware('role:commercial');
 
+    Route::middleware('role:commercial')->group(function () {
+        Route::get('/mes-clients/{client}/modifier', [CommercialClientController::class, 'edit'])->name('commercial.clients.edit');
+        Route::put('/mes-clients/{client}', [CommercialClientController::class, 'update'])->name('commercial.clients.update');
+    });
+
+    Route::middleware('role:admin,chef_agence')->prefix('clients')->name('clients.')->group(function () {
+        Route::get('/', [ClientsClientController::class, 'index'])->name('index');
+        Route::get('/{client}/export', [ClientsClientController::class, 'export'])->name('export');
+        Route::get('/{client}', [ClientsClientController::class, 'show'])->name('show');
+    });
+
+    Route::middleware('role:admin,chef_agence')->prefix('rapports')->name('rapports.')->group(function () {
+        Route::get('/', [RapportController::class, 'index'])->name('index');
+        Route::get('/export', [RapportController::class, 'export'])->name('export');
+        Route::get('/campagnes/{campagne}/ventes', [RapportController::class, 'campagneVentes'])->name('campagnes.ventes');
+        Route::get('/campagnes/{campagne}/clients', [RapportController::class, 'campagneClients'])->name('campagnes.clients');
+    });
+
+    Route::get('/admin/rapports', function () {
+        return redirect()->route('rapports.index');
+    })->middleware(['auth', 'role:admin']);
+
+    Route::get('/admin/rapports/export', function (\Illuminate\Http\Request $request) {
+        return redirect()->route('rapports.export', $request->only(['type', 'date', 'agence']));
+    })->middleware(['auth', 'role:admin']);
+
     // Admin
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::resource('agences', \App\Http\Controllers\Admin\AgenceController::class)->except('show');
@@ -58,8 +87,6 @@ Route::middleware('auth')->group(function () {
         Route::post('stocks/ajuster', [\App\Http\Controllers\Admin\StockController::class, 'ajuster'])->name('stocks.ajuster');
         Route::get('stocks/mouvements', [\App\Http\Controllers\Admin\StockController::class, 'mouvements'])->name('stocks.mouvements');
         Route::get('stocks/mouvements/{agenceId}', [\App\Http\Controllers\Admin\StockController::class, 'mouvements'])->name('stocks.mouvements.agence');
-        Route::get('rapports', [\App\Http\Controllers\Admin\RapportController::class, 'index'])->name('rapports.index');
-        Route::get('rapports/export', [\App\Http\Controllers\Admin\RapportController::class, 'export'])->name('rapports.export');
     });
 
     // Chef d'agence : dashboard, stocks agence, performances (lecture), activation (lecture), réclamations

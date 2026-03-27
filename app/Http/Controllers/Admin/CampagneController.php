@@ -27,8 +27,9 @@ class CampagneController extends Controller
     {
         $agences = Agence::all();
         $commerciaux = User::with('agence')->where('role', 'commercial')->whereNotNull('agence_id')->orderBy('name')->get();
+        $typesCartes = TypeCarte::orderBy('code')->get();
 
-        return view('admin.campagnes.create', compact('agences', 'commerciaux'));
+        return view('admin.campagnes.create', compact('agences', 'commerciaux', 'typesCartes'));
     }
 
     public function store(Request $request): RedirectResponse
@@ -38,6 +39,11 @@ class CampagneController extends Controller
         $err = $this->validerAideHebdo($request);
         if ($err) {
             return back()->withErrors($err)->withInput();
+        }
+
+        $errRemiseTypes = $this->validerRemiseTypesCartes($request);
+        if ($errRemiseTypes) {
+            return back()->withErrors($errRemiseTypes)->withInput();
         }
 
         $toutesAgences = $request->boolean('toutes_agences');
@@ -62,6 +68,7 @@ class CampagneController extends Controller
             'aide_hebdo_carburant' => (int) $request->input('aide_hebdo_carburant', 3000),
             'aide_hebdo_credit_tel' => (int) $request->input('aide_hebdo_credit_tel', 2000),
             'aide_hebdo_tous_commerciaux' => $request->boolean('aide_hebdo_tous_commerciaux'),
+            'remise_tous_types_cartes' => $request->boolean('remise_tous_types_cartes'),
         ]);
 
         if (!$toutesAgences) {
@@ -69,21 +76,30 @@ class CampagneController extends Controller
         }
 
         $this->syncAideBeneficiaires($campagne, $request);
+        $this->syncRemiseTypesCartes($campagne, $request);
 
         Campagne::syncStatuts();
 
         return redirect()->route('admin.campagnes.index')->with('success', 'Campagne créée.');
     }
 
-      public function show(Campagne $campagne): View
+    public function show(Campagne $campagne): View
     {
-        $campagne->load(['agences', 'actions.user', 'beneficiairesAide.agence']);
+        $campagne->load(['agences', 'actions.user', 'beneficiairesAide.agence', 'typesCartesRemise']);
         $dateDebut = $campagne->date_debut->copy()->startOfDay();
         $dateFin = $campagne->date_fin->copy()->endOfDay();
 
-        $queryVentes = Vente::query()
-            ->whereBetween('created_at', [$dateDebut, $dateFin])
-            ->when(!$campagne->toutes_agences, fn($q) => $q->whereIn('agence_id', $campagne->agences->pluck('id')));
+        $agenceIdsCampagne = $campagne->toutes_agences ? null : $campagne->agences->pluck('id');
+        $queryVentes = Vente::query()->where(function ($q) use ($campagne, $dateDebut, $dateFin, $agenceIdsCampagne) {
+            $q->where('campagne_id', $campagne->id)
+                ->orWhere(function ($q2) use ($dateDebut, $dateFin, $agenceIdsCampagne) {
+                    $q2->whereNull('campagne_id')
+                        ->whereBetween('created_at', [$dateDebut, $dateFin]);
+                    if ($agenceIdsCampagne !== null && $agenceIdsCampagne->isNotEmpty()) {
+                        $q2->whereIn('agence_id', $agenceIdsCampagne);
+                    }
+                });
+        });
 
         $stats = [
             'total_ventes' => (clone $queryVentes)->count(),
@@ -139,10 +155,11 @@ class CampagneController extends Controller
     public function edit(Campagne $campagne): View
     {
         $agences = Agence::all();
-        $campagne->load('beneficiairesAide');
+        $campagne->load(['beneficiairesAide', 'typesCartesRemise']);
         $commerciaux = User::with('agence')->where('role', 'commercial')->whereNotNull('agence_id')->orderBy('name')->get();
+        $typesCartes = TypeCarte::orderBy('code')->get();
 
-        return view('admin.campagnes.edit', compact('campagne', 'agences', 'commerciaux'));
+        return view('admin.campagnes.edit', compact('campagne', 'agences', 'commerciaux', 'typesCartes'));
     }
 
     public function update(Request $request, Campagne $campagne): RedirectResponse
@@ -152,6 +169,11 @@ class CampagneController extends Controller
         $err = $this->validerAideHebdo($request);
         if ($err) {
             return back()->withErrors($err)->withInput();
+        }
+
+        $errRemiseTypes = $this->validerRemiseTypesCartes($request);
+        if ($errRemiseTypes) {
+            return back()->withErrors($errRemiseTypes)->withInput();
         }
 
         $toutesAgences = $request->boolean('toutes_agences');
@@ -174,10 +196,12 @@ class CampagneController extends Controller
             'aide_hebdo_carburant' => (int) $request->input('aide_hebdo_carburant', 3000),
             'aide_hebdo_credit_tel' => (int) $request->input('aide_hebdo_credit_tel', 2000),
             'aide_hebdo_tous_commerciaux' => $request->boolean('aide_hebdo_tous_commerciaux'),
+            'remise_tous_types_cartes' => $request->boolean('remise_tous_types_cartes'),
         ]);
 
         $campagne->agences()->sync($toutesAgences ? [] : $agenceIds);
         $this->syncAideBeneficiaires($campagne, $request);
+        $this->syncRemiseTypesCartes($campagne, $request);
 
         Campagne::syncStatuts();
 
@@ -285,6 +309,9 @@ class CampagneController extends Controller
     {
         return [
             'remise_pourcentage' => 'nullable|numeric|min:0|max:100',
+            'remise_tous_types_cartes' => 'boolean',
+            'remise_types_cartes' => 'array',
+            'remise_types_cartes.*' => 'exists:types_cartes,id',
             'aide_hebdo_active' => 'boolean',
             'aide_hebdo_montant' => 'nullable|integer|min:0',
             'aide_hebdo_carburant' => 'nullable|integer|min:0',
@@ -327,5 +354,43 @@ class CampagneController extends Controller
         $ids = array_unique(array_map('intval', $request->input('aide_beneficiaires', [])));
         $valid = User::whereIn('id', $ids)->where('role', 'commercial')->pluck('id')->all();
         $campagne->beneficiairesAide()->sync($valid);
+    }
+
+    /** @return array<string, string>|null */
+    private function validerRemiseTypesCartes(Request $request): ?array
+    {
+        if (! $this->remiseEstActive($request)) {
+            return null;
+        }
+        if ($request->boolean('remise_tous_types_cartes')) {
+            return null;
+        }
+        $ids = $request->input('remise_types_cartes', []);
+        if (! is_array($ids) || count($ids) === 0) {
+            return ['remise_types_cartes' => 'Sélectionnez au moins un type de carte ou cochez « Tous les types de cartes ».'];
+        }
+
+        return null;
+    }
+
+    private function remiseEstActive(Request $request): bool
+    {
+        if (! $request->filled('remise_pourcentage')) {
+            return false;
+        }
+
+        return (float) $request->remise_pourcentage > 0;
+    }
+
+    private function syncRemiseTypesCartes(Campagne $campagne, Request $request): void
+    {
+        if (! $this->remiseEstActive($request) || $request->boolean('remise_tous_types_cartes')) {
+            $campagne->typesCartesRemise()->detach();
+
+            return;
+        }
+        $ids = array_unique(array_map('intval', $request->input('remise_types_cartes', [])));
+        $valid = TypeCarte::whereIn('id', $ids)->pluck('id')->all();
+        $campagne->typesCartesRemise()->sync($valid);
     }
 }

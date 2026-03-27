@@ -31,19 +31,26 @@ class VenteService
             throw new InvalidArgumentException('Type de carte invalide ou inactif.');
         }
 
-        $agenceId = $user->agence_id;
+        $agenceId = (int) $user->agence_id;
+
+        Campagne::syncStatuts();
+        $campagne = Campagne::getActiveForAgence($agenceId);
+        if (! $campagne || ! $campagne->estOuverteAuxVentes($agenceId)) {
+            throw new InvalidArgumentException(
+                'Aucune campagne en cours pour votre agence. Les ventes ne sont possibles que pendant une campagne active ; une campagne terminée ou arrêtée ne permet plus d’enregistrer de vente.'
+            );
+        }
 
         $stock = Stock::where('agence_id', $agenceId)
             ->where('type_carte_id', $typeCarteId)
             ->first();
 
         $montant = (int) $typeCarte->prix;
-        $campagne = Campagne::getActiveForAgence($agenceId);
-        if ($campagne && ($campagne->remise_pourcentage ?? 0) > 0 && $campagne->estActivePourPrimes($agenceId)) {
+        if ($campagne->estActivePourPrimes($agenceId) && $campagne->remiseSappliqueAuType($typeCarteId)) {
             $montant = $campagne->montantApresRemise((int) $typeCarte->prix);
         }
 
-        return DB::transaction(function () use ($data, $user, $agenceId, $typeCarteId, $typeCarte, $stock, $montant) {
+        return DB::transaction(function () use ($data, $user, $agenceId, $typeCarteId, $typeCarte, $stock, $montant, $campagne) {
             $client = Client::create([
                 'prenom' => $data['prenom'],
                 'nom' => $data['nom'],
@@ -60,6 +67,7 @@ class VenteService
                 'client_id' => $client->id,
                 'user_id' => $user->id,
                 'agence_id' => $agenceId,
+                'campagne_id' => $campagne->id,
                 'type_carte_id' => $typeCarteId,
                 'montant' => $montant,
                 'statut_activation' => 'vendue',
@@ -76,7 +84,7 @@ class VenteService
                 ]);
             }
 
-            return $vente->load(['client', 'agence', 'typeCarte']);
+            return $vente->load(['client', 'agence', 'typeCarte', 'campagne']);
         });
     }
 }

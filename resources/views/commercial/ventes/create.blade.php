@@ -13,7 +13,17 @@
                 @if($typesCartes->isEmpty())
                 <div class="alert alert-warning">Aucun type de carte actif. Contactez l'administrateur.</div>
                 <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Retour au Dashboard</a>
+                @elseif(!$peutVendre)
+                <div class="alert alert-danger">
+                    Impossible d’enregistrer une vente : il n’y a pas de campagne active pour votre agence, ou la campagne est terminée / arrêtée.
+                </div>
+                <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Retour au Dashboard</a>
                 @else
+                @if($campagneActive)
+                <div class="alert alert-success py-2 small mb-3">
+                    Vente rattachée à la campagne <strong>{{ $campagneActive->nom }}</strong> (fin le {{ $campagneActive->date_fin->format('d/m/Y') }}).
+                </div>
+                @endif
                 <form id="form-vente">
                     @csrf
                     <div class="mb-3">
@@ -40,6 +50,11 @@
                             <label class="form-label">Téléphone</label>
                             <input type="tel" class="form-control form-control-lg" name="telephone">
                         </div>
+                        <div class="col-12">
+                            <label class="form-label">Pièce d’identité <span class="text-muted fw-normal">(image ou PDF)</span></label>
+                            <input type="file" class="form-control" name="carte_identite" accept="image/jpeg,image/png,image/gif,image/webp,.pdf,application/pdf">
+                            <small class="text-muted">Formats acceptés : JPG, PNG, GIF, WebP, PDF — taille max. 10 Mo.</small>
+                        </div>
                         <div class="col-md-6">
                             <label class="form-label">Ville</label>
                             <input type="text" class="form-control" name="ville">
@@ -65,6 +80,7 @@
 @endsection
 
 @push('scripts')
+@if(!$typesCartes->isEmpty() && $peutVendre)
 <script>
 $(function() {
     const csrf = $('meta[name="csrf-token"]').attr('content');
@@ -75,21 +91,20 @@ $(function() {
         $btn.prop('disabled', true).text('En cours...');
         $('#alert-zone').empty();
 
-        const typeId = $('[name="type_carte_id"]:checked').val();
-        const data = {
-            _token: csrf,
-            prenom: $('[name="prenom"]').val(),
-            nom: $('[name="nom"]').val(),
-            telephone: $('[name="telephone"]').val(),
-            ville: $('[name="ville"]').val(),
-            quartier: $('[name="quartier"]').val(),
-            type_carte_id: typeId
-        };
+        const formEl = document.getElementById('form-vente');
+        const fd = new FormData(formEl);
 
         $.ajax({
             url: '{{ url("/api/ventes") }}',
             method: 'POST',
-            data: data,
+            data: fd,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-CSRF-TOKEN': csrf,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
             success: function(res) {
                 window.location.href = @json(route('dashboard'));
             },
@@ -110,4 +125,5 @@ $(function() {
     });
 });
 </script>
+@endif
 @endpush

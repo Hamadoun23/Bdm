@@ -9,9 +9,14 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Vente extends Model
 {
     protected $fillable = [
-        'client_id', 'user_id', 'agence_id',
+        'client_id', 'user_id', 'agence_id', 'campagne_id',
         'type_carte_id', 'montant', 'statut_activation'
     ];
+
+    public function campagne(): BelongsTo
+    {
+        return $this->belongsTo(Campagne::class);
+    }
 
     public function client(): BelongsTo
     {

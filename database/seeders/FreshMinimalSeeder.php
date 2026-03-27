@@ -47,6 +47,12 @@ class FreshMinimalSeeder extends Seeder
         if (Schema::hasTable('campagne_agence')) {
             DB::table('campagne_agence')->truncate();
         }
+        if (Schema::hasTable('campagne_aide_beneficiaire')) {
+            DB::table('campagne_aide_beneficiaire')->truncate();
+        }
+        if (Schema::hasTable('campagne_remise_type_carte')) {
+            DB::table('campagne_remise_type_carte')->truncate();
+        }
         if (Schema::hasTable('campagnes')) {
             DB::table('campagnes')->truncate();
         }
@@ -149,6 +155,7 @@ class FreshMinimalSeeder extends Seeder
             'actif' => true,
             'statut' => Campagne::STATUT_EN_COURS,
             'toutes_agences' => true,
+            'remise_tous_types_cartes' => true,
         ]);
 
         $this->command->info('OK : 2 agences, 1 admin, 6 commerciaux, 3 types de cartes, stocks à 200/unité/agence, 1 campagne.');

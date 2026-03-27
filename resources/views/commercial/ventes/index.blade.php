@@ -27,6 +27,9 @@
                         <th>Commercial</th>
                         <th>Agence</th>
                         @endif
+                        @if(auth()->user()?->isCommercial())
+                        <th class="text-end">Fiche client</th>
+                        @endif
                     </tr>
                 </thead>
                 <tbody>
@@ -40,9 +43,14 @@
                         <td>{{ $v->user->name ?? '-' }}</td>
                         <td>{{ $v->agence->nom ?? '-' }}</td>
                         @endif
+                        @if(auth()->user()?->isCommercial())
+                        <td class="text-end">
+                            <a href="{{ route('commercial.clients.edit', $v->client) }}" class="btn btn-sm btn-outline-primary">Modifier</a>
+                        </td>
+                        @endif
                     </tr>
                     @empty
-                    <tr><td colspan="7" class="text-center py-4">Aucune vente.</td></tr>
+                    <tr><td colspan="{{ auth()->user()?->isCommercial() ? 5 : 6 }}" class="text-center py-4">Aucune vente.</td></tr>
                     @endforelse
                 </tbody>
             </table>

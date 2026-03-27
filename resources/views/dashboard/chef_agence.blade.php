@@ -55,5 +55,6 @@
 <div class="mt-3">
     <a href="{{ url('/agence/stocks') }}" class="btn btn-primary">Détail stocks</a>
     <a href="{{ route('ventes.index') }}" class="btn btn-outline-primary">Voir les ventes de l'agence</a>
+    <a href="{{ route('rapports.index') }}" class="btn btn-outline-secondary">Rapports</a>
 </div>
 @endsection

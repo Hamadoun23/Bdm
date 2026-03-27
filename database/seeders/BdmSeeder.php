@@ -72,6 +72,7 @@ class BdmSeeder extends Seeder
             'actif' => true,
             'statut' => Campagne::STATUT_EN_COURS,
             'toutes_agences' => true,
+            'remise_tous_types_cartes' => true,
         ]);
     }
 }

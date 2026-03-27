@@ -47,6 +47,9 @@ class SoloAdminSeeder extends Seeder
         if (Schema::hasTable('campagne_aide_beneficiaire')) {
             DB::table('campagne_aide_beneficiaire')->truncate();
         }
+        if (Schema::hasTable('campagne_remise_type_carte')) {
+            DB::table('campagne_remise_type_carte')->truncate();
+        }
         if (Schema::hasTable('campagnes')) {
             DB::table('campagnes')->truncate();
         }

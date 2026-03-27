@@ -20,6 +20,7 @@ class Campagne extends Model
         'prime_top1', 'prime_top2', 'actif',
         'statut', 'toutes_agences',
         'remise_pourcentage',
+        'remise_tous_types_cartes',
         'aide_hebdo_active', 'aide_hebdo_montant',
         'aide_hebdo_carburant', 'aide_hebdo_credit_tel',
         'aide_hebdo_tous_commerciaux',
@@ -33,6 +34,7 @@ class Campagne extends Model
             'actif' => 'boolean',
             'toutes_agences' => 'boolean',
             'remise_pourcentage' => 'decimal:2',
+            'remise_tous_types_cartes' => 'boolean',
             'aide_hebdo_active' => 'boolean',
             'aide_hebdo_tous_commerciaux' => 'boolean',
         ];
@@ -48,10 +50,55 @@ class Campagne extends Model
         return $this->hasMany(CampagneAction::class)->orderByDesc('created_at');
     }
 
+    public function ventes(): HasMany
+    {
+        return $this->hasMany(Vente::class);
+    }
+
+    /** Vente autorisée pour une agence : campagne marquée active, non arrêtée / annulée, dans la fenêtre de dates, et concernant l’agence. */
+    public function estOuverteAuxVentes(int $agenceId): bool
+    {
+        if (! $this->actif) {
+            return false;
+        }
+        if (in_array($this->statut, [self::STATUT_ARRETEE, self::STATUT_ANNULEE], true)) {
+            return false;
+        }
+        if (! $this->concerneAgence($agenceId)) {
+            return false;
+        }
+        $now = Carbon::now()->startOfDay();
+        if ($this->date_debut->gt($now) || $this->date_fin->lt($now)) {
+            return false;
+        }
+
+        return $this->statut_effectif === self::STATUT_EN_COURS;
+    }
+
     /** Commerciaux explicitement choisis pour l'aide hebdomadaire (si « pas tous »). */
     public function beneficiairesAide(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'campagne_aide_beneficiaire')->withTimestamps();
+    }
+
+    /** Types de carte concernés par la remise (si remise_tous_types_cartes est faux). */
+    public function typesCartesRemise(): BelongsToMany
+    {
+        return $this->belongsToMany(TypeCarte::class, 'campagne_remise_type_carte')->withTimestamps();
+    }
+
+    /** La remise % s’applique-t-elle à ce type de carte ? */
+    public function remiseSappliqueAuType(int $typeCarteId): bool
+    {
+        $p = (float) ($this->remise_pourcentage ?? 0);
+        if ($p <= 0) {
+            return false;
+        }
+        if ($this->remise_tous_types_cartes) {
+            return true;
+        }
+
+        return $this->typesCartesRemise()->where('types_cartes.id', $typeCarteId)->exists();
     }
 
     /** Montant catalogue après remise campagne (%). */

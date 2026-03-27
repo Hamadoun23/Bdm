@@ -76,7 +76,7 @@
             <div class="card-body">
                 <a href="{{ route('admin.campagnes.index') }}" class="btn btn-outline-primary me-2 mb-2">Campagnes</a>
                 <a href="{{ url('/admin/stocks') }}" class="btn btn-outline-primary me-2 mb-2">Stocks</a>
-                <a href="{{ url('/admin/rapports') }}" class="btn btn-outline-primary me-2 mb-2">Rapports</a>
+                <a href="{{ route('rapports.index') }}" class="btn btn-outline-primary me-2 mb-2">Rapports</a>
                 <a href="{{ url('/performances') }}" class="btn btn-outline-primary me-2 mb-2">Performances</a>
             </div>
         </div>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Commercial;
 
 use App\Http\Controllers\Controller;
+use App\Models\Campagne;
 use App\Models\TypeCarte;
 use App\Models\Vente;
 use Illuminate\Http\Request;
@@ -28,9 +29,16 @@ class VenteController extends Controller
         return view('commercial.ventes.index', compact('ventes'));
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
+        Campagne::syncStatuts();
+        $user = $request->user();
+        $agenceId = $user->agence_id ? (int) $user->agence_id : null;
+        $campagneActive = $agenceId ? Campagne::getActiveForAgence($agenceId) : null;
+        $peutVendre = $agenceId && $campagneActive && $campagneActive->estOuverteAuxVentes($agenceId);
+
         $typesCartes = TypeCarte::actifs()->get();
-        return view('commercial.ventes.create', compact('typesCartes'));
+
+        return view('commercial.ventes.create', compact('typesCartes', 'campagneActive', 'peutVendre'));
     }
 }
