@@ -12,11 +12,11 @@ class StockController extends Controller
     public function byAgence(Request $request, int $agenceId): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['success' => false, 'message' => 'Non authentifié'], 401);
         }
 
-        if (!$user->isAdmin() && $user->agence_id != $agenceId) {
+        if (! $user->isAdmin() && ! $user->isDirection() && $user->agence_id != $agenceId) {
             return response()->json(['success' => false, 'message' => 'Accès refusé'], 403);
         }
 

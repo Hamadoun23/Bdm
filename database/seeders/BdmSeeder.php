@@ -14,13 +14,12 @@ class BdmSeeder extends Seeder
 {
     public function run(): void
     {
-        // Créer l'agence
         $agence = Agence::create([
             'nom' => 'Agence Principale',
             'adresse' => 'Dakar, Sénégal',
+            'chef_id' => null,
         ]);
 
-        // Créer l'admin (sans agence)
         User::create([
             'name' => 'Administrateur',
             'email' => 'admin@bdm.com',
@@ -30,20 +29,6 @@ class BdmSeeder extends Seeder
             'agence_id' => null,
         ]);
 
-        // Créer le chef d'agence
-        $chef = User::create([
-            'name' => 'Chef Agence',
-            'email' => 'chef@bdm.com',
-            'password' => Hash::make('password'),
-            'telephone' => '221771234568',
-            'role' => 'chef_agence',
-            'agence_id' => $agence->id,
-        ]);
-
-        // Lier le chef à l'agence
-        $agence->update(['chef_id' => $chef->id]);
-
-        // Créer un commercial
         User::create([
             'name' => 'Commercial Test',
             'email' => 'commercial@bdm.com',
@@ -53,7 +38,6 @@ class BdmSeeder extends Seeder
             'agence_id' => $agence->id,
         ]);
 
-        // Créer les stocks initiaux pour l'agence
         foreach (TypeCarte::orderBy('code')->get() as $tc) {
             Stock::create([
                 'type_carte_id' => $tc->id,
@@ -62,13 +46,11 @@ class BdmSeeder extends Seeder
             ]);
         }
 
-        // Créer une campagne (toutes agences, active auto à partir de date_debut)
         Campagne::create([
             'nom' => 'Campagne 2025',
             'date_debut' => now()->startOfMonth(),
             'date_fin' => now()->endOfMonth()->addMonths(3),
-            'prime_top1' => 25000,
-            'prime_top2' => 15000,
+            'prime_meilleur_vendeur' => 25000,
             'actif' => true,
             'statut' => Campagne::STATUT_EN_COURS,
             'toutes_agences' => true,

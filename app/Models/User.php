@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -24,6 +25,8 @@ class User extends Authenticatable
         'role',
         'agence_id',
         'actif',
+        'adresse_contrat',
+        'piece_identite_ref',
     ];
 
     public function agence(): BelongsTo
@@ -51,6 +54,11 @@ class User extends Authenticatable
         return $this->hasMany(Prime::class);
     }
 
+    public function campagnesSignataireContrat(): BelongsToMany
+    {
+        return $this->belongsToMany(Campagne::class, 'campagne_commercial_contrat')->withTimestamps();
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -61,9 +69,15 @@ class User extends Authenticatable
         return $this->role === 'commercial';
     }
 
+    /** @deprecated Ancien rôle chef d’agence (retiré ; migré en commercial en base). */
     public function isChefAgence(): bool
     {
-        return $this->role === 'chef_agence';
+        return false;
+    }
+
+    public function isDirection(): bool
+    {
+        return $this->role === 'direction';
     }
 
     /**

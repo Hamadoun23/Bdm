@@ -6,7 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h4 class="mb-0">Clients — {{ $campagne->nom }}</h4>
-        <p class="text-muted small mb-0 mt-1">Clients ayant au moins une vente sur cette campagne @if(auth()->user()?->isChefAgence()) (votre agence) @endif</p>
+        <p class="text-muted small mb-0 mt-1">Clients ayant au moins une vente sur cette campagne.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="{{ route('rapports.campagnes.ventes', $campagne) }}" class="btn btn-outline-secondary">Liste des ventes</a>

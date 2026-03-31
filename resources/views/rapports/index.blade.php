@@ -10,9 +10,6 @@
 
 <p class="text-muted small mb-3">
     Les ventes sont liées à la campagne en cours au moment de l’enregistrement. Sélectionnez une campagne pour voir ses ventes, puis la fiche des clients (export PDF / Excel / Word).
-    @if($user->isChefAgence())
-        Données limitées à votre agence.
-    @endif
 </p>
 
 <div class="card shadow-sm mb-4">
@@ -64,7 +61,7 @@
                 <input type="month" name="date" class="form-control" value="{{ now()->format('Y-m') }}">
                 <small class="text-muted">Hebdomadaire : semaine contenant le 1er du mois choisi.</small>
             </div>
-            @if($user->isAdmin())
+            @if($user->isAdmin() || $user->isDirection())
             <div class="col-md-4">
                 <label class="form-label">Agence</label>
                 <select name="agence" class="form-select">

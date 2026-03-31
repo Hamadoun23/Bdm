@@ -28,27 +28,6 @@ class FakeDataSeeder extends Seeder
             'adresse' => 'Thiès, Sénégal',
         ]);
 
-        // Chefs et commerciaux pour les nouvelles agences
-        $chef2 = User::create([
-            'name' => 'Mamadou Diallo',
-            'email' => 'chef2@bdm.com',
-            'password' => bcrypt('password'),
-            'telephone' => '221771234600',
-            'role' => 'chef_agence',
-            'agence_id' => $agence2->id,
-        ]);
-        $agence2->update(['chef_id' => $chef2->id]);
-
-        $chef3 = User::create([
-            'name' => 'Fatou Ndiaye',
-            'email' => 'chef3@bdm.com',
-            'password' => bcrypt('password'),
-            'telephone' => '221771234601',
-            'role' => 'chef_agence',
-            'agence_id' => $agence3->id,
-        ]);
-        $agence3->update(['chef_id' => $chef3->id]);
-
         $commerciaux = [
             ['name' => 'Ibrahima Sow', 'email' => 'comm1@bdm.com', 'agence_id' => 1],
             ['name' => 'Awa Ba', 'email' => 'comm2@bdm.com', 'agence_id' => 1],
@@ -61,7 +40,7 @@ class FakeDataSeeder extends Seeder
                 'name' => $c['name'],
                 'email' => $c['email'],
                 'password' => bcrypt('password'),
-                'telephone' => '22177' . rand(100000, 999999),
+                'telephone' => '22177'.rand(100000, 999999),
                 'role' => 'commercial',
                 'agence_id' => $c['agence_id'],
             ]);
@@ -93,9 +72,11 @@ class FakeDataSeeder extends Seeder
             $typeCarteId = collect($typeIds)->random();
 
             $stock = Stock::where('agence_id', $agenceId)->where('type_carte_id', $typeCarteId)->first();
-            if (!$stock || $stock->quantite < 1) {
+            if (! $stock || $stock->quantite < 1) {
                 $stock = Stock::where('agence_id', $agenceId)->where('quantite', '>', 0)->first();
-                if (!$stock) continue;
+                if (! $stock) {
+                    continue;
+                }
                 $typeCarteId = $stock->type_carte_id;
             }
 
@@ -104,7 +85,7 @@ class FakeDataSeeder extends Seeder
             $client = Client::create([
                 'prenom' => collect($prenoms)->random(),
                 'nom' => collect($noms)->random(),
-                'telephone' => '22177' . rand(1000000, 9999999),
+                'telephone' => '22177'.rand(1000000, 9999999),
                 'ville' => collect($villes)->random(),
                 'quartier' => collect($quartiers)->random(),
                 'type_carte_id' => $typeCarteId,
@@ -132,18 +113,16 @@ class FakeDataSeeder extends Seeder
             ]);
         }
 
-        // Primes pour les 2 meilleurs commerciaux
+        // Prime du meilleur commercial du mois (données fictives)
         $periode = now()->format('Y-m');
-        $tops = User::where('role', 'commercial')
+        $top = User::where('role', 'commercial')
             ->withCount('ventes')
             ->orderByDesc('ventes_count')
-            ->take(2)
-            ->get();
-        $montants = [25000, 15000];
-        foreach ($tops as $idx => $u) {
+            ->first();
+        if ($top) {
             Prime::firstOrCreate(
-                ['user_id' => $u->id, 'periode' => $periode],
-                ['montant' => $montants[$idx], 'rang' => $idx + 1]
+                ['user_id' => $top->id, 'periode' => $periode],
+                ['montant' => 25000, 'rang' => 1]
             );
         }
 

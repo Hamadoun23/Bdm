@@ -2,10 +2,10 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -52,7 +52,7 @@ class LoginRequest extends FormRequest
                 $q->where('email', $identifier)
                     ->orWhere('telephone', $identifier)
                     ->orWhere(function ($q2) use ($identifierLower) {
-                        $q2->where('role', 'admin')
+                        $q2->whereIn('role', ['admin', 'direction'])
                             ->whereRaw('LOWER(TRIM(name)) = ?', [$identifierLower]);
                     });
             })
@@ -67,7 +67,7 @@ class LoginRequest extends FormRequest
         }
 
         Auth::login($user, $this->boolean('remember'));
-        if ($user && in_array($user->role, ['commercial', 'chef_agence'], true) && !$user->actif) {
+        if ($user && in_array($user->role, ['commercial', 'direction'], true) && ! $user->actif) {
             Auth::logout();
             throw ValidationException::withMessages([
                 'email' => 'Votre compte est désactivé. Contactez l\'administration.',

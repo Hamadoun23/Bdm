@@ -24,6 +24,9 @@
                         </ul>
                     </div>
                 @endif
+                @if(session('error'))
+                    <div class="alert alert-danger py-2">{{ session('error') }}</div>
+                @endif
                 <form method="post" action="{{ route('commercial.clients.update', $client) }}" enctype="multipart/form-data">
                     @csrf
                     @method('PUT')
@@ -64,6 +67,18 @@
                         <a href="{{ route('ventes.index') }}" class="btn btn-outline-secondary">Annuler</a>
                     </div>
                 </form>
+                @if($client->peutEtreSupprimeParCommercial())
+                    <hr class="my-4">
+                    <p class="small text-danger mb-2">Supprimer définitivement cette fiche et les ventes liées (possible pendant {{ \App\Models\Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES }} h après création uniquement).</p>
+                    <form method="post" action="{{ route('commercial.clients.destroy', $client) }}" onsubmit="return confirm('Supprimer ce client et toutes les ventes associées ? Cette action est irréversible.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer la fiche client</button>
+                    </form>
+                @else
+                    <hr class="my-4">
+                    <p class="small text-muted mb-0">La suppression de la fiche par vos soins n’est plus disponible (délai de {{ \App\Models\Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES }} h dépassé). Contactez l’administration si besoin.</p>
+                @endif
             </div>
         </div>
     </div>

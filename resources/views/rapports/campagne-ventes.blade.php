@@ -40,13 +40,20 @@
                     <td><span class="badge bg-light text-dark">{{ $v->statut_activation }}</span></td>
                 </tr>
                 @empty
-                <tr><td colspan="7" class="text-center py-4">Aucune vente enregistrée sur cette campagne@if(auth()->user()?->isChefAgence()) pour votre agence@endif.</td></tr>
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        Aucune vente enregistrée sur cette campagne.
+                    </td>
+                </tr>
                 @endforelse
             </tbody>
         </table>
     </div>
     @if($ventes->hasPages())
-    <div class="card-footer">{{ $ventes->links() }}</div>
+    <div class="card-footer d-flex flex-wrap justify-content-center justify-content-sm-between align-items-center gap-2 py-3">
+        <div class="small text-muted order-2 order-sm-1">{{ $ventes->firstItem() }}–{{ $ventes->lastItem() }} / {{ $ventes->total() }}</div>
+        <div class="order-1 order-sm-2 overflow-auto w-100 w-sm-auto d-flex justify-content-center">{{ $ventes->links() }}</div>
+    </div>
     @endif
 </div>
 @endsection

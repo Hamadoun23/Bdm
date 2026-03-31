@@ -46,6 +46,24 @@ class ClientController extends Controller
         return redirect()->route('ventes.index')->with('success', 'Informations client mises à jour.');
     }
 
+    public function destroy(Request $request, Client $client): RedirectResponse
+    {
+        $this->authorizeCommercialOwnClient($request, $client);
+
+        if (! $client->peutEtreSupprimeParCommercial()) {
+            return redirect()->route('commercial.clients.edit', $client)
+                ->with('error', 'La suppression n’est plus possible : plus de '.Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES.' heures se sont écoulées depuis l’enregistrement du client.');
+        }
+
+        if ($client->carte_identite) {
+            Storage::disk('public')->delete($client->carte_identite);
+        }
+
+        $client->delete();
+
+        return redirect()->route('ventes.index')->with('success', 'Fiche client supprimée (ventes associées supprimées également).');
+    }
+
     private function authorizeCommercialOwnClient(Request $request, Client $client): void
     {
         $user = $request->user();

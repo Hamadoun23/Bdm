@@ -16,7 +16,7 @@
         <label class="form-label">Période</label>
         <input type="month" name="periode" class="form-control" value="{{ $periode }}">
     </div>
-    @if(auth()->user()?->isAdmin())
+    @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
     <div>
         <label class="form-label">Agence</label>
         <select name="agence" class="form-select" style="min-width: 180px;">
@@ -97,8 +97,7 @@
                         <td>{{ $c['user_name'] }}</td>
                         <td>{{ $c['total_ventes'] }}</td>
                         <td>
-                            @if($campagne && $c['rang'] == 1){{ number_format($campagne->prime_top1) }} F
-                            @elseif($campagne && $c['rang'] == 2){{ number_format($campagne->prime_top2) }} F
+                            @if($campagne && $c['rang'] == 1){{ number_format($campagne->prime_meilleur_vendeur) }} F
                             @else - @endif
                         </td>
                     </tr>
@@ -126,8 +125,7 @@
                         <td>{{ $c['user_name'] }}</td>
                         <td>{{ $c['total_ventes'] }}</td>
                         <td>
-                            @if($campagne && $c['rang'] == 1){{ number_format($campagne->prime_top1) }} F
-                            @elseif($campagne && $c['rang'] == 2){{ number_format($campagne->prime_top2) }} F
+                            @if($campagne && $c['rang'] == 1){{ number_format($campagne->prime_meilleur_vendeur) }} F
                             @else - @endif
                         </td>
                     </tr>

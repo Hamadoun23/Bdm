@@ -14,7 +14,7 @@
                     <th>Client</th>
                     <th>Type carte</th>
                     <th>Statut</th>
-                    @if(auth()->user()?->isAdmin() || auth()->user()?->isChefAgence())
+                    @if(auth()->user()?->isAdmin())
                     <th>Actions</th>
                     @endif
                 </tr>
@@ -30,7 +30,7 @@
                             {{ $v->statut_activation }}
                         </span>
                     </td>
-                    @if(auth()->user()?->isAdmin() || auth()->user()?->isChefAgence())
+                    @if(auth()->user()?->isAdmin())
                     <td>
                         @if($v->statut_activation !== 'activée')
                         <div class="btn-group btn-group-sm">

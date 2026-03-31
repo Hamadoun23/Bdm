@@ -23,7 +23,7 @@
                         <th>Client</th>
                         <th>Type carte</th>
                         <th>Montant</th>
-                        @if(auth()->user()?->isAdmin() || auth()->user()?->isChefAgence())
+                        @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
                         <th>Commercial</th>
                         <th>Agence</th>
                         @endif
@@ -39,7 +39,7 @@
                         <td>{{ $v->client->prenom }} {{ $v->client->nom }}</td>
                         <td><span class="badge bg-info">{{ $v->typeCarte?->code ?? '?' }}</span></td>
                         <td>{{ $v->montant ? number_format($v->montant) . ' F' : '-' }}</td>
-                        @if(auth()->user()?->isAdmin() || auth()->user()?->isChefAgence())
+                        @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
                         <td>{{ $v->user->name ?? '-' }}</td>
                         <td>{{ $v->agence->nom ?? '-' }}</td>
                         @endif
@@ -57,8 +57,9 @@
         </div>
     </div>
     @if($ventes->hasPages())
-    <div class="card-footer">
-        {{ $ventes->links() }}
+    <div class="card-footer d-flex flex-wrap justify-content-center justify-content-sm-between align-items-center gap-2 py-3">
+        <div class="small text-muted order-2 order-sm-1">{{ $ventes->firstItem() }}–{{ $ventes->lastItem() }} / {{ $ventes->total() }}</div>
+        <div class="order-1 order-sm-2 overflow-auto w-100 w-sm-auto d-flex justify-content-center">{{ $ventes->links() }}</div>
     </div>
     @endif
 </div>

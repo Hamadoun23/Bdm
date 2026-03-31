@@ -14,8 +14,6 @@
             <thead class="table-light">
                 <tr>
                     <th>Nom</th>
-                    <th>Adresse</th>
-                    <th>Chef</th>
                     <th>Stocks</th>
                     <th>Actions</th>
                 </tr>
@@ -24,8 +22,6 @@
                 @foreach($agences as $a)
                 <tr>
                     <td>{{ $a->nom }}</td>
-                    <td>{{ $a->adresse ?? '-' }}</td>
-                    <td>{{ $a->chef->name ?? '-' }}</td>
                     <td>
                         @foreach($a->stocks as $s)
                         <span class="badge bg-secondary">{{ $s->typeCarte?->code ?? '?' }}: {{ $s->quantite }}</span>

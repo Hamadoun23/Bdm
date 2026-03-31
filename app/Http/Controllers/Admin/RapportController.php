@@ -21,25 +21,10 @@ class RapportController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $query = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id');
-
-        if ($user->isChefAgence() && $user->agence_id) {
-            $aid = (int) $user->agence_id;
-            $query->where(function ($q) use ($aid) {
-                $q->whereHas('ventes', fn ($v) => $v->where('agence_id', $aid))
-                    ->orWhere('toutes_agences', true)
-                    ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $aid));
-            });
-        }
-
-        $campagnes = $query->get();
+        $campagnes = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id')->get();
 
         foreach ($campagnes as $campagne) {
-            $vq = $campagne->ventes();
-            if ($user->isChefAgence() && $user->agence_id) {
-                $vq->where('agence_id', $user->agence_id);
-            }
-            $campagne->setAttribute('nb_ventes_rapport', $vq->count());
+            $campagne->setAttribute('nb_ventes_rapport', $campagne->ventes()->count());
         }
 
         return view('rapports.index', compact('campagnes', 'user'));
@@ -49,15 +34,10 @@ class RapportController extends Controller
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
 
-        $query = Vente::with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+        $ventes = Vente::with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
             ->where('campagne_id', $campagne->id)
-            ->orderByDesc('created_at');
-
-        if ($request->user()->isChefAgence() && $request->user()->agence_id) {
-            $query->where('agence_id', $request->user()->agence_id);
-        }
-
-        $ventes = $query->paginate(25);
+            ->orderByDesc('created_at')
+            ->paginate(25);
 
         return view('rapports.campagne-ventes', compact('campagne', 'ventes'));
     }
@@ -66,12 +46,12 @@ class RapportController extends Controller
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
 
-        $venteQuery = Vente::query()->where('campagne_id', $campagne->id);
-        if ($request->user()->isChefAgence() && $request->user()->agence_id) {
-            $venteQuery->where('agence_id', $request->user()->agence_id);
-        }
-
-        $clientIds = $venteQuery->distinct()->pluck('client_id')->filter()->values();
+        $clientIds = Vente::query()
+            ->where('campagne_id', $campagne->id)
+            ->distinct()
+            ->pluck('client_id')
+            ->filter()
+            ->values();
 
         $clients = Client::query()
             ->with(['user.agence', 'typeCarte'])
@@ -87,17 +67,13 @@ class RapportController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        if (! $user->isAdmin() && ! $user->isChefAgence()) {
+        if (! $user->isAdmin() && ! $user->isDirection()) {
             abort(403);
         }
 
         $type = $request->query('type', 'mensuel');
         $agenceId = $request->query('agence');
         $date = $request->query('date', now()->format('Y-m'));
-
-        if ($user->isChefAgence() && $user->agence_id) {
-            $agenceId = (string) $user->agence_id;
-        }
 
         if ($type === 'hebdomadaire') {
             $dateDebut = Carbon::parse($date.'-01')->startOfWeek();
@@ -149,17 +125,8 @@ class RapportController extends Controller
         if (! $user) {
             abort(403);
         }
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $user->isDirection()) {
             return;
-        }
-        if ($user->isChefAgence() && $user->agence_id) {
-            $aid = (int) $user->agence_id;
-            if ($campagne->concerneAgence($aid)) {
-                return;
-            }
-            if ($campagne->ventes()->where('agence_id', $aid)->exists()) {
-                return;
-            }
         }
         abort(403, 'Accès non autorisé à cette campagne.');
     }

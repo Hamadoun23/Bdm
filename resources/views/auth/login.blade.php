@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="theme-color" content="#FF6A3A">
-    <title>Connexion — {{ config('app.name') }}</title>
+    <title>Connexion — Gda Money</title>
     @include('layouts.partials.pwa')
     @include('layouts.partials.favicon')
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/gda-theme.css') }}?v=6" rel="stylesheet">
+    <link href="{{ asset('css/gda-theme.css') }}?v=7" rel="stylesheet">
     <style>
         .gda-login-page {
             min-height: 100vh;

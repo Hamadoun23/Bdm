@@ -16,16 +16,21 @@ class ProfileUpdateRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
-            'email' => [
-                'required',
+        ];
+
+        if (! $this->user()->isCommercial()) {
+            $rules['email'] = [
+                'nullable',
                 'string',
                 'lowercase',
                 'email',
                 'max:255',
                 Rule::unique(User::class)->ignore($this->user()->id),
-            ],
-        ];
+            ];
+        }
+
+        return $rules;
     }
 }

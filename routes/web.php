@@ -1,10 +1,23 @@
 <?php
 
+use App\Http\Controllers\Admin\AgenceController;
+use App\Http\Controllers\Admin\CampagneAideVersementController;
+use App\Http\Controllers\Admin\CampagneContratArticleController;
+use App\Http\Controllers\Admin\CampagneController;
 use App\Http\Controllers\Admin\RapportController;
+use App\Http\Controllers\Admin\StockController;
+use App\Http\Controllers\Admin\TypeCarteController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Api\VenteController;
 use App\Http\Controllers\Clients\ClientController as ClientsClientController;
 use App\Http\Controllers\Commercial\ClientController as CommercialClientController;
+use App\Http\Controllers\Commercial\ContratPrestationController;
 use App\Http\Controllers\Commercial\VenteController as CommercialVenteController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Direction\CampagneController as DirectionCampagneController;
+use App\Http\Controllers\Direction\ReferentielController as DirectionReferentielController;
+use App\Http\Controllers\PerformanceController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/site.webmanifest', function () {
@@ -14,8 +27,8 @@ Route::get('/site.webmanifest', function () {
     $icon = asset('logo/iconesgda.png');
 
     return response()->json([
-        'name' => 'Gda Money — Cartes & performance',
-        'short_name' => config('app.name', 'Gda Money'),
+        'name' => config('app.name', 'Campagne BDM'),
+        'short_name' => config('app.name', 'Campagne BDM'),
         'description' => 'Application de gestion des ventes de cartes et du suivi des performances.',
         'start_url' => $start,
         'scope' => $start,
@@ -41,7 +54,8 @@ Route::get('/', function () {
 });
 
 Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::middleware('role:admin,direction')->get('/alertes-stock-faible', [DashboardController::class, 'alertesStockFaible'])->name('alertes.stock-faible');
     // Ventes : uniquement les commerciaux
     Route::get('/ventes', [CommercialVenteController::class, 'index'])->name('ventes.index');
     Route::get('/ventes/create', [CommercialVenteController::class, 'create'])->name('ventes.create')->middleware('role:commercial');
@@ -50,15 +64,26 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:commercial')->group(function () {
         Route::get('/mes-clients/{client}/modifier', [CommercialClientController::class, 'edit'])->name('commercial.clients.edit');
         Route::put('/mes-clients/{client}', [CommercialClientController::class, 'update'])->name('commercial.clients.update');
+        Route::delete('/mes-clients/{client}', [CommercialClientController::class, 'destroy'])->name('commercial.clients.destroy');
+        Route::get('/mon-contrat', [ContratPrestationController::class, 'show'])->name('commercial.contrat');
+        Route::post('/mon-contrat/accepter', [ContratPrestationController::class, 'accepter'])->name('commercial.contrat.accepter');
+        Route::post('/mon-contrat/rejeter', [ContratPrestationController::class, 'rejeter'])->name('commercial.contrat.rejeter');
+        Route::post('/mes-aides/{versement}/accuser', [ContratPrestationController::class, 'accuserVersement'])->name('commercial.aides.accuser');
     });
 
-    Route::middleware('role:admin,chef_agence')->prefix('clients')->name('clients.')->group(function () {
+    Route::middleware('role:admin,direction')->prefix('clients')->name('clients.')->group(function () {
         Route::get('/', [ClientsClientController::class, 'index'])->name('index');
         Route::get('/{client}/export', [ClientsClientController::class, 'export'])->name('export');
         Route::get('/{client}', [ClientsClientController::class, 'show'])->name('show');
     });
 
-    Route::middleware('role:admin,chef_agence')->prefix('rapports')->name('rapports.')->group(function () {
+    Route::middleware('role:direction')->prefix('direction')->name('direction.')->group(function () {
+        Route::get('campagnes', [DirectionCampagneController::class, 'index'])->name('campagnes.index');
+        Route::get('campagnes/{campagne}', [DirectionCampagneController::class, 'show'])->name('campagnes.show');
+        Route::get('types-de-cartes', [DirectionReferentielController::class, 'typesCartes'])->name('types-cartes.index');
+    });
+
+    Route::middleware('role:admin,direction')->prefix('rapports')->name('rapports.')->group(function () {
         Route::get('/', [RapportController::class, 'index'])->name('index');
         Route::get('/export', [RapportController::class, 'export'])->name('export');
         Route::get('/campagnes/{campagne}/ventes', [RapportController::class, 'campagneVentes'])->name('campagnes.ventes');
@@ -69,34 +94,34 @@ Route::middleware('auth')->group(function () {
         return redirect()->route('rapports.index');
     })->middleware(['auth', 'role:admin']);
 
-    Route::get('/admin/rapports/export', function (\Illuminate\Http\Request $request) {
+    Route::get('/admin/rapports/export', function (Request $request) {
         return redirect()->route('rapports.export', $request->only(['type', 'date', 'agence']));
     })->middleware(['auth', 'role:admin']);
 
     // Admin
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
-        Route::resource('agences', \App\Http\Controllers\Admin\AgenceController::class)->except('show');
-        Route::resource('users', \App\Http\Controllers\Admin\UserController::class)->parameters(['users' => 'user'])->except('show');
-        Route::resource('types-cartes', \App\Http\Controllers\Admin\TypeCarteController::class)->except(['show']);
-        Route::resource('campagnes', \App\Http\Controllers\Admin\CampagneController::class);
-        Route::post('campagnes/{campagne}/arreter', [\App\Http\Controllers\Admin\CampagneController::class, 'arreter'])->name('campagnes.arreter');
-        Route::post('campagnes/{campagne}/annuler', [\App\Http\Controllers\Admin\CampagneController::class, 'annuler'])->name('campagnes.annuler');
-        Route::post('campagnes/{campagne}/reprogrammer', [\App\Http\Controllers\Admin\CampagneController::class, 'reprogrammer'])->name('campagnes.reprogrammer');
-        Route::get('stocks', [\App\Http\Controllers\Admin\StockController::class, 'index'])->name('stocks.index');
-        Route::post('stocks/approvisionner', [\App\Http\Controllers\Admin\StockController::class, 'approvisionner'])->name('stocks.approvisionner');
-        Route::post('stocks/ajuster', [\App\Http\Controllers\Admin\StockController::class, 'ajuster'])->name('stocks.ajuster');
-        Route::get('stocks/mouvements', [\App\Http\Controllers\Admin\StockController::class, 'mouvements'])->name('stocks.mouvements');
-        Route::get('stocks/mouvements/{agenceId}', [\App\Http\Controllers\Admin\StockController::class, 'mouvements'])->name('stocks.mouvements.agence');
+        Route::resource('agences', AgenceController::class)->except('show');
+        Route::resource('users', UserController::class)->parameters(['users' => 'user'])->except('show');
+        Route::resource('types-cartes', TypeCarteController::class)->except(['show']);
+        Route::resource('campagnes', CampagneController::class);
+        Route::post('campagnes/{campagne}/arreter', [CampagneController::class, 'arreter'])->name('campagnes.arreter');
+        Route::post('campagnes/{campagne}/annuler', [CampagneController::class, 'annuler'])->name('campagnes.annuler');
+        Route::post('campagnes/{campagne}/reprogrammer', [CampagneController::class, 'reprogrammer'])->name('campagnes.reprogrammer');
+        Route::post('campagnes/{campagne}/versements', [CampagneAideVersementController::class, 'store'])->name('campagnes.versements.store');
+        Route::delete('campagnes/{campagne}/versements/{versement}', [CampagneAideVersementController::class, 'destroy'])->name('campagnes.versements.destroy');
+        Route::post('campagnes/{campagne}/contrat-articles', [CampagneContratArticleController::class, 'store'])->name('campagnes.contrat-articles.store');
+        Route::put('campagnes/{campagne}/contrat-articles/{article}', [CampagneContratArticleController::class, 'update'])->name('campagnes.contrat-articles.update');
+        Route::delete('campagnes/{campagne}/contrat-articles/{article}', [CampagneContratArticleController::class, 'destroy'])->name('campagnes.contrat-articles.destroy');
+        Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
+        Route::post('stocks/approvisionner', [StockController::class, 'approvisionner'])->name('stocks.approvisionner');
+        Route::post('stocks/ajuster', [StockController::class, 'ajuster'])->name('stocks.ajuster');
+        Route::get('stocks/mouvements', [StockController::class, 'mouvements'])->name('stocks.mouvements');
+        Route::get('stocks/mouvements/{agenceId}', [StockController::class, 'mouvements'])->name('stocks.mouvements.agence');
     });
 
-    // Chef d'agence : dashboard, stocks agence, performances (lecture), activation (lecture), réclamations
-    Route::get('/agence/stocks', [\App\Http\Controllers\ChefAgence\StockController::class, 'index'])->name('agence.stocks')->middleware('role:admin,chef_agence');
-    Route::post('/agence/stocks/approvisionner', [\App\Http\Controllers\ChefAgence\StockController::class, 'approvisionner'])->name('agence.stocks.approvisionner')->middleware('role:chef_agence');
-    Route::post('/agence/stocks/ajuster', [\App\Http\Controllers\ChefAgence\StockController::class, 'ajuster'])->name('agence.stocks.ajuster')->middleware('role:chef_agence');
+    Route::get('/performances', [PerformanceController::class, 'index'])->name('performances.index');
 
-    Route::get('/performances', [\App\Http\Controllers\PerformanceController::class, 'index'])->name('performances.index');
-
-    Route::get('/api/stocks/agence/{agenceId}', [\App\Http\Controllers\Api\StockController::class, 'byAgence'])->name('api.stocks.agence');
+    Route::get('/api/stocks/agence/{agenceId}', [App\Http\Controllers\Api\StockController::class, 'byAgence'])->name('api.stocks.agence');
 });
 
 require __DIR__.'/auth.php';

@@ -20,9 +20,9 @@ class PerformanceController extends Controller
         $user = $request->user();
         $periode = $request->query('periode', now()->format('Y-m'));
 
-        if ($user?->isAdmin()) {
+        if ($user?->isAdmin() || $user?->isDirection()) {
             $agenceId = $request->query('agence') ? (int) $request->query('agence') : null;
-        } elseif ($user?->isChefAgence() || $user?->isCommercial()) {
+        } elseif ($user?->isCommercial()) {
             $agenceId = $user->agence_id;
         } else {
             $agenceId = null;
@@ -30,12 +30,12 @@ class PerformanceController extends Controller
 
         $classementComplet = $this->primeService->getClassement($periode, $agenceId);
 
-        $dateDebut = Carbon::parse($periode . '-01')->startOfMonth();
+        $dateDebut = Carbon::parse($periode.'-01')->startOfMonth();
         $dateFin = $dateDebut->copy()->endOfMonth();
 
         $statsQuery = Vente::query()
             ->whereBetween('created_at', [$dateDebut, $dateFin])
-            ->when($agenceId, fn($q) => $q->where('agence_id', $agenceId));
+            ->when($agenceId, fn ($q) => $q->where('agence_id', $agenceId));
 
         $stats = [
             'total_ventes' => (clone $statsQuery)->count(),
@@ -48,7 +48,7 @@ class PerformanceController extends Controller
         $typesCartes = TypeCarte::orderBy('code')->get();
 
         $vueCommerciale = $user?->isCommercial() ?? false;
-        $vueChef = $user?->isChefAgence() ?? false;
+        $vueChef = false;
 
         $classement = $classementComplet;
         $classementTop3 = collect();
@@ -56,7 +56,7 @@ class PerformanceController extends Controller
 
         if ($vueCommerciale) {
             $classementTop3 = $classementComplet->take(3);
-            $idx = $classementComplet->search(fn($c) => $c['user_id'] == $user->id);
+            $idx = $classementComplet->search(fn ($c) => $c['user_id'] == $user->id);
             if ($idx !== false && $idx >= 3) {
                 $maLigne = $classementComplet->values()[$idx];
             }

@@ -113,7 +113,7 @@ class FreshMinimalSeeder extends Seeder
                 'prenom' => $c['prenom'],
                 'email' => $c['email'],
                 'password' => Hash::make('password'),
-                'telephone' => '22177' . str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT),
+                'telephone' => '22177'.str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT),
                 'role' => 'commercial',
                 'agence_id' => $agenceDakar->id,
             ]);
@@ -130,7 +130,7 @@ class FreshMinimalSeeder extends Seeder
                 'prenom' => $c['prenom'],
                 'email' => $c['email'],
                 'password' => Hash::make('password'),
-                'telephone' => '22177' . str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT),
+                'telephone' => '22177'.str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT),
                 'role' => 'commercial',
                 'agence_id' => $agenceThies->id,
             ]);
@@ -147,11 +147,10 @@ class FreshMinimalSeeder extends Seeder
         }
 
         Campagne::create([
-            'nom' => 'Campagne ' . now()->format('Y'),
+            'nom' => 'Campagne '.now()->format('Y'),
             'date_debut' => now()->startOfMonth(),
             'date_fin' => now()->endOfMonth()->addMonths(3),
-            'prime_top1' => 25000,
-            'prime_top2' => 15000,
+            'prime_meilleur_vendeur' => 25000,
             'actif' => true,
             'statut' => Campagne::STATUT_EN_COURS,
             'toutes_agences' => true,

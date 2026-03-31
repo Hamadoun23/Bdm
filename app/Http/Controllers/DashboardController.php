@@ -21,22 +21,22 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return view('dashboard.guest');
         }
 
         if ($user->isAdmin()) {
-            return $this->dashboardAdmin($user);
+            return $this->dashboardAdmin($user, false);
         }
 
-        if ($user->isChefAgence()) {
-            return $this->dashboardChefAgence($user);
+        if ($user->isDirection()) {
+            return $this->dashboardAdmin($user, true);
         }
 
         return $this->dashboardCommercial($user);
     }
 
-    private function dashboardAdmin($user): View
+    private function dashboardAdmin($user, bool $directionReadOnly): View
     {
         $ventesTotal = Vente::count();
         $ventesMois = Vente::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->count();
@@ -50,23 +50,14 @@ class DashboardController extends Controller
         $campagnesEnCours = Campagne::where('statut', Campagne::STATUT_EN_COURS)->count();
         $campagnesProgrammees = Campagne::where('statut', Campagne::STATUT_PROGRAMMEE)->count();
 
+        $readOnly = $directionReadOnly;
+
         return view('dashboard.admin', compact(
             'user',
             'ventesTotal', 'ventesMois', 'stocks', 'alertes',
-            'classement', 'campagnesTotal', 'campagneActive', 'campagnesEnCours', 'campagnesProgrammees'
+            'classement', 'campagnesTotal', 'campagneActive', 'campagnesEnCours', 'campagnesProgrammees',
+            'readOnly'
         ));
-    }
-
-    private function dashboardChefAgence($user): View
-    {
-        $user->load('agence');
-        $agenceId = $user->agence_id;
-        $stocks = Stock::with('typeCarte')->where('agence_id', $agenceId)->get();
-        $ventesAgence = Vente::where('agence_id', $agenceId)->whereMonth('created_at', now()->month)->count();
-        $classement = $this->primeService->getClassement(now()->format('Y-m'), $agenceId);
-        $alertes = $this->stockAlertService->getAlertes()->where('agence_id', $agenceId);
-
-        return view('dashboard.chef_agence', compact('user', 'stocks', 'ventesAgence', 'classement', 'alertes'));
     }
 
     private function dashboardCommercial($user): View
@@ -80,12 +71,24 @@ class DashboardController extends Controller
         $mesVentes = Vente::where('user_id', $user->id)->whereMonth('created_at', now()->month)->count();
         $stocks = $user->agence_id ? Stock::with('typeCarte')->where('agence_id', $user->agence_id)->get() : collect();
         $classement = $this->primeService->getClassement(now()->format('Y-m'), $user->agence_id);
-        $monRang = $classement->search(fn($c) => $c['user_id'] == $user->id) !== false
-            ? $classement->search(fn($c) => $c['user_id'] == $user->id) + 1
+        $monRang = $classement->search(fn ($c) => $c['user_id'] == $user->id) !== false
+            ? $classement->search(fn ($c) => $c['user_id'] == $user->id) + 1
             : null;
 
         return view('dashboard.commercial', compact(
             'user', 'mesVentes', 'stocks', 'classement', 'monRang', 'campagneActive', 'peutVendre'
         ));
+    }
+
+    public function alertesStockFaible(): View
+    {
+        $alertes = $this->stockAlertService->getAlertes()->sortBy(function (Stock $s) {
+            $agence = $s->agence?->nom ?? '';
+            $code = $s->typeCarte?->code ?? '';
+
+            return $agence.' '.$code;
+        })->values();
+
+        return view('dashboard.alertes-stock-faible', compact('alertes'));
     }
 }

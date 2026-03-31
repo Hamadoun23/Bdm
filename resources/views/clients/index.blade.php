@@ -6,11 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h4 class="mb-0">Clients</h4>
-        @if(auth()->user()?->isChefAgence())
-            <p class="text-muted small mb-0 mt-1">Clients liés à votre agence (ventes ou commerciaux rattachés).</p>
-        @else
-            <p class="text-muted small mb-0 mt-1">Liste de tous les clients enregistrés.</p>
-        @endif
+        <p class="text-muted small mb-0 mt-1">Liste de tous les clients enregistrés.</p>
     </div>
     <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Dashboard</a>
 </div>

@@ -402,6 +402,18 @@ body.gda-app .pagination .page-item.active .page-link {
     border-color: #ff6a3a;
 }
 
+body.gda-app .card-footer .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 0;
+}
+
+body.gda-app .card-footer nav[aria-label="Pagination Navigation"] {
+    display: flex;
+    justify-content: center;
+    max-width: 100%;
+}
+
 /* ---------- List group ---------- */
 body.gda-app .list-group-item {
     border-color: rgba(48, 48, 48, 0.06);
@@ -476,6 +488,29 @@ body.gda-app main .table-responsive {
 .gda-password-field .gda-pw-toggle:focus-visible {
     z-index: 3;
     box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.35);
+}
+
+/* Masquer l’œil natif dans le champ (Edge / Chrome / etc.) — seul le bouton externe reste */
+.gda-password-field input[type="password"]::-ms-reveal,
+.gda-password-field input[type="password"]::-ms-clear {
+    display: none;
+    width: 0;
+    height: 0;
+}
+.gda-password-field input[type="password"]::-webkit-textfield-decoration-container,
+.gda-password-field input[type="password"]::-webkit-credentials-auto-fill-button,
+.gda-password-field input[type="password"]::-webkit-strong-password-auto-fill-button {
+    display: none !important;
+    visibility: hidden;
+    pointer-events: none;
+    height: 0;
+    width: 0;
+    margin: 0;
+    opacity: 0;
+}
+.gda-password-field input[type="password"]::-moz-reveal,
+.gda-password-field input[type="password"]::-moz-reveal-label {
+    display: none;
 }
 
 @media (max-width: 991.98px) {

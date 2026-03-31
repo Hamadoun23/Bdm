@@ -12,7 +12,7 @@ class EnsureCompteActif
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        if ($user && in_array($user->role, ['commercial', 'chef_agence'], true) && !$user->actif) {
+        if ($user && in_array($user->role, ['commercial', 'direction'], true) && ! $user->actif) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

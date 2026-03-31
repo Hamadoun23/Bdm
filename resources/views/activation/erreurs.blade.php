@@ -14,7 +14,7 @@
                     <th>Client</th>
                     <th>Téléphone</th>
                     <th>Type carte</th>
-                    @if(auth()->user()?->isAdmin() || auth()->user()?->isChefAgence())
+                    @if(auth()->user()?->isAdmin())
                     <th>Actions</th>
                     @endif
                 </tr>
@@ -26,7 +26,7 @@
                     <td>{{ $v->client->prenom }} {{ $v->client->nom }}</td>
                     <td>{{ $v->client->telephone ?? '-' }}</td>
                     <td>{{ $v->type_carte }}</td>
-                    @if(auth()->user()?->isAdmin() || auth()->user()?->isChefAgence())
+                    @if(auth()->user()?->isAdmin())
                     <td>
                         <form action="{{ url('/activation/' . $v->id . '/statut') }}" method="POST" class="d-inline">
                             @csrf

@@ -22,8 +22,7 @@
                     <th>Nom</th>
                     <th>Période</th>
                     <th>Agences</th>
-                    <th>Prime Top 1</th>
-                    <th>Prime Top 2</th>
+                    <th>Prime 1<sup>er</sup></th>
                     <th>Statut</th>
                     <th>Actions</th>
                 </tr>
@@ -40,8 +39,7 @@
                         {{ $c->agences->pluck('nom')->join(', ') ?: '-' }}
                         @endif
                     </td>
-                    <td>{{ number_format($c->prime_top1) }} F</td>
-                    <td>{{ number_format($c->prime_top2) }} F</td>
+                    <td>{{ number_format($c->prime_meilleur_vendeur) }} F</td>
                     <td>
                         @php $statut = $c->statut_effectif; @endphp
                         @if($statut === 'en_cours')

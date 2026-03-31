@@ -19,8 +19,8 @@ class VenteController extends Controller
         if ($user) {
             if ($user->isCommercial()) {
                 $query->where('user_id', $user->id);
-            } elseif ($user->isChefAgence() && $user->agence_id) {
-                $query->where('agence_id', $user->agence_id);
+            } elseif ($user->isDirection()) {
+                // toutes les ventes (lecture)
             }
         }
 

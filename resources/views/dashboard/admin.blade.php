@@ -1,18 +1,31 @@
 @extends('layouts.app')
 
-@section('title', 'Dashboard Admin')
+@section('title', isset($readOnly) && $readOnly ? 'Dashboard Direction' : 'Dashboard Admin')
 
 @section('content')
-<h4 class="mb-4">Dashboard Admin</h4>
+<h4 class="mb-4">{{ ($readOnly ?? false) ? 'Dashboard Direction' : 'Dashboard Admin' }}</h4>
 @include('dashboard._user_context', ['user' => $user])
 
 @if($alertes->isNotEmpty())
-<div class="alert alert-warning">
-    <strong>Alertes stock faible :</strong>
-    @foreach($alertes as $a)
-        {{ $a->agence->nom }} - {{ $a->typeCarte?->code ?? '?' }} : {{ $a->quantite }}
-        @if(!$loop->last) | @endif
-    @endforeach
+@php
+    $alertesApercu = $alertes->take(2);
+    $alertesTotal = $alertes->count();
+@endphp
+<div class="alert alert-warning d-flex flex-column flex-sm-row flex-wrap align-items-start align-items-sm-center gap-2">
+    <div class="flex-grow-1 min-w-0">
+        <strong>Alertes stock faible :</strong>
+        <span class="d-inline ms-1">
+            @foreach($alertesApercu as $a)
+                <span class="text-nowrap">{{ $a->agence->nom }} — {{ $a->typeCarte?->code ?? '?' }} : <strong>{{ $a->quantite }}</strong></span>@if(!$loop->last)<span class="mx-1">·</span>@endif
+            @endforeach
+            @if($alertesTotal > 2)
+                <span class="text-muted">(+ {{ $alertesTotal - 2 }} autre(s))</span>
+            @endif
+        </span>
+    </div>
+    <a href="{{ route('alertes.stock-faible') }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-dark text-nowrap flex-shrink-0">
+        Voir tout
+    </a>
 </div>
 @endif
 
@@ -68,15 +81,27 @@
                     @endif
                 </div>
                 @endif
+                @if(!($readOnly ?? false))
                 <a href="{{ route('admin.campagnes.index') }}" class="btn btn-sm btn-light mt-2">Voir les campagnes →</a>
+                @else
+                <a href="{{ route('direction.campagnes.index') }}" class="btn btn-sm btn-light mt-2 me-1">Détail des campagnes →</a>
+                <a href="{{ route('rapports.index') }}" class="btn btn-sm btn-outline-light mt-2">Rapports →</a>
+                @endif
             </div>
         </div>
         <div class="card shadow-sm">
             <div class="card-header"><strong>Liens rapides</strong></div>
             <div class="card-body">
+                @unless($readOnly ?? false)
                 <a href="{{ route('admin.campagnes.index') }}" class="btn btn-outline-primary me-2 mb-2">Campagnes</a>
                 <a href="{{ url('/admin/stocks') }}" class="btn btn-outline-primary me-2 mb-2">Stocks</a>
+                @else
+                <a href="{{ route('direction.campagnes.index') }}" class="btn btn-outline-primary me-2 mb-2">Campagnes (détail)</a>
+                <a href="{{ route('direction.types-cartes.index') }}" class="btn btn-outline-primary me-2 mb-2">Types de cartes</a>
+                @endunless
                 <a href="{{ route('rapports.index') }}" class="btn btn-outline-primary me-2 mb-2">Rapports</a>
+                <a href="{{ route('clients.index') }}" class="btn btn-outline-primary me-2 mb-2">Clients</a>
+                <a href="{{ route('ventes.index') }}" class="btn btn-outline-primary me-2 mb-2">Historique des ventes</a>
                 <a href="{{ url('/performances') }}" class="btn btn-outline-primary me-2 mb-2">Performances</a>
             </div>
         </div>

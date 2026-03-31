@@ -3,10 +3,19 @@
 @section('title', 'Détail campagne')
 
 @section('content')
+@php $isDirectionDetail = $isDirectionDetail ?? false; @endphp
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4>Rapport détaillé : {{ $campagne->nom }}</h4>
-    <a href="{{ route('admin.campagnes.index') }}" class="btn btn-outline-secondary">← Retour</a>
+    <a href="{{ $isDirectionDetail ? route('direction.campagnes.index') : route('admin.campagnes.index') }}" class="btn btn-outline-secondary">← Retour</a>
 </div>
+
+@if($isDirectionDetail)
+<div class="alert alert-light border mb-3 small mb-4">
+    <strong>Raccourcis :</strong>
+    <a href="{{ route('rapports.campagnes.clients', $campagne) }}">Clients de cette campagne</a>
+    · <a href="{{ route('rapports.campagnes.ventes', $campagne) }}">Rapport ventes détaillé</a>
+</div>
+@endif
 
 @php $statut = $campagne->statut_effectif; @endphp
 
@@ -34,8 +43,7 @@
                 <table class="table table-sm table-borderless mb-0">
                     <tr><th class="text-muted" style="width: 140px;">Période</th><td>{{ $campagne->date_debut->format('d/m/Y') }} → {{ $campagne->date_fin->format('d/m/Y') }}</td></tr>
                     <tr><th class="text-muted">Agences</th><td>{{ $campagne->toutes_agences ? 'Toutes les agences' : $campagne->agences->pluck('nom')->join(', ') }}</td></tr>
-                    <tr><th class="text-muted">Prime Top 1</th><td>{{ number_format($campagne->prime_top1) }} FCFA</td></tr>
-                    <tr><th class="text-muted">Prime Top 2</th><td>{{ number_format($campagne->prime_top2) }} FCFA</td></tr>
+                    <tr><th class="text-muted">Prime du meilleur vendeur</th><td>{{ number_format($campagne->prime_meilleur_vendeur) }} FCFA</td></tr>
                     <tr>
                         <th class="text-muted">Remise ventes</th>
                         <td>
@@ -89,6 +97,145 @@
         </div>
     </div>
 </div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><strong>Contrat de prestation — signataires et réponses</strong></div>
+    <div class="card-body">
+        <p class="small text-muted">Émolument forfait : {{ number_format($campagne->contrat_emolument_forfait) }} F · Communication {{ number_format($campagne->contrat_forfait_communication) }} F · Déplacement {{ number_format($campagne->contrat_forfait_deplacement) }} F · Représentant : {{ $campagne->contrat_representant_nom }}</p>
+        <p class="small text-muted mb-2">Articles du corps du contrat : <strong>{{ $campagne->contratArticles->count() }}</strong>@unless($isDirectionDetail) — <a href="{{ route('admin.campagnes.edit', $campagne) }}">Modifier les articles</a>@endunless</p>
+        @if($campagne->contrat_publie_at)
+            <p class="small text-muted">Publié le {{ $campagne->contrat_publie_at->format('d/m/Y H:i') }} — délai de réponse : 5 jours après cette date.</p>
+        @endif
+        <h6 class="mt-3">Signataires ({{ $campagne->signatairesContrat->count() }})</h6>
+        <ul class="small mb-3">
+            @forelse($campagne->signatairesContrat as $u)
+                <li>{{ $u->prenom ? trim($u->prenom.' '.$u->name) : $u->name }} — {{ $u->agence->nom ?? '?' }}</li>
+            @empty
+                <li class="text-muted">Aucun — modifiez la campagne pour engager des commerciaux.</li>
+            @endforelse
+        </ul>
+        <h6>Réponses au contrat</h6>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead class="table-light"><tr><th>Commercial</th><th>Statut</th><th>Répondu le</th></tr></thead>
+                <tbody>
+                    @forelse($campagne->contratReponses as $rep)
+                        @php
+                            $verrou = $campagne->contrat_publie_at && $campagne->contrat_publie_at->copy()->addDays(5)->isPast();
+                        @endphp
+                        <tr>
+                            <td>{{ $rep->user?->prenom ? trim($rep->user->prenom.' '.$rep->user->name) : $rep->user?->name }}</td>
+                            <td>
+                                @if($rep->statut === 'accepte')<span class="badge bg-success">Accepté</span>
+                                @elseif($rep->statut === 'rejete')<span class="badge bg-danger">Refusé</span>
+                                @else<span class="badge bg-secondary">En attente</span>@endif
+                                @if($verrou && $rep->statut === 'en_attente')<span class="text-muted small"> (délai expiré)</span>@endif
+                            </td>
+                            <td>{{ $rep->repondu_at?->format('d/m/Y H:i') ?? '—' }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="3" class="text-muted">Aucune ligne de réponse (enregistrez des signataires).</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if($isDirectionDetail)
+        <h6 class="mt-4">Texte du contrat (articles)</h6>
+        @if($campagne->contratArticles->isEmpty())
+        <p class="text-muted small mb-0">Aucun article enregistré.</p>
+        @else
+        <div class="accordion accordion-flush" id="directionContratArticles">
+            @foreach($campagne->contratArticles->sortBy('sort_order') as $art)
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed py-2 small" type="button" data-bs-toggle="collapse" data-bs-target="#dirArticle{{ $art->id }}">
+                        {{ $art->titre }}
+                    </button>
+                </h2>
+                <div id="dirArticle{{ $art->id }}" class="accordion-collapse collapse" data-bs-parent="#directionContratArticles">
+                    <div class="accordion-body small text-body-secondary">{!! nl2br(e($art->contenu)) !!}</div>
+                </div>
+            </div>
+            @endforeach
+        </div>
+        @endif
+        @endif
+    </div>
+</div>
+
+@if($campagne->aide_hebdo_active)
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><strong>Versements aide hebdo (carburant / crédit) — accusés</strong></div>
+    <div class="card-body">
+        @unless($isDirectionDetail)
+        @if(session('success'))
+            <div class="alert alert-success py-2">{{ session('success') }}</div>
+        @endif
+        @if($errors->any())
+            <div class="alert alert-danger py-2 small">{{ $errors->first() }}</div>
+        @endif
+        <form method="POST" action="{{ route('admin.campagnes.versements.store', $campagne) }}" class="row g-2 align-items-end mb-4">
+            @csrf
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Commercial</label>
+                <select name="user_id" class="form-select form-select-sm" required>
+                    <option value="">—</option>
+                    @foreach($campagne->signatairesContrat as $u)
+                        <option value="{{ $u->id }}">{{ $u->prenom ? trim($u->prenom.' '.$u->name) : $u->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Semaine (lundi)</label>
+                <input type="date" name="semaine_debut" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Carburant (F)</label>
+                <input type="number" name="montant_carburant" class="form-control form-control-sm" value="{{ $campagne->aide_hebdo_carburant }}" min="0" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Crédit tel. (F)</label>
+                <input type="number" name="montant_credit_tel" class="form-control form-control-sm" value="{{ $campagne->aide_hebdo_credit_tel }}" min="0" required>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100">Enregistrer le versement</button>
+            </div>
+        </form>
+        @else
+        <p class="small text-muted mb-3">Lecture seule : suivi des versements et des accusés de réception.</p>
+        @endunless
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead class="table-light"><tr><th>Semaine</th><th>Commercial</th><th>Carburant</th><th>Crédit</th><th>Accusé</th>@unless($isDirectionDetail)<th></th>@endunless</tr></thead>
+                <tbody>
+                    @forelse($campagne->aideVersements->sortByDesc('semaine_debut') as $v)
+                        <tr>
+                            <td>{{ $v->semaine_debut->format('d/m/Y') }}</td>
+                            <td>{{ $v->user?->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user?->name }}</td>
+                            <td>{{ number_format($v->montant_carburant) }}</td>
+                            <td>{{ number_format($v->montant_credit_tel) }}</td>
+                            <td>@if($v->accuse_at)<span class="badge bg-success">{{ $v->accuse_at->format('d/m/Y H:i') }}</span>@else<span class="badge bg-warning text-dark">En attente</span>@endif</td>
+                            @unless($isDirectionDetail)
+                            <td>
+                                @if(!$v->accuse_at)
+                                <form method="POST" action="{{ route('admin.campagnes.versements.destroy', [$campagne, $v]) }}" class="d-inline" onsubmit="return confirm('Supprimer ce versement ?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Suppr.</button>
+                                </form>
+                                @endif
+                            </td>
+                            @endunless
+                        </tr>
+                    @empty
+                        <tr><td colspan="{{ $isDirectionDetail ? 5 : 6 }}" class="text-muted">Aucun versement.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Performances --}}
 <div class="card shadow-sm mb-4">
@@ -232,7 +379,9 @@
 @endif
 
 <div class="mb-4">
-    <a href="{{ route('admin.campagnes.index') }}" class="btn btn-outline-secondary">← Retour à la liste</a>
+    <a href="{{ $isDirectionDetail ? route('direction.campagnes.index') : route('admin.campagnes.index') }}" class="btn btn-outline-secondary">← Retour à la liste</a>
+    @unless($isDirectionDetail)
     <a href="{{ route('admin.campagnes.edit', $campagne) }}" class="btn btn-primary">Modifier la campagne</a>
+    @endunless
 </div>
 @endsection
