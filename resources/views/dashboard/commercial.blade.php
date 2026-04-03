@@ -21,7 +21,7 @@
     <div class="col-md-4">
         <div class="card bg-primary text-white">
             <div class="card-body">
-                <h6>Mes ventes ce mois</h6>
+                <h6>Mes ventes @if($campagneActive)<span class="small opacity-75">(campagne en cours)</span>@else<span class="small opacity-75">(mois en cours)</span>@endif</h6>
                 <h3>{{ $mesVentes }}</h3>
             </div>
         </div>

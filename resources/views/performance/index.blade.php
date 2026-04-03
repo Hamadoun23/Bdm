@@ -14,6 +14,17 @@
 <p class="small text-muted mb-2">
     <strong>Période affichée :</strong> {{ $libellePeriode ?? '—' }}
 </p>
+@if($vueCommerciale && !empty($classementLigneTop1))
+<p class="small mb-3 border-start border-3 border-warning ps-2">
+    <strong>1<sup>er</sup> du classement</strong>
+    @if(!empty($campagnePerformances))
+        — campagne « {{ $campagnePerformances->nom }} »
+    @endif
+    :
+    <strong>{{ $classementLigneTop1['user_name'] }}</strong>
+    — {{ $classementLigneTop1['total_ventes'] }} vente(s).
+</p>
+@endif
 
 <form method="GET" class="mb-4 d-flex gap-2 flex-wrap align-items-end">
     <div>
@@ -40,7 +51,18 @@
 </form>
 <p class="small text-muted mb-3">Sans dates : statistiques sur toute la période de la campagne affichée. Renseignez <strong>Du</strong> et <strong>Au</strong> pour un intervalle précis.</p>
 
+@php
+    $performancesDetailQuery = array_filter([
+        'du' => ! empty($filtreIntervalle) ? ($du ?? null) : null,
+        'au' => ! empty($filtreIntervalle) ? ($au ?? null) : null,
+        'agence' => $agenceId ?? null,
+    ], fn ($v) => $v !== null && $v !== '');
+@endphp
+
 @if($vueCommerciale)
+<div class="mb-3">
+    <a href="{{ route('performances.commercial.show', array_merge(['user' => $user->id], $performancesDetailQuery)) }}" class="btn btn-outline-primary">Voir mon détail (ventes, clients, cartes)</a>
+</div>
 <div class="row mb-4">
     <div class="col-md-4">
         <div class="card bg-primary text-white">
@@ -92,36 +114,41 @@
                     <th>Commercial</th>
                     <th>Nombre de ventes</th>
                     <th>Prime (estimée)</th>
+                    @if(!$vueCommerciale)
+                    <th class="text-end">Détail</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
                 @php $campagne = \App\Models\Campagne::getActiveForAgence($agenceId); @endphp
                 @if($vueCommerciale)
-                    @foreach($classementTop3 as $c)
+                    @if($classementLigneTop1)
+                        @php $c = $classementLigneTop1; @endphp
                     <tr>
-                        <td>
-                            @if($c['rang'] == 1)<span class="badge bg-warning text-dark">Top 1</span>
-                            @elseif($c['rang'] == 2)<span class="badge bg-secondary">Top 2</span>
-                            @else{{ $c['rang'] }}@endif
-                        </td>
+                        <td><span class="badge bg-warning text-dark">1<sup>er</sup></span></td>
                         <td>{{ $c['user_name'] }}</td>
                         <td>{{ $c['total_ventes'] }}</td>
                         <td>
-                            @if($campagne && $c['rang'] == 1){{ number_format($campagne->prime_meilleur_vendeur) }} F
+                            @if($campagne){{ number_format($campagne->prime_meilleur_vendeur) }} F
                             @else - @endif
                         </td>
                     </tr>
-                    @endforeach
-                    @if($maLigne)
-                    <tr class="table-secondary"><td colspan="4" class="small fw-bold">Votre position</td></tr>
+                    @endif
+                    @if($ligneCommercialConnecte)
+                    <tr class="table-secondary"><td colspan="4" class="small fw-bold">Ma position</td></tr>
                     <tr class="table-info">
-                        <td><span class="badge bg-dark">{{ $maLigne['rang'] }}ᵉ</span></td>
-                        <td>{{ $maLigne['user_name'] }}</td>
-                        <td>{{ $maLigne['total_ventes'] }}</td>
+                        <td><span class="badge bg-dark">{{ $ligneCommercialConnecte['rang'] }}ᵉ</span></td>
+                        <td>
+                            {{ $ligneCommercialConnecte['user_name'] }}
+                            @if((int) $user->id === (int) $ligneCommercialConnecte['user_id'])
+                                <span class="badge bg-secondary ms-1">vous</span>
+                            @endif
+                        </td>
+                        <td>{{ $ligneCommercialConnecte['total_ventes'] }}</td>
                         <td>-</td>
                     </tr>
                     @endif
-                    @if($classementTop3->isEmpty() && !$maLigne)
+                    @if(!$classementLigneTop1 && !$ligneCommercialConnecte)
                     <tr><td colspan="4" class="text-center py-4">Aucun commercial à afficher.</td></tr>
                     @endif
                 @else
@@ -138,10 +165,13 @@
                             @if($campagne && $c['rang'] == 1){{ number_format($campagne->prime_meilleur_vendeur) }} F
                             @else - @endif
                         </td>
+                        <td class="text-end">
+                            <a href="{{ route('performances.commercial.show', array_merge(['user' => $c['user_id']], $performancesDetailQuery)) }}" class="btn btn-sm btn-outline-primary">Détail</a>
+                        </td>
                     </tr>
                     @endforeach
                     @if($classement->isEmpty())
-                    <tr><td colspan="4" class="text-center py-4">Aucun commercial à afficher.</td></tr>
+                    <tr><td colspan="5" class="text-center py-4">Aucun commercial à afficher.</td></tr>
                     @endif
                 @endif
             </tbody>

@@ -83,12 +83,29 @@ class DashboardController extends Controller
         $campagneActive = $agenceId ? Campagne::getActiveForAgence($agenceId) : null;
         $peutVendre = $agenceId && $campagneActive && $campagneActive->estOuverteAuxVentes($agenceId);
 
-        $mesVentes = Vente::where('user_id', $user->id)->whereMonth('created_at', now()->month)->count();
         $stocks = $user->agence_id ? Stock::with('typeCarte')->where('agence_id', $user->agence_id)->get() : collect();
-        $classement = $this->primeService->getClassement(now()->format('Y-m'), $user->agence_id);
-        $monRang = $classement->search(fn ($c) => $c['user_id'] == $user->id) !== false
-            ? $classement->search(fn ($c) => $c['user_id'] == $user->id) + 1
-            : null;
+
+        // Même logique que Performances : période = campagne active pour l’agence (pas le mois calendaire seul).
+        if ($campagneActive) {
+            $dateDebut = $campagneActive->date_debut->copy()->startOfDay();
+            $dateFin = $campagneActive->date_fin->copy()->endOfDay();
+            $mesVentes = Vente::query()
+                ->where('user_id', $user->id)
+                ->where('campagne_id', $campagneActive->id)
+                ->whereBetween('created_at', [$dateDebut, $dateFin])
+                ->count();
+            $classement = $this->primeService->getClassementPourCampagne($campagneActive, $dateDebut, $dateFin);
+        } else {
+            $mesVentes = Vente::query()
+                ->where('user_id', $user->id)
+                ->whereYear('created_at', now()->year)
+                ->whereMonth('created_at', now()->month)
+                ->count();
+            $classement = $this->primeService->getClassement(now()->format('Y-m'), $agenceId);
+        }
+
+        $rangIdx = $classement->search(fn ($c) => (int) $c['user_id'] === (int) $user->id);
+        $monRang = $rangIdx !== false ? (int) $classement->values()[$rangIdx]['rang'] : null;
 
         return view('dashboard.commercial', compact(
             'user', 'mesVentes', 'stocks', 'classement', 'monRang', 'campagneActive', 'peutVendre'

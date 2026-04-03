@@ -136,6 +136,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/performances', [PerformanceController::class, 'index'])->name('performances.index');
+    Route::get('/performances/commercial/{user}', [PerformanceController::class, 'show'])->name('performances.commercial.show');
 
     Route::get('/api/stocks/agence/{agenceId}', [App\Http\Controllers\Api\StockController::class, 'byAgence'])->name('api.stocks.agence');
 });
