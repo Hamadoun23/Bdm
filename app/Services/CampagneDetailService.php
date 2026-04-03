@@ -8,33 +8,47 @@ use App\Models\Prime;
 use App\Models\TypeCarte;
 use App\Models\User;
 use App\Models\Vente;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
 class CampagneDetailService
 {
     /**
-     * @return array{campagne: Campagne, stats: array, classement: Collection, primes: Collection, typesCartes: Collection}
+     * @return array{preset: string, periode_debut: Carbon, periode_fin: Carbon, campagne: Campagne, stats: array, classement: Collection, primes: Collection, typesCartes: Collection}
      */
-    public function buildShowData(Campagne $campagne): array
+    public function buildShowData(Campagne $campagne, ?Request $request = null): array
     {
+        [$preset, $dateDebut, $dateFin] = self::resolvePeriodeFromRequest($request, $campagne);
+
         $campagne->load([
             'agences', 'actions.user', 'beneficiairesAide.agence', 'typesCartesRemise',
             'signatairesContrat.agence', 'contratReponses.user', 'aideVersements.user',
             'contratArticles',
         ]);
-        $dateDebut = $campagne->date_debut->copy()->startOfDay();
-        $dateFin = $campagne->date_fin->copy()->endOfDay();
+
+        $campDebut = $campagne->date_debut->copy()->startOfDay();
+        $campFin = $campagne->date_fin->copy()->endOfDay();
+
+        $dateDebut = $dateDebut->copy()->max($campDebut);
+        $dateFin = $dateFin->copy()->min($campFin);
+        if ($dateDebut->gt($dateFin)) {
+            $dateDebut = $campDebut->copy();
+            $dateFin = $campFin->copy();
+        }
 
         $agenceIdsCampagne = $campagne->toutes_agences ? null : $campagne->agences->pluck('id');
         $queryVentes = Vente::query()->where(function ($q) use ($campagne, $dateDebut, $dateFin, $agenceIdsCampagne) {
-            $q->where('campagne_id', $campagne->id)
-                ->orWhere(function ($q2) use ($dateDebut, $dateFin, $agenceIdsCampagne) {
-                    $q2->whereNull('campagne_id')
-                        ->whereBetween('created_at', [$dateDebut, $dateFin]);
-                    if ($agenceIdsCampagne !== null && $agenceIdsCampagne->isNotEmpty()) {
-                        $q2->whereIn('agence_id', $agenceIdsCampagne);
-                    }
-                });
+            $q->where(function ($q1) use ($campagne, $dateDebut, $dateFin) {
+                $q1->where('campagne_id', $campagne->id)
+                    ->whereBetween('created_at', [$dateDebut, $dateFin]);
+            })->orWhere(function ($q2) use ($dateDebut, $dateFin, $agenceIdsCampagne) {
+                $q2->whereNull('campagne_id')
+                    ->whereBetween('created_at', [$dateDebut, $dateFin]);
+                if ($agenceIdsCampagne !== null && $agenceIdsCampagne->isNotEmpty()) {
+                    $q2->whereIn('agence_id', $agenceIdsCampagne);
+                }
+            });
         });
 
         $stats = [
@@ -74,8 +88,9 @@ class CampagneDetailService
         })->values();
 
         $periodes = [];
-        $current = $dateDebut->copy();
-        while ($current->lte($dateFin)) {
+        $current = $dateDebut->copy()->startOfMonth();
+        $endMonth = $dateFin->copy()->startOfMonth();
+        while ($current->lte($endMonth)) {
             $periodes[] = $current->format('Y-m');
             $current->addMonth();
         }
@@ -87,6 +102,42 @@ class CampagneDetailService
 
         $typesCartes = TypeCarte::orderBy('code')->get();
 
-        return compact('campagne', 'stats', 'classement', 'primes', 'typesCartes');
+        $periode_debut = $dateDebut;
+        $periode_fin = $dateFin;
+
+        return compact(
+            'campagne', 'stats', 'classement', 'primes', 'typesCartes',
+            'preset', 'periode_debut', 'periode_fin'
+        );
+    }
+
+    /**
+     * @return array{0: string, 1: Carbon, 2: Carbon}
+     */
+    public static function resolvePeriodeFromRequest(?Request $request, Campagne $campagne): array
+    {
+        $campDebut = $campagne->date_debut->copy()->startOfDay();
+        $campFin = $campagne->date_fin->copy()->endOfDay();
+
+        if ($request === null) {
+            return ['campagne', $campDebut, $campFin];
+        }
+
+        $preset = $request->get('periode', 'campagne');
+        $now = now();
+
+        switch ($preset) {
+            case 'semaine':
+                return ['semaine', $now->copy()->startOfWeek()->startOfDay(), $now->copy()->endOfWeek()->endOfDay()];
+            case 'mois':
+                return ['mois', $now->copy()->startOfMonth()->startOfDay(), $now->copy()->endOfMonth()->endOfDay()];
+            case 'perso':
+                $from = $request->date('date_debut')?->copy()->startOfDay() ?? $campDebut;
+                $to = $request->date('date_fin')?->copy()->endOfDay() ?? $campFin;
+
+                return ['perso', $from, $to];
+            default:
+                return ['campagne', $campDebut, $campFin];
+        }
     }
 }

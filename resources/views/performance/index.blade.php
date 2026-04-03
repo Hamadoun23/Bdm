@@ -11,10 +11,18 @@
 <p class="text-muted small mb-3">Statistiques de votre agence uniquement.</p>
 @endif
 
+<p class="small text-muted mb-2">
+    <strong>Période affichée :</strong> {{ $libellePeriode ?? '—' }}
+</p>
+
 <form method="GET" class="mb-4 d-flex gap-2 flex-wrap align-items-end">
     <div>
-        <label class="form-label">Période</label>
-        <input type="month" name="periode" class="form-control" value="{{ $periode }}">
+        <label class="form-label">Du</label>
+        <input type="date" name="du" class="form-control" value="{{ old('du', $filtreIntervalle ? ($du ?? '') : '') }}">
+    </div>
+    <div>
+        <label class="form-label">Au</label>
+        <input type="date" name="au" class="form-control" value="{{ old('au', $filtreIntervalle ? ($au ?? '') : '') }}">
     </div>
     @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
     <div>
@@ -28,14 +36,16 @@
     </div>
     @endif
     <button type="submit" class="btn btn-primary">Filtrer</button>
+    <a href="{{ route('performances.index', array_filter(['agence' => $agenceId])) }}" class="btn btn-outline-secondary">Campagne (défaut)</a>
 </form>
+<p class="small text-muted mb-3">Sans dates : statistiques sur toute la période de la campagne affichée. Renseignez <strong>Du</strong> et <strong>Au</strong> pour un intervalle précis.</p>
 
 @if($vueCommerciale)
 <div class="row mb-4">
     <div class="col-md-4">
         <div class="card bg-primary text-white">
             <div class="card-body">
-                <h6>Mes ventes (période)</h6>
+                <h6>Mes ventes</h6>
                 <h3>{{ $stats['mes_ventes'] ?? 0 }}</h3>
             </div>
         </div>

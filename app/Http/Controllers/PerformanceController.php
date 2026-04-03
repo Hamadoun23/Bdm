@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Campagne;
 use App\Models\TypeCarte;
 use App\Models\Vente;
 use App\Services\PrimeService;
@@ -17,21 +18,46 @@ class PerformanceController extends Controller
 
     public function index(Request $request): View
     {
+        Campagne::syncStatuts();
         $user = $request->user();
-        $periode = $request->query('periode', now()->format('Y-m'));
 
         if ($user?->isAdmin() || $user?->isDirection()) {
             $agenceId = $request->query('agence') ? (int) $request->query('agence') : null;
-        } elseif ($user?->isCommercial()) {
+        } elseif ($user?->isCommercial() || $user?->isCommercialTelephonique()) {
             $agenceId = $user->agence_id;
         } else {
             $agenceId = null;
         }
 
-        $classementComplet = $this->primeService->getClassement($periode, $agenceId);
+        $du = $request->query('du');
+        $au = $request->query('au');
+        $filtreIntervalle = $request->filled('du') && $request->filled('au');
 
-        $dateDebut = Carbon::parse($periode.'-01')->startOfMonth();
-        $dateFin = $dateDebut->copy()->endOfMonth();
+        $campagnePerformances = Campagne::getCampagnePourPerformances($agenceId);
+
+        if ($filtreIntervalle) {
+            $dateDebut = Carbon::parse($du)->startOfDay();
+            $dateFin = Carbon::parse($au)->endOfDay();
+            if ($dateDebut->gt($dateFin)) {
+                [$dateDebut, $dateFin] = [$dateFin->copy()->startOfDay(), $dateDebut->copy()->endOfDay()];
+            }
+            $libellePeriode = 'Du '.$dateDebut->format('d/m/Y').' au '.$dateFin->format('d/m/Y');
+        } elseif ($request->filled('periode')) {
+            $periodeMois = $request->query('periode');
+            $dateDebut = Carbon::parse($periodeMois.'-01')->startOfMonth();
+            $dateFin = $dateDebut->copy()->endOfMonth();
+            $libellePeriode = $dateDebut->locale('fr')->translatedFormat('F Y');
+        } elseif ($campagnePerformances) {
+            $dateDebut = $campagnePerformances->date_debut->copy()->startOfDay();
+            $dateFin = $campagnePerformances->date_fin->copy()->endOfDay();
+            $libellePeriode = 'Campagne « '.$campagnePerformances->nom.' » ('.$dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y').')';
+        } else {
+            $dateDebut = Carbon::now()->startOfDay();
+            $dateFin = Carbon::now()->endOfDay();
+            $libellePeriode = 'Aucune campagne trouvée';
+        }
+
+        $classementComplet = $this->primeService->getClassementBetween($dateDebut, $dateFin, $agenceId);
 
         $statsQuery = Vente::query()
             ->whereBetween('created_at', [$dateDebut, $dateFin])
@@ -47,7 +73,7 @@ class PerformanceController extends Controller
 
         $typesCartes = TypeCarte::orderBy('code')->get();
 
-        $vueCommerciale = $user?->isCommercial() ?? false;
+        $vueCommerciale = $user && ($user->isCommercial() || $user->isCommercialTelephonique());
         $vueChef = false;
 
         $classement = $classementComplet;
@@ -60,9 +86,12 @@ class PerformanceController extends Controller
             if ($idx !== false && $idx >= 3) {
                 $maLigne = $classementComplet->values()[$idx];
             }
-            $mesVentesMois = (int) ($classementComplet->firstWhere('user_id', $user->id)['total_ventes'] ?? 0);
+            $mesVentesPeriode = (int) Vente::query()
+                ->where('user_id', $user->id)
+                ->whereBetween('created_at', [$dateDebut, $dateFin])
+                ->count();
             $monRang = $idx !== false ? $idx + 1 : null;
-            $stats['mes_ventes'] = $mesVentesMois;
+            $stats['mes_ventes'] = $mesVentesPeriode;
             $stats['mon_rang'] = $monRang;
         }
 
@@ -71,12 +100,18 @@ class PerformanceController extends Controller
             'classementTop3',
             'maLigne',
             'stats',
-            'periode',
             'agenceId',
             'typesCartes',
             'vueCommerciale',
             'vueChef',
-            'user'
+            'user',
+            'libellePeriode',
+            'campagnePerformances',
+            'dateDebut',
+            'dateFin',
+            'filtreIntervalle',
+            'du',
+            'au'
         ));
     }
 }

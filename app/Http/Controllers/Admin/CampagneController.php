@@ -28,7 +28,7 @@ class CampagneController extends Controller
     public function create(): View
     {
         $agences = Agence::all();
-        $commerciaux = User::with('agence')->where('role', 'commercial')->whereNotNull('agence_id')->orderBy('name')->get();
+        $commerciaux = User::with('agence')->whereIn('role', ['commercial', 'commercial_telephonique'])->whereNotNull('agence_id')->orderBy('name')->get();
         $typesCartes = TypeCarte::orderBy('code')->get();
 
         return view('admin.campagnes.create', compact('agences', 'commerciaux', 'typesCartes'));
@@ -99,16 +99,16 @@ class CampagneController extends Controller
         return redirect()->route('admin.campagnes.index')->with('success', 'Campagne créée.');
     }
 
-    public function show(Campagne $campagne, CampagneDetailService $detailService): View
+    public function show(Request $request, Campagne $campagne, CampagneDetailService $detailService): View
     {
-        return view('admin.campagnes.show', $detailService->buildShowData($campagne));
+        return view('admin.campagnes.show', $detailService->buildShowData($campagne, $request));
     }
 
     public function edit(Campagne $campagne): View
     {
         $agences = Agence::all();
         $campagne->load(['beneficiairesAide', 'typesCartesRemise', 'signatairesContrat', 'contratArticles']);
-        $commerciaux = User::with('agence')->where('role', 'commercial')->whereNotNull('agence_id')->orderBy('name')->get();
+        $commerciaux = User::with('agence')->whereIn('role', ['commercial', 'commercial_telephonique'])->whereNotNull('agence_id')->orderBy('name')->get();
         $typesCartes = TypeCarte::orderBy('code')->get();
 
         return view('admin.campagnes.edit', compact('campagne', 'agences', 'commerciaux', 'typesCartes'));
@@ -334,7 +334,7 @@ class CampagneController extends Controller
             return;
         }
         $ids = array_unique(array_map('intval', $request->input('aide_beneficiaires', [])));
-        $valid = User::whereIn('id', $ids)->where('role', 'commercial')->pluck('id')->all();
+        $valid = User::whereIn('id', $ids)->whereIn('role', ['commercial', 'commercial_telephonique'])->pluck('id')->all();
         $campagne->beneficiairesAide()->sync($valid);
     }
 
@@ -379,7 +379,7 @@ class CampagneController extends Controller
     private function syncSignatairesContrat(Campagne $campagne, Request $request): void
     {
         if ($request->boolean('aide_hebdo_tous_commerciaux')) {
-            $q = User::query()->where('role', 'commercial')->whereNotNull('agence_id');
+            $q = User::query()->whereIn('role', ['commercial', 'commercial_telephonique'])->whereNotNull('agence_id');
             if (! $campagne->toutes_agences) {
                 $agenceIds = $campagne->agences()->pluck('agences.id');
                 $q->whereIn('agence_id', $agenceIds);
@@ -388,7 +388,7 @@ class CampagneController extends Controller
             $campagne->signatairesContrat()->sync($ids);
         } else {
             $ids = array_unique(array_map('intval', $request->input('aide_beneficiaires', [])));
-            $valid = User::whereIn('id', $ids)->where('role', 'commercial')->pluck('id')->all();
+            $valid = User::whereIn('id', $ids)->whereIn('role', ['commercial', 'commercial_telephonique'])->pluck('id')->all();
             $campagne->signatairesContrat()->sync($valid);
         }
     }

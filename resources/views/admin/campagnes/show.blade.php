@@ -237,11 +237,70 @@
 </div>
 @endif
 
+@php
+    $preset = $preset ?? 'campagne';
+    $periode_debut = $periode_debut ?? $campagne->date_debut;
+    $periode_fin = $periode_fin ?? $campagne->date_fin;
+    $periodeLib = match ($preset) {
+        'semaine' => 'Semaine en cours (découpée selon les dates de campagne)',
+        'mois' => 'Mois civil en cours (découpé selon les dates de campagne)',
+        'perso' => 'Intervalle personnalisé',
+        default => 'Toute la durée de la campagne',
+    };
+@endphp
+<div class="card shadow-sm mb-4 border-primary border-opacity-25">
+    <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <strong>Période d’analyse (ventes &amp; classement)</strong>
+        <span class="badge bg-secondary">{{ $periode_debut->format('d/m/Y') }} → {{ $periode_fin->format('d/m/Y') }}</span>
+    </div>
+    <div class="card-body py-3">
+        <form method="get" id="form-periode-campagne" class="row g-2 align-items-end mb-2">
+            <div class="col-12 col-md-3">
+                <label class="form-label small mb-0">Préréglage</label>
+                <select name="periode" id="select-periode-preset" class="form-select form-select-sm">
+                    <option value="campagne" @selected($preset === 'campagne')>Toute la campagne</option>
+                    <option value="semaine" @selected($preset === 'semaine')>Semaine en cours</option>
+                    <option value="mois" @selected($preset === 'mois')>Mois en cours</option>
+                    <option value="perso" @selected($preset === 'perso')>Dates au choix</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-0">Du</label>
+                <input type="date" name="date_debut" class="form-control form-control-sm" value="{{ request('date_debut', $periode_debut->format('Y-m-d')) }}" @if($preset !== 'perso') disabled @endif>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small mb-0">Au</label>
+                <input type="date" name="date_fin" class="form-control form-control-sm" value="{{ request('date_fin', $periode_fin->format('Y-m-d')) }}" @if($preset !== 'perso') disabled @endif>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary">Appliquer</button>
+            </div>
+        </form>
+        @push('scripts')
+        <script>
+        (function () {
+            var sel = document.getElementById('select-periode-preset');
+            var form = document.getElementById('form-periode-campagne');
+            if (!sel || !form) return;
+            sel.addEventListener('change', function () {
+                var perso = sel.value === 'perso';
+                form.querySelectorAll('[name="date_debut"],[name="date_fin"]').forEach(function (el) {
+                    el.disabled = !perso;
+                });
+                if (!perso) form.submit();
+            });
+        })();
+        </script>
+        @endpush
+        <p class="small text-muted mb-0"><strong>{{ $periodeLib }}</strong> — Les montants se limitent aux ventes enregistrées sur la fenêtre affichée (recoupée avec les dates de campagne).</p>
+    </div>
+</div>
+
 {{-- Performances --}}
 <div class="card shadow-sm mb-4">
     <div class="card-header"><strong>Performances commerciales</strong></div>
     <div class="card-body">
-        <div class="row mb-4">
+        <div class="row mb-4 g-3">
             <div class="col-md-4">
                 <div class="card bg-primary text-white">
                     <div class="card-body py-3">
@@ -262,8 +321,8 @@
         <div class="row mb-3">
             <div class="col-md-6">
                 <h6>Ventes par type de carte</h6>
-                <table class="table table-sm">
-                    <thead><tr><th>Type</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
+                <table class="table table-sm table-striped">
+                    <thead class="table-light"><tr><th>Type</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
                     <tbody>
                         @foreach($typesCartes as $tc)
                         @php $p = $stats['par_type'][$tc->id] ?? null; @endphp
@@ -274,8 +333,8 @@
             </div>
             <div class="col-md-6">
                 <h6>Ventes par agence</h6>
-                <table class="table table-sm">
-                    <thead><tr><th>Agence</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
+                <table class="table table-sm table-striped">
+                    <thead class="table-light"><tr><th>Agence</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
                     <tbody>
                         @foreach($stats['par_agence'] as $pa)
                         <tr><td>{{ $pa->agence_nom }}</td><td class="text-end">{{ $pa->nb }}</td><td class="text-end">{{ number_format($pa->mt) }} F</td></tr>
@@ -289,7 +348,7 @@
         </div>
         <h6>Classement des commerciaux</h6>
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table table-hover table-striped mb-0">
                 <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
                 <tbody>
                     @foreach($classement as $c)

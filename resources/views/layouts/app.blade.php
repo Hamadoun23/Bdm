@@ -8,11 +8,8 @@
     <title>@yield('title', 'Accueil') — {{ config('app.name') }}</title>
     @include('layouts.partials.pwa')
     @include('layouts.partials.favicon')
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/gda-theme.css') }}?v=8" rel="stylesheet">
+    <link href="{{ asset('css/gda-theme.css') }}?v=9" rel="stylesheet">
 </head>
 <body class="gda-app">
     <nav class="navbar navbar-expand-lg navbar-dark gda-navbar gda-navbar-split">
@@ -52,12 +49,20 @@
                                         <li><a class="dropdown-item" href="{{ route('admin.stocks.index') }}">Stocks</a></li>
                                         <li><a class="dropdown-item" href="{{ route('rapports.index') }}">Rapports</a></li>
                                         <li><a class="dropdown-item" href="{{ route('clients.index') }}">Clients</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="{{ route('admin.login-logs.index') }}">Journal des connexions</a></li>
+                                        <li><a class="dropdown-item" href="{{ route('admin.telephonique-rapports.index') }}">Reporting téléphonique (toutes)</a></li>
                                     </ul>
                                 </li>
                                 <li class="nav-item"><a class="nav-link" href="{{ route('performances.index') }}">Performances</a></li>
                                 @endif
                                 @if($u?->isCommercial())
                                 <li class="nav-item"><a class="nav-link" href="{{ route('ventes.index') }}">Mes ventes</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{{ route('commercial.contrat') }}">Mon contrat</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{{ route('performances.index') }}">Performances</a></li>
+                                @endif
+                                @if($u?->isCommercialTelephonique())
+                                <li class="nav-item"><a class="nav-link" href="{{ route('commercial.telephonique.create') }}">Reporting téléphonique</a></li>
                                 <li class="nav-item"><a class="nav-link" href="{{ route('commercial.contrat') }}">Mon contrat</a></li>
                                 <li class="nav-item"><a class="nav-link" href="{{ route('performances.index') }}">Performances</a></li>
                                 @endif

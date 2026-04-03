@@ -6,12 +6,15 @@ use App\Http\Controllers\Admin\CampagneContratArticleController;
 use App\Http\Controllers\Admin\CampagneController;
 use App\Http\Controllers\Admin\RapportController;
 use App\Http\Controllers\Admin\StockController;
+use App\Http\Controllers\Admin\TelephoniqueRapportController as AdminTelephoniqueRapportController;
 use App\Http\Controllers\Admin\TypeCarteController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\UserLoginLogController;
 use App\Http\Controllers\Api\VenteController;
 use App\Http\Controllers\Clients\ClientController as ClientsClientController;
 use App\Http\Controllers\Commercial\ClientController as CommercialClientController;
 use App\Http\Controllers\Commercial\ContratPrestationController;
+use App\Http\Controllers\Commercial\TelephoniqueRapportController;
 use App\Http\Controllers\Commercial\VenteController as CommercialVenteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Direction\CampagneController as DirectionCampagneController;
@@ -56,19 +59,30 @@ Route::get('/', function () {
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::middleware('role:admin,direction')->get('/alertes-stock-faible', [DashboardController::class, 'alertesStockFaible'])->name('alertes.stock-faible');
-    // Ventes : uniquement les commerciaux
-    Route::get('/ventes', [CommercialVenteController::class, 'index'])->name('ventes.index');
+    // Ventes terrain : commerciaux + lecture admin/direction
+    Route::get('/ventes', [CommercialVenteController::class, 'index'])->name('ventes.index')->middleware('role:admin,direction,commercial');
     Route::get('/ventes/create', [CommercialVenteController::class, 'create'])->name('ventes.create')->middleware('role:commercial');
+    Route::delete('/ventes/{vente}', [CommercialVenteController::class, 'destroy'])->name('ventes.destroy')->middleware('role:commercial');
     Route::post('/api/ventes', [VenteController::class, 'store'])->name('api.ventes.store')->middleware('role:commercial');
 
     Route::middleware('role:commercial')->group(function () {
         Route::get('/mes-clients/{client}/modifier', [CommercialClientController::class, 'edit'])->name('commercial.clients.edit');
         Route::put('/mes-clients/{client}', [CommercialClientController::class, 'update'])->name('commercial.clients.update');
         Route::delete('/mes-clients/{client}', [CommercialClientController::class, 'destroy'])->name('commercial.clients.destroy');
+    });
+
+    Route::middleware('role:commercial,commercial_telephonique')->group(function () {
         Route::get('/mon-contrat', [ContratPrestationController::class, 'show'])->name('commercial.contrat');
         Route::post('/mon-contrat/accepter', [ContratPrestationController::class, 'accepter'])->name('commercial.contrat.accepter');
         Route::post('/mon-contrat/rejeter', [ContratPrestationController::class, 'rejeter'])->name('commercial.contrat.rejeter');
         Route::post('/mes-aides/{versement}/accuser', [ContratPrestationController::class, 'accuserVersement'])->name('commercial.aides.accuser');
+    });
+
+    Route::middleware('role:commercial_telephonique')->group(function () {
+        Route::get('/reporting-telephonique', [TelephoniqueRapportController::class, 'index'])->name('commercial.telephonique.index');
+        Route::get('/reporting-telephonique/saisie', [TelephoniqueRapportController::class, 'create'])->name('commercial.telephonique.create');
+        Route::post('/reporting-telephonique', [TelephoniqueRapportController::class, 'store'])->name('commercial.telephonique.store');
+        Route::delete('/reporting-telephonique/{telephoniqueRapport}', [TelephoniqueRapportController::class, 'destroy'])->name('commercial.telephonique.destroy');
     });
 
     Route::middleware('role:admin,direction')->prefix('clients')->name('clients.')->group(function () {
@@ -117,6 +131,8 @@ Route::middleware('auth')->group(function () {
         Route::post('stocks/ajuster', [StockController::class, 'ajuster'])->name('stocks.ajuster');
         Route::get('stocks/mouvements', [StockController::class, 'mouvements'])->name('stocks.mouvements');
         Route::get('stocks/mouvements/{agenceId}', [StockController::class, 'mouvements'])->name('stocks.mouvements.agence');
+        Route::get('journal-connexions', [UserLoginLogController::class, 'index'])->name('login-logs.index');
+        Route::get('reporting-telephonique', [AdminTelephoniqueRapportController::class, 'index'])->name('telephonique-rapports.index');
     });
 
     Route::get('/performances', [PerformanceController::class, 'index'])->name('performances.index');

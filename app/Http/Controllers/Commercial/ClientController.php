@@ -23,6 +23,11 @@ class ClientController extends Controller
     {
         $this->authorizeCommercialOwnClient($request, $client);
 
+        if (! $client->peutEtreModifieOuSupprimeParCommercial()) {
+            return redirect()->route('commercial.clients.edit', $client)
+                ->with('error', 'La modification n’est plus possible : plus de '.Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES.' h se sont écoulées depuis l’enregistrement du client.');
+        }
+
         $validated = $request->validate([
             'prenom' => 'required|string|max:100',
             'nom' => 'required|string|max:100',
@@ -50,7 +55,7 @@ class ClientController extends Controller
     {
         $this->authorizeCommercialOwnClient($request, $client);
 
-        if (! $client->peutEtreSupprimeParCommercial()) {
+        if (! $client->peutEtreModifieOuSupprimeParCommercial()) {
             return redirect()->route('commercial.clients.edit', $client)
                 ->with('error', 'La suppression n’est plus possible : plus de '.Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES.' heures se sont écoulées depuis l’enregistrement du client.');
         }

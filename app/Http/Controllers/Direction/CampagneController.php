@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Direction;
 use App\Http\Controllers\Controller;
 use App\Models\Campagne;
 use App\Services\CampagneDetailService;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class CampagneController extends Controller
@@ -17,9 +18,9 @@ class CampagneController extends Controller
         return view('direction.campagnes.index', compact('campagnes'));
     }
 
-    public function show(Campagne $campagne, CampagneDetailService $detailService): View
+    public function show(Request $request, Campagne $campagne, CampagneDetailService $detailService): View
     {
-        $data = $detailService->buildShowData($campagne);
+        $data = $detailService->buildShowData($campagne, $request);
 
         return view('admin.campagnes.show', array_merge($data, [
             'isDirectionDetail' => true,

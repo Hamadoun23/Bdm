@@ -8,12 +8,12 @@
     <title>Connexion — Gda Money</title>
     @include('layouts.partials.pwa')
     @include('layouts.partials.favicon')
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{{ asset('css/gda-theme.css') }}?v=7" rel="stylesheet">
+    <link href="{{ asset('css/gda-theme.css') }}?v=9" rel="stylesheet">
     <style>
+        body {
+            font-family: var(--gda-font-family);
+        }
         .gda-login-page {
             min-height: 100vh;
             min-height: 100dvh;
@@ -50,15 +50,15 @@
             border-bottom: 3px solid rgba(255, 255, 255, 0.25);
         }
         .gda-login-header img {
-            height: 56px;
+            height: 80px;
             width: auto;
-            max-width: 160px;
+            max-width: 220px;
             object-fit: contain;
             filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
             margin-bottom: 0.75rem;
         }
         .gda-login-header h1 {
-            font-family: "Syne", sans-serif;
+            font-family: var(--gda-font-family);
             font-weight: 800;
             font-size: 1.85rem;
             margin: 0;

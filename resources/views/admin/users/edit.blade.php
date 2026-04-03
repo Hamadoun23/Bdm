@@ -53,12 +53,13 @@
             <div class="mb-3">
                 <label class="form-label">Rôle *</label>
                 <select name="role" id="role" class="form-select" required>
-                    <option value="commercial" {{ old('role', $user->role) === 'commercial' ? 'selected' : '' }}>Commercial</option>
-                    <option value="direction" {{ old('role', $user->role) === 'direction' ? 'selected' : '' }}>Direction (lecture &amp; exports)</option>
+                    <option value="commercial" {{ old('role', $user->role) === 'commercial' ? 'selected' : '' }}>Commercial terrain</option>
+                    <option value="commercial_telephonique" {{ old('role', $user->role) === 'commercial_telephonique' ? 'selected' : '' }}>Commercial téléphonique</option>
+                    <option value="direction" {{ old('role', $user->role) === 'direction' ? 'selected' : '' }}>Direction</option>
                 </select>
             </div>
             <div class="mb-3" id="agence-wrap">
-                <label class="form-label">Agence <span class="text-muted" id="agence-hint">{{ old('role', $user->role) === 'commercial' ? '*' : '' }}</span></label>
+                <label class="form-label">Agence <span class="text-muted" id="agence-hint">{{ in_array(old('role', $user->role), ['commercial', 'commercial_telephonique'], true) ? '*' : '' }}</span></label>
                 <select name="agence_id" id="agence_id" class="form-select @error('agence_id') is-invalid @enderror">
                     <option value="">— Sélectionner —</option>
                     @foreach($agences as $a)
@@ -67,8 +68,8 @@
                 </select>
                 @error('agence_id')<div class="text-danger small">{{ $message }}</div>@enderror
             </div>
-            <div id="contrat-commercial-wrap" style="display: {{ old('role', $user->role) === 'commercial' ? 'block' : 'none' }};">
-                <h6 class="text-muted small text-uppercase">Contrat de prestation (commercial)</h6>
+            <div id="contrat-commercial-wrap" style="display: {{ in_array(old('role', $user->role), ['commercial', 'commercial_telephonique'], true) ? 'block' : 'none' }};">
+                <h6 class="text-muted small text-uppercase">Contrat de prestation</h6>
                 <div class="mb-3">
                     <label class="form-label">Adresse (contrat) — « Demeurant à »</label>
                     <textarea name="adresse_contrat" class="form-control" rows="2">{{ old('adresse_contrat', $user->adresse_contrat) }}</textarea>
@@ -110,7 +111,8 @@
             agenceHint.textContent = isDirection ? '' : '*';
         }
         var contratWrap = document.getElementById('contrat-commercial-wrap');
-        if (contratWrap) contratWrap.style.display = isDirection ? 'none' : 'block';
+        var terrainOuTel = role && (role.value === 'commercial' || role.value === 'commercial_telephonique');
+        if (contratWrap) contratWrap.style.display = isDirection ? 'none' : (terrainOuTel ? 'block' : 'none');
     }
     if (role) role.addEventListener('change', sync);
     sync();

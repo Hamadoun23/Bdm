@@ -4,7 +4,7 @@
     <title>Fiche client {{ $client->prenom }} {{ $client->nom }}</title>
     <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
     <style>
-        body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
+        body { font-family: Futura, "Futura PT", "Century Gothic", "Trebuchet MS", Arial, sans-serif; font-size: 11pt; }
         h1 { font-size: 18pt; }
         h2 { font-size: 14pt; margin-top: 1.2em; }
         table { border-collapse: collapse; width: 100%; }

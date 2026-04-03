@@ -4,11 +4,17 @@
  */
 :root,
 [data-bs-theme="light"] {
+    /* Futura : système (souvent macOS/iOS) + Century Gothic / Trebuchet en repli (proche sur Windows) */
+    --gda-font-family: Futura, "Futura PT", "Futura Std", "Century Gothic", "Trebuchet MS", "Apple Gothic", "URW Gothic L", "Helvetica Neue", Helvetica, Arial, sans-serif;
+
     --gda-orange: #ff6a3a;
     --gda-burgundy: #381419;
     --gda-charcoal: #303030;
     --gda-terracotta: #b26440;
     --gda-white: #ffffff;
+
+    --bs-font-sans-serif: var(--gda-font-family);
+    --bs-body-font-family: var(--gda-font-family);
 
     --bs-primary: #ff6a3a;
     --bs-primary-rgb: 255, 106, 58;
@@ -23,7 +29,7 @@
 }
 
 body.gda-app {
-    font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+    font-family: var(--gda-font-family);
     font-optical-sizing: auto;
     min-height: 100vh;
     background:
@@ -38,7 +44,7 @@ body.gda-app main.container {
 }
 
 body.gda-app main h4 {
-    font-family: "Syne", sans-serif;
+    font-family: var(--gda-font-family);
     font-weight: 700;
     color: #381419;
     letter-spacing: -0.02em;
@@ -73,7 +79,7 @@ body.gda-app main h4 {
 }
 
 .gda-brand {
-    font-family: "Syne", sans-serif;
+    font-family: var(--gda-font-family);
     font-weight: 700;
     letter-spacing: -0.02em;
     text-decoration: none !important;
@@ -170,7 +176,7 @@ body.gda-app main h4 {
 }
 
 .gda-brand-wrap .gda-brand-tagline {
-    font-family: "DM Sans", sans-serif;
+    font-family: var(--gda-font-family);
     font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.11em;
@@ -212,7 +218,7 @@ body.gda-app main h4 {
 
 /* ---------- Titres de page ---------- */
 .gda-page-title {
-    font-family: "Syne", sans-serif;
+    font-family: var(--gda-font-family);
     font-weight: 700;
     color: #381419;
     letter-spacing: -0.03em;

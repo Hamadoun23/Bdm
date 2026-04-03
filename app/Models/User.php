@@ -59,14 +59,37 @@ class User extends Authenticatable
         return $this->belongsToMany(Campagne::class, 'campagne_commercial_contrat')->withTimestamps();
     }
 
+    public function telephoniqueRapports(): HasMany
+    {
+        return $this->hasMany(TelephoniqueRapport::class);
+    }
+
+    public function loginLogs(): HasMany
+    {
+        return $this->hasMany(UserLoginLog::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
     }
 
+    /** Commercial terrain (ventes sur le terrain). */
     public function isCommercial(): bool
     {
         return $this->role === 'commercial';
+    }
+
+    /** Téléopératrice / commercial téléphonique (reporting appels, sans tunnel vente terrain). */
+    public function isCommercialTelephonique(): bool
+    {
+        return $this->role === 'commercial_telephonique';
+    }
+
+    /** Commercial terrain ou téléphonique (contrat, espace « commercial » restreint). */
+    public function isCommercialOuTelephonique(): bool
+    {
+        return $this->isCommercial() || $this->isCommercialTelephonique();
     }
 
     /** @deprecated Ancien rôle chef d’agence (retiré ; migré en commercial en base). */

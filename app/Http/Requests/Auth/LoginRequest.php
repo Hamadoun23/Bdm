@@ -67,7 +67,7 @@ class LoginRequest extends FormRequest
         }
 
         Auth::login($user, $this->boolean('remember'));
-        if ($user && in_array($user->role, ['commercial', 'direction'], true) && ! $user->actif) {
+        if ($user && in_array($user->role, ['commercial', 'commercial_telephonique', 'direction'], true) && ! $user->actif) {
             Auth::logout();
             throw ValidationException::withMessages([
                 'email' => 'Votre compte est désactivé. Contactez l\'administration.',

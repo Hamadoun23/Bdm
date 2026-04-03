@@ -5,8 +5,8 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
     <div>
-        <h4 class="mb-0">Commerciaux &amp; Direction</h4>
-        <p class="text-muted small mb-0 mt-1">Connexion commerciaux : <strong>téléphone</strong> uniquement. Direction : <strong>téléphone</strong>, e-mail optionnel. Consultation et exports seulement (pas d’administration opérationnelle).</p>
+        <h4 class="mb-0">Commerciaux, téléphoniques &amp; Direction</h4>
+        <p class="text-muted small mb-0 mt-1">Commerciaux et téléopératrices : <strong>téléphone</strong> (identifiant). Direction : téléphone, e-mail optionnel.</p>
     </div>
     <a href="{{ route('admin.users.create') }}" class="btn btn-primary">Nouvel utilisateur</a>
 </div>
@@ -20,13 +20,24 @@
         <label class="form-label small text-muted mb-0">Rôle</label>
         <select name="role" class="form-select">
             <option value="">Tous</option>
-            <option value="commercial" {{ request('role') === 'commercial' ? 'selected' : '' }}>Commerciaux</option>
+            <option value="commercial" {{ request('role') === 'commercial' ? 'selected' : '' }}>Commercial terrain</option>
+            <option value="commercial_telephonique" {{ request('role') === 'commercial_telephonique' ? 'selected' : '' }}>Commercial téléphonique</option>
             <option value="direction" {{ request('role') === 'direction' ? 'selected' : '' }}>Direction</option>
+        </select>
+    </div>
+    <div class="col-12 col-sm-6 col-md-3 col-lg-2">
+        <label class="form-label small text-muted mb-0">Contrat (campagne active)</label>
+        <select name="contrat" class="form-select">
+            <option value="">—</option>
+            <option value="accepte" {{ request('contrat') === 'accepte' ? 'selected' : '' }}>Accepté</option>
+            <option value="en_attente" {{ request('contrat') === 'en_attente' ? 'selected' : '' }}>En attente</option>
+            <option value="rejete" {{ request('contrat') === 'rejete' ? 'selected' : '' }}>Refusé</option>
+            <option value="non_signataire" {{ request('contrat') === 'non_signataire' ? 'selected' : '' }}>Non signataire / sans campagne</option>
         </select>
     </div>
     <div class="col-auto d-flex flex-wrap gap-2">
         <button type="submit" class="btn btn-secondary">Filtrer</button>
-        @if(request()->hasAny(['q', 'role']))
+        @if(request()->hasAny(['q', 'role', 'contrat']))
         <a href="{{ route('admin.users.index') }}" class="btn btn-outline-secondary">Réinitialiser</a>
         @endif
     </div>
@@ -40,6 +51,7 @@
                     <th>Nom</th>
                     <th>Téléphone / e-mail</th>
                     <th>Rôle</th>
+                    <th>Contrat actif</th>
                     <th>Statut</th>
                     <th>Agence</th>
                     <th>Actions</th>
@@ -58,8 +70,24 @@
                     <td>
                         @if($u->role === 'direction')
                         <span class="badge bg-dark">direction</span>
+                        @elseif($u->role === 'commercial_telephonique')
+                        <span class="badge bg-info text-dark">téléphonique</span>
                         @else
-                        <span class="badge bg-success">commercial</span>
+                        <span class="badge bg-success">terrain</span>
+                        @endif
+                    </td>
+                    <td class="small">
+                        @php $cs = $contratParUser[$u->id] ?? null; @endphp
+                        @if($cs === null)
+                        <span class="text-muted">—</span>
+                        @elseif($cs === 'accepte')
+                        <span class="badge bg-success">Accepté</span>
+                        @elseif($cs === 'rejete')
+                        <span class="badge bg-danger">Refusé</span>
+                        @elseif($cs === 'en_attente')
+                        <span class="badge bg-warning text-dark">En attente</span>
+                        @else
+                        <span class="badge bg-secondary">Non concerné</span>
                         @endif
                     </td>
                     <td>

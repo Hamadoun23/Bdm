@@ -5,7 +5,7 @@
 @section('content')
 <div class="card shadow-sm">
     <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">Nouvel utilisateur (Commercial ou Direction)</h5>
+        <h5 class="mb-0">Nouvel utilisateur</h5>
     </div>
     <div class="card-body">
         <form method="POST" action="{{ route('admin.users.store') }}">
@@ -65,7 +65,8 @@
             <div class="mb-3">
                 <label class="form-label">Rôle *</label>
                 <select name="role" id="role" class="form-select" required>
-                    <option value="commercial" @selected(old('role', 'commercial') === 'commercial')>Commercial</option>
+                    <option value="commercial" @selected(old('role', 'commercial') === 'commercial')>Commercial terrain (ventes)</option>
+                    <option value="commercial_telephonique" @selected(old('role') === 'commercial_telephonique')>Commercial téléphonique (reporting appels)</option>
                     <option value="direction" @selected(old('role') === 'direction')>Direction (lecture &amp; exports)</option>
                 </select>
             </div>
@@ -80,8 +81,8 @@
                 @error('agence_id')<div class="text-danger small">{{ $message }}</div>@enderror
                 <small class="text-muted">Obligatoire pour un commercial uniquement.</small>
             </div>
-            <div id="contrat-commercial-wrap" style="display: {{ old('role', 'commercial') === 'commercial' ? 'block' : 'none' }};">
-                <h6 class="text-muted small text-uppercase">Contrat de prestation (commercial)</h6>
+            <div id="contrat-commercial-wrap" style="display: {{ in_array(old('role', 'commercial'), ['commercial', 'commercial_telephonique'], true) ? 'block' : 'none' }};">
+                <h6 class="text-muted small text-uppercase">Contrat de prestation (terrain / téléphonique)</h6>
                 <div class="mb-3">
                     <label class="form-label">Adresse (contrat)</label>
                     <textarea name="adresse_contrat" class="form-control" rows="2">{{ old('adresse_contrat') }}</textarea>
@@ -120,7 +121,8 @@
         }
         if (agenceHint) agenceHint.style.display = isDirection ? 'none' : 'inline';
         var contratWrap = document.getElementById('contrat-commercial-wrap');
-        if (contratWrap) contratWrap.style.display = isDirection ? 'none' : 'block';
+        var terrainOuTel = role && (role.value === 'commercial' || role.value === 'commercial_telephonique');
+        if (contratWrap) contratWrap.style.display = isDirection ? 'none' : (terrainOuTel ? 'block' : 'none');
     }
     if (role) role.addEventListener('change', sync);
     sync();

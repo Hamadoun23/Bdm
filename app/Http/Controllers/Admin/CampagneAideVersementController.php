@@ -21,7 +21,7 @@ class CampagneAideVersementController extends Controller
         ]);
 
         $user = User::findOrFail($request->user_id);
-        if (! $user->isCommercial() || ! $campagne->userEstSignataireContrat($user)) {
+        if (! $user->isCommercialOuTelephonique() || ! $campagne->userEstSignataireContrat($user)) {
             return back()->withErrors(['user_id' => 'Ce commercial ne fait pas partie des signataires de cette campagne.']);
         }
 

@@ -28,7 +28,7 @@
                         <th>Agence</th>
                         @endif
                         @if(auth()->user()?->isCommercial())
-                        <th class="text-end">Fiche client</th>
+                        <th class="text-end text-nowrap">Actions</th>
                         @endif
                     </tr>
                 </thead>
@@ -45,7 +45,22 @@
                         @endif
                         @if(auth()->user()?->isCommercial())
                         <td class="text-end">
-                            <a href="{{ route('commercial.clients.edit', $v->client) }}" class="btn btn-sm btn-outline-primary">Modifier</a>
+                            <div class="d-inline-flex flex-column flex-sm-row gap-1 justify-content-end">
+                                @if($v->client->peutEtreModifieOuSupprimeParCommercial())
+                                    <a href="{{ route('commercial.clients.edit', $v->client) }}" class="btn btn-sm btn-outline-primary">Modifier</a>
+                                @else
+                                    <span class="btn btn-sm btn-outline-secondary disabled" tabindex="-1" title="Modification impossible après {{ \App\Models\Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES }} h suivant la création de la fiche client.">Modifier</span>
+                                @endif
+                                @if($v->peutEtreSupprimeeParCommercial())
+                                    <form method="POST" action="{{ route('ventes.destroy', $v) }}" class="d-inline" onsubmit="return confirm('Supprimer cette vente et la fiche client associée ? Le stock sera réintégré si applicable.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+                                    </form>
+                                @else
+                                    <span class="btn btn-sm btn-outline-secondary disabled" tabindex="-1" title="Suppression impossible après {{ \App\Models\Vente::DELAI_SUPPRESSION_COMMERCIAL_HEURES }} h suivant la vente.">Supprimer</span>
+                                @endif
+                            </div>
                         </td>
                         @endif
                     </tr>

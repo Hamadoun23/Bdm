@@ -16,6 +16,12 @@ class PrimeService
         $dateDebut = Carbon::parse($periode.'-01')->startOfMonth();
         $dateFin = $dateDebut->copy()->endOfMonth();
 
+        return $this->getClassementBetween($dateDebut, $dateFin, $agenceId);
+    }
+
+    /** Classement des commerciaux sur une plage de dates (ventes agrégées). */
+    public function getClassementBetween(Carbon $dateDebut, Carbon $dateFin, ?int $agenceId = null): Collection
+    {
         $query = User::query()
             ->where('users.role', 'commercial')
             ->where('users.actif', true)

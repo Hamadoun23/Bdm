@@ -12,7 +12,19 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                sans: [
+                    'Futura',
+                    '"Futura PT"',
+                    '"Futura Std"',
+                    '"Century Gothic"',
+                    '"Trebuchet MS"',
+                    '"Apple Gothic"',
+                    '"URW Gothic L"',
+                    '"Helvetica Neue"',
+                    'Helvetica',
+                    'Arial',
+                    ...defaultTheme.fontFamily.sans,
+                ],
             },
         },
     },

@@ -5,12 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 class Vente extends Model
 {
+    /** Délai après enregistrement pendant lequel le commercial peut supprimer la vente. */
+    public const DELAI_SUPPRESSION_COMMERCIAL_HEURES = 48;
+
     protected $fillable = [
         'client_id', 'user_id', 'agence_id', 'campagne_id',
-        'type_carte_id', 'montant', 'statut_activation'
+        'type_carte_id', 'montant', 'statut_activation',
     ];
 
     public function campagne(): BelongsTo
@@ -41,5 +45,11 @@ class Vente extends Model
     public function mouvementStock(): HasOne
     {
         return $this->hasOne(MouvementStock::class);
+    }
+
+    public function peutEtreSupprimeeParCommercial(): bool
+    {
+        return $this->created_at instanceof Carbon
+            && $this->created_at->gt(now()->subHours(self::DELAI_SUPPRESSION_COMMERCIAL_HEURES));
     }
 }

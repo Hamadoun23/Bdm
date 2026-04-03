@@ -34,11 +34,17 @@ class Client extends Model
         return $this->hasMany(Reclamation::class);
     }
 
-    /** Délais depuis la création du client pour autoriser la suppression par le commercial. */
+    /** Délai depuis la création du client pour autoriser modification ou suppression par le commercial (48 h). */
     public const DELAI_SUPPRESSION_COMMERCIAL_HEURES = 48;
+
+    public function peutEtreModifieOuSupprimeParCommercial(): bool
+    {
+        return $this->created_at instanceof Carbon
+            && $this->created_at->gt(Carbon::now()->subHours(self::DELAI_SUPPRESSION_COMMERCIAL_HEURES));
+    }
 
     public function peutEtreSupprimeParCommercial(): bool
     {
-        return $this->created_at->gt(Carbon::now()->subHours(self::DELAI_SUPPRESSION_COMMERCIAL_HEURES));
+        return $this->peutEtreModifieOuSupprimeParCommercial();
     }
 }

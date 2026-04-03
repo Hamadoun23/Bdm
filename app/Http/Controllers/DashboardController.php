@@ -33,6 +33,10 @@ class DashboardController extends Controller
             return $this->dashboardAdmin($user, true);
         }
 
+        if ($user->isCommercialTelephonique()) {
+            return $this->dashboardTelephonique($user);
+        }
+
         return $this->dashboardCommercial($user);
     }
 
@@ -58,6 +62,17 @@ class DashboardController extends Controller
             'classement', 'campagnesTotal', 'campagneActive', 'campagnesEnCours', 'campagnesProgrammees',
             'readOnly'
         ));
+    }
+
+    private function dashboardTelephonique($user): View
+    {
+        $user->load('agence');
+        Campagne::syncStatuts();
+        $agenceId = $user->agence_id ? (int) $user->agence_id : null;
+        $campagneActive = $agenceId ? Campagne::getActiveForAgence($agenceId) : null;
+        $signataire = $campagneActive && $campagneActive->userEstSignataireContrat($user);
+
+        return view('dashboard.telephonique', compact('user', 'campagneActive', 'signataire'));
     }
 
     private function dashboardCommercial($user): View

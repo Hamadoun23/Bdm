@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class Campagne extends Model
@@ -120,7 +121,7 @@ class Campagne extends Model
 
     public function userEstSignataireContrat(User $user): bool
     {
-        if (! $user->isCommercial() || ! $user->agence_id) {
+        if (! $user->isCommercialOuTelephonique() || ! $user->agence_id) {
             return false;
         }
 
@@ -141,6 +142,25 @@ class Campagne extends Model
     public function typesCartesRemise(): BelongsToMany
     {
         return $this->belongsToMany(TypeCarte::class, 'campagne_remise_type_carte')->withTimestamps();
+    }
+
+    /**
+     * Types de cartes proposés au reporting téléphonique : même périmètre que la campagne (tous les types actifs si « tous », sinon types liés à la campagne).
+     *
+     * @return Collection<int, TypeCarte>
+     */
+    public function typesCartesPourReportingTelephonique(): Collection
+    {
+        $this->loadMissing('typesCartesRemise');
+        if ($this->remise_tous_types_cartes) {
+            return TypeCarte::query()->where('actif', true)->orderBy('code')->get();
+        }
+        $types = $this->typesCartesRemise()->orderBy('types_cartes.code')->get();
+        if ($types->isEmpty()) {
+            return TypeCarte::query()->where('actif', true)->orderBy('code')->get();
+        }
+
+        return $types;
     }
 
     /** La remise % s’applique-t-elle à ce type de carte ? */
@@ -171,7 +191,7 @@ class Campagne extends Model
     /** Le commercial reçoit-il l'aide hebdomadaire configurée sur cette campagne ? */
     public function commercialRecoitAideHebdo(User $user): bool
     {
-        if (! $this->aide_hebdo_active || ! $user->isCommercial() || ! $user->agence_id || ! $user->actif) {
+        if (! $this->aide_hebdo_active || ! $user->isCommercialOuTelephonique() || ! $user->agence_id || ! $user->actif) {
             return false;
         }
         if (! $this->concerneAgence((int) $user->agence_id)) {
@@ -272,9 +292,9 @@ class Campagne extends Model
 
         $aDesactiver = collect($historiquesIds)->diff($actifsIds)->all();
 
-        User::where('role', 'commercial')->whereIn('id', $actifsIds)->update(['actif' => true]);
+        User::whereIn('role', ['commercial', 'commercial_telephonique'])->whereIn('id', $actifsIds)->update(['actif' => true]);
         if ($aDesactiver !== []) {
-            User::where('role', 'commercial')->whereIn('id', $aDesactiver)->update(['actif' => false]);
+            User::whereIn('role', ['commercial', 'commercial_telephonique'])->whereIn('id', $aDesactiver)->update(['actif' => false]);
         }
     }
 
@@ -290,5 +310,28 @@ class Campagne extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Campagne de référence pour l’écran Performances (par défaut : active sinon la plus récente concernant l’agence).
+     * Sans agence (admin « toutes ») : active d’abord, sinon dernière campagne globale.
+     */
+    public static function getCampagnePourPerformances(?int $agenceId = null): ?Campagne
+    {
+        self::syncStatuts();
+        $active = self::getActiveForAgence($agenceId);
+        if ($active) {
+            return $active;
+        }
+
+        $q = self::query()->whereNotIn('statut', [self::STATUT_ANNULEE]);
+        if ($agenceId !== null) {
+            $q->where(function ($w) use ($agenceId) {
+                $w->where('toutes_agences', true)
+                    ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $agenceId));
+            });
+        }
+
+        return $q->orderByDesc('date_debut')->first();
     }
 }
