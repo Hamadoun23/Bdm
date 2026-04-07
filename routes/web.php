@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin,direction')->get('/alertes-stock-faible', [DashboardController::class, 'alertesStockFaible'])->name('alertes.stock-faible');
     // Ventes terrain : commerciaux + lecture admin/direction
     Route::get('/ventes', [CommercialVenteController::class, 'index'])->name('ventes.index')->middleware('role:admin,direction,commercial');
+    Route::get('/ventes/export-excel', [CommercialVenteController::class, 'exportExcel'])->name('ventes.export-excel')->middleware('role:admin,direction,commercial');
     Route::get('/ventes/create', [CommercialVenteController::class, 'create'])->name('ventes.create')->middleware('role:commercial');
     Route::delete('/ventes/{vente}', [CommercialVenteController::class, 'destroy'])->name('ventes.destroy')->middleware('role:commercial');
     Route::post('/api/ventes', [VenteController::class, 'store'])->name('api.ventes.store')->middleware('role:commercial');
@@ -79,6 +80,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('role:commercial_telephonique')->group(function () {
+        Route::get('/reporting-telephonique/export-excel', [TelephoniqueRapportController::class, 'exportExcel'])->name('commercial.telephonique.export-excel');
         Route::get('/reporting-telephonique', [TelephoniqueRapportController::class, 'index'])->name('commercial.telephonique.index');
         Route::get('/reporting-telephonique/saisie', [TelephoniqueRapportController::class, 'create'])->name('commercial.telephonique.create');
         Route::post('/reporting-telephonique', [TelephoniqueRapportController::class, 'store'])->name('commercial.telephonique.store');
@@ -100,8 +102,12 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin,direction')->prefix('rapports')->name('rapports.')->group(function () {
         Route::get('/', [RapportController::class, 'index'])->name('index');
         Route::get('/export', [RapportController::class, 'export'])->name('export');
+        Route::get('/campagnes/{campagne}/synthese', [RapportController::class, 'campagneSynthese'])->name('campagnes.synthese');
+        Route::get('/campagnes/{campagne}/export', [RapportController::class, 'exportCampagne'])->name('campagnes.export');
         Route::get('/campagnes/{campagne}/ventes', [RapportController::class, 'campagneVentes'])->name('campagnes.ventes');
         Route::get('/campagnes/{campagne}/clients', [RapportController::class, 'campagneClients'])->name('campagnes.clients');
+        Route::get('/campagnes/{campagne}/reporting-telephonique', [RapportController::class, 'campagneReportingTelephonique'])->name('campagnes.reporting-telephonique');
+        Route::get('/campagnes/{campagne}/reporting-telephonique/{telephoniqueRapport}', [RapportController::class, 'campagneReportingTelephoniqueShow'])->name('campagnes.reporting-telephonique.show');
     });
 
     Route::get('/admin/rapports', function () {
@@ -132,10 +138,14 @@ Route::middleware('auth')->group(function () {
         Route::get('stocks/mouvements', [StockController::class, 'mouvements'])->name('stocks.mouvements');
         Route::get('stocks/mouvements/{agenceId}', [StockController::class, 'mouvements'])->name('stocks.mouvements.agence');
         Route::get('journal-connexions', [UserLoginLogController::class, 'index'])->name('login-logs.index');
+        Route::get('reporting-telephonique/export', [AdminTelephoniqueRapportController::class, 'export'])->name('telephonique-rapports.export');
         Route::get('reporting-telephonique', [AdminTelephoniqueRapportController::class, 'index'])->name('telephonique-rapports.index');
+        Route::get('reporting-telephonique/{telephoniqueRapport}', [AdminTelephoniqueRapportController::class, 'show'])->name('telephonique-rapports.show');
     });
 
     Route::get('/performances', [PerformanceController::class, 'index'])->name('performances.index');
+    Route::get('/performances/export-excel', [PerformanceController::class, 'exportExcel'])->name('performances.export-excel');
+    Route::get('/performances/commercial/{user}/export-excel', [PerformanceController::class, 'exportCommercialExcel'])->name('performances.commercial.export-excel');
     Route::get('/performances/commercial/{user}', [PerformanceController::class, 'show'])->name('performances.commercial.show');
 
     Route::get('/api/stocks/agence/{agenceId}', [App\Http\Controllers\Api\StockController::class, 'byAgence'])->name('api.stocks.agence');

@@ -6,23 +6,34 @@ use App\Http\Controllers\Controller;
 use App\Models\Campagne;
 use App\Models\TelephoniqueRapport;
 use App\Models\TypeCarte;
+use App\Services\CampagneRapportService;
+use App\Services\SpreadsheetExportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TelephoniqueRapportController extends Controller
 {
+    public function __construct(
+        private SpreadsheetExportService $spreadsheetExportService,
+        private CampagneRapportService $campagneRapportService
+    ) {}
+
     public function index(Request $request): View
     {
-        $rapports = TelephoniqueRapport::query()
-            ->where('user_id', $request->user()->id)
+        $base = TelephoniqueRapport::query()->where('user_id', $request->user()->id);
+        $totauxListe = $this->campagneRapportService->totauxTelephoniqueListe($base);
+
+        $rapports = $base->clone()
             ->orderByDesc('date_rapport')
             ->paginate(20);
 
-        return view('commercial.telephonique.index', compact('rapports'));
+        return view('commercial.telephonique.index', compact('rapports', 'totauxListe'));
     }
 
     public function create(Request $request): View
@@ -163,7 +174,11 @@ class TelephoniqueRapportController extends Controller
             $cartesProposees[(string) $tid] = (int) $request->input('propose.'.$tid, 0);
         }
 
+        $agenceId = $request->user()->agence_id ? (int) $request->user()->agence_id : null;
+        $campagneFiche = Campagne::pourFicheTelephonique($agenceId, $request->date('date_rapport'));
+
         return [
+            'campagne_id' => $campagneFiche?->id,
             'date_rapport' => $request->date('date_rapport')->format('Y-m-d'),
             'appels_emis' => $emis,
             'appels_joignables' => $joignables,
@@ -184,5 +199,81 @@ class TelephoniqueRapportController extends Controller
             'nj_autres_nombre' => (int) $request->input('nj_autres_nombre'),
             'nj_autres_precision' => $autresNb > 0 ? trim((string) $request->input('nj_autres_precision')) : null,
         ];
+    }
+
+    public function exportExcel(Request $request): StreamedResponse
+    {
+        $request->user()->loadMissing('agence');
+        $rapports = TelephoniqueRapport::query()
+            ->with(['user.agence', 'campagne'])
+            ->where('user_id', $request->user()->id)
+            ->orderByDesc('date_rapport')
+            ->get();
+
+        $hdr = [
+            'Date', 'Campagne', 'Collaborateur', 'Agence', 'Appels émis', 'Joignables', 'Non joignables',
+            'Taux joign. %', 'Intéressés (nb)', 'Intéressés %', 'Déjà servis (nb)', 'Déjà servis %',
+            'NJ répondeur', 'NJ n° erroné', 'NJ hors réseau', 'NJ autres nb', 'NJ autres précision',
+            'Cartes proposées (résumé)', 'Cohérence NJ',
+        ];
+        $rows = $rapports->map(fn ($r) => [
+            $r->date_rapport->format('d/m/Y'),
+            $r->campagne?->nom ?? '—',
+            $r->user?->prenom ? trim($r->user->prenom.' '.$r->user->name) : ($r->user?->name ?? ''),
+            $r->user?->agence?->nom ?? '',
+            $r->appels_emis,
+            $r->appels_joignables,
+            $r->appels_non_joignables,
+            $r->taux_joignabilite !== null ? round((float) $r->taux_joignabilite, 2) : '',
+            $r->clients_interesses_nombre,
+            $r->clients_interesses_pct !== null ? round((float) $r->clients_interesses_pct, 2) : ($r->pctInteressesCalcule() ?? ''),
+            $r->clients_deja_servis_nombre,
+            $r->clients_deja_servis_pct !== null ? round((float) $r->clients_deja_servis_pct, 2) : ($r->pctDejaServisCalcule() ?? ''),
+            $r->nj_repondeur,
+            $r->nj_numero_errone,
+            $r->nj_hors_reseau,
+            $r->nj_autres_nombre,
+            $r->nj_autres_precision ?? '',
+            $r->resumeCartesProposees(),
+            $r->njAnalyseCoherente() ? 'OK' : 'Écart',
+        ])->all();
+
+        $user = $request->user();
+        $nomCollaborateur = $user->prenom ? trim($user->prenom.' '.$user->name) : $user->name;
+        $meta = [
+            'Généré le '.now()->locale('fr')->translatedFormat('d F Y').' à '.now()->format('H:i'),
+            'Collaborateur : '.$nomCollaborateur.($user->agence?->nom ? ' — '.$user->agence->nom : ''),
+        ];
+
+        $totaux = [
+            'TOTAUX', $rapports->count().' fiche(s)', '', '',
+            $rapports->sum('appels_emis'),
+            $rapports->sum('appels_joignables'),
+            $rapports->sum('appels_non_joignables'),
+            '', $rapports->sum('clients_interesses_nombre'), '',
+            $rapports->sum('clients_deja_servis_nombre'), '',
+            $rapports->sum('nj_repondeur'),
+            $rapports->sum('nj_numero_errone'),
+            $rapports->sum('nj_hors_reseau'),
+            $rapports->sum('nj_autres_nombre'),
+            '',
+            '',
+            '',
+        ];
+
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $this->spreadsheetExportService->fillStructuredTable(
+            $sheet,
+            'Mes fiches — reporting téléphonique',
+            $meta,
+            $hdr,
+            $rows,
+            $totaux
+        );
+        $sheet->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Mes fiches'));
+        $fn = 'mes_fiches_telephonique_'.now()->format('Y-m-d_His').'.xlsx';
+
+        return $this->spreadsheetExportService->download($spreadsheet, $fn);
     }
 }

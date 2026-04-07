@@ -8,7 +8,10 @@
         <h4 class="mb-0">Détail — {{ $displayName }}</h4>
         <p class="small text-muted mb-0 mt-1"><strong>Période :</strong> {{ $libellePeriode }}</p>
     </div>
-    <a href="{{ route('performances.index', $queryParams) }}" class="btn btn-outline-secondary">Retour aux performances</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ route('performances.commercial.export-excel', array_merge(['user' => $commercial], $queryParams)) }}" class="btn btn-success btn-sm" target="_blank">Exporter Excel (.xlsx)</a>
+        <a href="{{ route('performances.index', $queryParams) }}" class="btn btn-outline-secondary btn-sm">Retour aux performances</a>
+    </div>
 </div>
 
 @if($commercial->agence)

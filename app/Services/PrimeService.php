@@ -25,12 +25,15 @@ class PrimeService
     /**
      * Classement sur le périmètre d’une campagne : ventes avec ce `campagne_id` sur la période,
      * et commerciaux rattachés aux agences de la campagne (ou tous si « toutes agences »).
+     *
+     * @param  ?int  $ventesAgenceId  Si renseigné (ex. filtre « Agence » sur l’écran performances), seules les ventes avec ce `ventes.agence_id` sont comptées — aligné sur les totaux du tableau de bord.
      */
     public function getClassementPourCampagne(
         Campagne $campagne,
         Carbon $dateDebut,
         Carbon $dateFin,
-        bool $seulementSignatairesActifs = false
+        bool $seulementSignatairesActifs = false,
+        ?int $ventesAgenceId = null
     ): Collection {
         $campagne->loadMissing('agences');
         $campagneId = (int) $campagne->id;
@@ -46,10 +49,13 @@ class PrimeService
                     $q->whereIn('users.agence_id', $ids->all());
                 }
             })
-            ->leftJoin('ventes', function ($join) use ($campagneId, $dateDebut, $dateFin) {
+            ->leftJoin('ventes', function ($join) use ($campagneId, $dateDebut, $dateFin, $ventesAgenceId) {
                 $join->on('users.id', '=', 'ventes.user_id')
                     ->where('ventes.campagne_id', '=', $campagneId)
                     ->whereBetween('ventes.created_at', [$dateDebut, $dateFin]);
+                if ($ventesAgenceId !== null) {
+                    $join->where('ventes.agence_id', '=', $ventesAgenceId);
+                }
             })
             ->selectRaw('users.id as user_id, users.name, users.prenom, COALESCE(COUNT(ventes.id), 0) as total')
             ->groupBy('users.id', 'users.name', 'users.prenom')
@@ -80,18 +86,20 @@ class PrimeService
      * Classement des commerciaux sur une plage de dates (ventes agrégées).
      *
      * @param  bool  $seulementSignatairesActifs  Même logique que {@see getClassement()}.
+     * @param  ?int  $ventesAgenceId  Si renseigné, restreint le comptage des ventes à cette agence (aligné performances / filtres tableau de bord).
      */
-    public function getClassementBetween(Carbon $dateDebut, Carbon $dateFin, ?int $agenceId = null, bool $seulementSignatairesActifs = false): Collection
+    public function getClassementBetween(Carbon $dateDebut, Carbon $dateFin, ?int $agenceId = null, bool $seulementSignatairesActifs = false, ?int $ventesAgenceId = null): Collection
     {
         $query = User::query()
             ->whereIn('users.role', ['commercial', 'commercial_telephonique'])
             ->when($seulementSignatairesActifs, fn ($q) => $q->where('users.actif', true))
             ->when($agenceId, fn ($q) => $q->where('users.agence_id', $agenceId))
-            // Ne pas filtrer ventes.agence_id : le total doit refléter toutes les ventes du commercial sur la période
-            // (sinon des ventes mal rattachées à l’agence excluent des collègues du classement et faussent le 1ᵉʳ).
-            ->leftJoin('ventes', function ($join) use ($dateDebut, $dateFin) {
+            ->leftJoin('ventes', function ($join) use ($dateDebut, $dateFin, $ventesAgenceId) {
                 $join->on('users.id', '=', 'ventes.user_id')
                     ->whereBetween('ventes.created_at', [$dateDebut, $dateFin]);
+                if ($ventesAgenceId !== null) {
+                    $join->where('ventes.agence_id', '=', $ventesAgenceId);
+                }
             })
             ->selectRaw('users.id as user_id, users.name, users.prenom, COALESCE(COUNT(ventes.id), 0) as total')
             ->groupBy('users.id', 'users.name', 'users.prenom')

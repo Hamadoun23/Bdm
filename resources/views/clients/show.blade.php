@@ -86,7 +86,7 @@
                 <p class="text-muted small mb-3">Choisissez le format du fichier à télécharger.</p>
                 <div class="d-grid gap-2">
                     <a href="{{ route('clients.export', ['client' => $client, 'format' => 'pdf']) }}" class="btn btn-outline-danger">PDF</a>
-                    <a href="{{ route('clients.export', ['client' => $client, 'format' => 'excel']) }}" class="btn btn-outline-success">Excel (CSV)</a>
+                    <a href="{{ route('clients.export', ['client' => $client, 'format' => 'excel']) }}" class="btn btn-outline-success">Excel (.xlsx)</a>
                     <a href="{{ route('clients.export', ['client' => $client, 'format' => 'word']) }}" class="btn btn-outline-primary">Word (.doc)</a>
                 </div>
             </div>

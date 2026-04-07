@@ -5,7 +5,10 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <h4 class="mb-0">Mes fiches de reporting</h4>
-    <a href="{{ route('commercial.telephonique.create') }}" class="btn btn-primary">Nouvelle saisie / jour</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ route('commercial.telephonique.export-excel') }}" class="btn btn-success" target="_blank">Exporter Excel (.xlsx)</a>
+        <a href="{{ route('commercial.telephonique.create') }}" class="btn btn-primary">Nouvelle saisie / jour</a>
+    </div>
 </div>
 
 <div class="card shadow-sm">
@@ -51,6 +54,19 @@
                 <tr><td colspan="7" class="text-muted text-center py-4">Aucune fiche enregistrée.</td></tr>
                 @endforelse
             </tbody>
+            @if(($totauxListe['nb_fiches'] ?? 0) > 0)
+            <tfoot class="table-secondary">
+                <tr class="fw-bold small">
+                    <td class="text-end">Total ({{ number_format($totauxListe['nb_fiches']) }} fiche(s))</td>
+                    <td class="text-end">{{ number_format($totauxListe['appels_emis']) }}</td>
+                    <td class="text-end">{{ number_format($totauxListe['appels_joignables']) }}</td>
+                    <td class="text-end">{{ number_format($totauxListe['appels_non_joignables']) }}</td>
+                    <td></td>
+                    <td class="text-end">{{ number_format($totauxListe['clients_interesses']) }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            @endif
         </table>
     </div>
     @if($rapports->hasPages())

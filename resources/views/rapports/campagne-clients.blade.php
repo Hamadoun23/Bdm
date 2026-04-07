@@ -9,8 +9,10 @@
         <p class="text-muted small mb-0 mt-1">Clients ayant au moins une vente sur cette campagne.</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
-        <a href="{{ route('rapports.campagnes.ventes', $campagne) }}" class="btn btn-outline-secondary">Liste des ventes</a>
-        <a href="{{ route('rapports.index') }}" class="btn btn-outline-secondary">Rapports</a>
+        <a href="{{ route('rapports.campagnes.synthese', $campagne) }}" class="btn btn-success btn-sm">Synthèse</a>
+        <a href="{{ route('rapports.campagnes.ventes', $campagne) }}" class="btn btn-outline-secondary btn-sm">Liste des ventes</a>
+        <a href="{{ route('rapports.campagnes.reporting-telephonique', $campagne) }}" class="btn btn-outline-info btn-sm">Reporting téléphonique</a>
+        <a href="{{ route('rapports.index') }}" class="btn btn-outline-secondary btn-sm">Rapports</a>
     </div>
 </div>
 
@@ -59,7 +61,7 @@
             <div class="modal-body">
                 <div class="d-grid gap-2">
                     <a href="{{ route('clients.export', ['client' => $c, 'format' => 'pdf']) }}" class="btn btn-outline-danger">PDF</a>
-                    <a href="{{ route('clients.export', ['client' => $c, 'format' => 'excel']) }}" class="btn btn-outline-success">Excel (CSV)</a>
+                    <a href="{{ route('clients.export', ['client' => $c, 'format' => 'excel']) }}" class="btn btn-outline-success">Excel (.xlsx)</a>
                     <a href="{{ route('clients.export', ['client' => $c, 'format' => 'word']) }}" class="btn btn-outline-primary">Word (.doc)</a>
                 </div>
             </div>

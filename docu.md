@@ -1,197 +1,253 @@
-# Documentation projet — Campagne BDM (Laravel)
+# Documentation — Application Campagne BDM (Gda Money)
 
-Application de gestion des campagnes de cartes BDM : ventes terrain, stocks, rapports, contrats de prestation, direction en lecture seule, **commerciaux téléphoniques** (reporting d’appels), journal des connexions.
+Application web **Laravel** de pilotage des campagnes de vente de cartes bancaires / prépayées : **ventes terrain**, **stocks**, **contrats de prestation** et aides, **reporting téléphonique**, **rapports** direction, **performances** et **exports** (Excel structurés, PDF selon modules).
 
 ---
 
-## 1. Stack technique
+## 1. Vue d’ensemble
+
+| Domaine | Description |
+|--------|-------------|
+| **Ventes** | Saisie par commerciaux terrain ; rattachement `campagne_id`, `agence_id`, client, type de carte, montant ; décrément stock agence. |
+| **Campagnes** | Périodes, agences cibles, remises, prime meilleur vendeur, signataires contrat, articles de contrat, versements d’aide. |
+| **Stocks** | Stock par agence et type de carte ; approvisionnement / ajustement ; mouvements ; alertes seuil bas. |
+| **Clients** | Fiches clients (terrain) ; consultation admin/direction ; exports. |
+| **Reporting téléphonique** | Fiches journalières (appels, joignabilité, intéressés, non-joignables, cartes proposées) ; lien campagne ; agrégats dans les rapports campagne. |
+| **Rapports** | Synthèse par campagne (graphiques, filtres), listes ventes/clients, reporting téléphonique par campagne, **export Excel complet** par campagne (`section=all`). |
+| **Performances** | Classements commerciaux / agences / types de cartes ; graphiques (top 5, parts d’agences, répartition types) ; **export Excel global** multi-feuilles. |
+| **Direction** | Lecture seule sur campagnes et référentiel types de cartes. |
+| **Admin** | Référentiels (agences, utilisateurs, types de cartes), campagnes, stocks, journal des connexions, reporting téléphonique global. |
+
+**Langue interface** : français. **Auth** : session web (Breeze) ; identification flexible (e-mail, téléphone, nom normalisé pour certains rôles).
+
+---
+
+## 2. Stack technique
 
 | Couche | Technologie |
 |--------|-------------|
-| Framework | Laravel 11+ (PHP) |
-| Front app principale | Blade + Bootstrap 5.3 (CDN) + `public/css/gda-theme.css` |
-| Auth | Laravel Breeze (layouts `guest` + Vite/Tailwind pour certaines pages) |
-| PWA | `site.webmanifest`, service worker (partials layouts) |
-| Build optionnel | Vite + Tailwind (`resources/css/app.js`, `tailwind.config.js`) |
-| Base de données | MySQL (cible production) ; SQLite en mémoire en tests (certaines migrations SQL restent spécifiques MySQL) |
+| **PHP** | ^8.2 |
+| **Framework** | **Laravel 12** |
+| **Auth UI** | Laravel Breeze (Vite + Tailwind sur pages *guest* / auth) |
+| **App métier (UI)** | **Blade** + **Bootstrap 5** (CDN) + `public/css/gda-theme.css` |
+| **PDF** | `barryvdh/laravel-dompdf` |
+| **Excel** | `phpoffice/phpspreadsheet` — structuration via `App\Services\SpreadsheetExportService` |
+| **Base de données** | **Visée production : MySQL** (ENUM, SQL spécifique) ; SQLite possible pour dev/tests |
+| **PWA** | Route `site.webmanifest` ; thème / icônes dans `public/logo/` |
+
+Fichiers utiles : `composer.json`, `routes/web.php`, `routes/auth.php`, `bootstrap/app.php` (middleware).
 
 ---
 
-## 2. Rôles utilisateurs (`users.role`)
+## 3. Rôles utilisateurs (`users.role`)
 
-Valeurs possibles (ENUM MySQL après migrations récentes) :
+| Rôle | Code | Accès résumé |
+|------|------|----------------|
+| **Administrateur** | `admin` | Tout le back-office : agences, utilisateurs, types de cartes, **CRUD campagnes**, stocks, rapports, journal connexions, export reporting téléphonique global. |
+| **Direction** | `direction` | **Lecture** : clients, rapports, campagnes (`/direction/campagnes`), performances, alertes stock. Pas de CRUD admin. |
+| **Commercial terrain** | `commercial` | Ventes, *mes clients*, contrat campagne, performances (vue restreinte), dashboard terrain. **Pas** d’accès reporting téléphonique métier (réservé au rôle téléphonique). |
+| **Commercial téléphonique** | `commercial_telephonique` | **Pas** de tunnel ventes terrain ni clients commerciaux classiques ; **reporting téléphonique** ; contrat / aides si signataire ; performances (périmètre agence) ; dashboard dédié. |
 
-| Rôle | Code | Accès principal |
-|------|------|-----------------|
-| Administrateur | `admin` | CRUD agences, utilisateurs, types de cartes, campagnes, stocks, rapports admin, journal connexions, reporting téléphonique global |
-| Commercial terrain | `commercial` | Ventes, clients associés, contrat, performances, dashboard terrain |
-| Commercial téléphonique | `commercial_telephonique` | **Pas** de ventes / fiches clients commerciales ; **reporting téléphonique** ; contrat + aides si signataire ; performances (vue agence) ; dashboard dédié |
-| Direction | `direction` | Lecture : clients, rapports, campagnes détail (`/direction/campagnes`), performances, alertes stock ; pas d’admin CRUD |
+**Comptes** : `users.actif` ; middleware / login peuvent bloquer les comptes inactifs selon le rôle (`EnsureCompteActif`, `LoginRequest`).
 
-**Identification à la connexion** (`LoginRequest`) : e-mail, téléphone, ou (admin/direction) nom normalisé. Comptes inactifs (`actif = 0`) : déconnexion pour commerciaux, téléphoniques et direction (`EnsureCompteActif`, `LoginRequest`).
-
----
-
-## 3. Commerciaux téléphoniques — principe d’implémentation
-
-1. **Nouveau rôle en base** : extension de l’ENUM MySQL `users.role` avec `commercial_telephonique` (migration `2026_03_31_200000_add_commercial_telephonique_and_logs.php`).
-2. **Séparation des permissions par middleware** : le middleware `role` (`app/Http/Middleware/CheckRole.php`) vérifie `in_array($user->role, $roles)`. Les routes **ventes** et **clients commerciaux** restent `role:commercial` uniquement. Les routes **contrat** sont `role:commercial,commercial_telephonique`. Les routes **reporting** sont `role:commercial_telephonique` uniquement.
-3. **Modèle `User`** : `isCommercial()` = terrain seul ; `isCommercialTelephonique()` ; `isCommercialOuTelephonique()` pour contrat, signataires campagne, aide hebdo éligible, sync comptes actifs.
-4. **Données métier** : table `telephonique_rapports` (fiche journalière : appels, joignabilité, typologie clients, cartes proposées, motifs non joignables) ; contrôleur `App\Http\Controllers\Commercial\TelephoniqueRapportController`.
-5. **Campagnes** : les listes de signataires / bénéficiaires incluent **terrain + téléphonique** là où le code utilisait seulement `commercial` (`Admin\CampagneController`, sync pivot `campagne_commercial_contrat`).
-6. **Journal des connexions** : table `user_login_logs` ; insert après `authenticate()` dans `AuthenticatedSessionController`.
-7. **Front** : vues `resources/views/commercial/telephonique/`, `dashboard/telephonique.blade.php`, entrées menu `layouts/app.blade.php` conditionnées par `isCommercialTelephonique()`.
+**Méthodes utiles** (`App\Models\User`) : `isAdmin()`, `isDirection()`, `isCommercial()`, `isCommercialTelephonique()`, `isCommercialOuTelephonique()`.
 
 ---
 
-## 4. Arborescence backend (résumé)
+## 4. Carte des routes principales (`routes/web.php`)
 
-```
-app/
-├── Http/
-│   ├── Controllers/
-│   │   ├── Admin/          # Agences, Users, Types cartes, Campagnes, Stocks, Rapports, Versements, Articles contrat, Login logs, Telephonique rapports admin
-│   │   ├── Auth/           # Sessions, mots de passe, etc.
-│   │   ├── Api/            # VenteController (store), StockController (JSON)
-│   │   ├── Clients/        # Liste / fiche / export clients (admin + direction)
-│   │   ├── Commercial/     # Ventes, Clients terrain, Contrat, TelephoniqueRapportController
-│   │   ├── Direction/      # Campagnes liste/détail lecture seule, référentiel types cartes
-│   │   ├── DashboardController.php
-│   │   └── PerformanceController.php
-│   ├── Middleware/
-│   │   ├── CheckRole.php
-│   │   └── EnsureCompteActif.php
-│   └── Requests/Auth/LoginRequest.php
-├── Models/                 # User, Campagne, Vente, Client, Stock, … (voir §6)
-└── Services/
-     ├── CampagneDetailService.php    # Données détail campagne + filtres période
-     ├── ContratPrestationService.php (si présent)
-     ├── PrimeService.php
-     └── StockAlertService.php
-```
+### 4.1 Public / auth
+- `/` → login ou dashboard.
+- Auth Breeze : `routes/auth.php` (login, logout, reset password, etc.).
 
-**Routes principales** : `routes/web.php` (API vente sous `/api/ventes` en `web` + session), `routes/auth.php`, `routes/api.php` (quasi vide).
+### 4.2 Authentifié — commun
+- `GET /dashboard` — `DashboardController@index` (vue selon rôle).
+- `GET /performances` — tableau de bord performances + filtres.
+- `GET /performances/export-excel` — export global (résumé, classements, par semaine, ventes détaillées).
+- `GET /performances/commercial/{user}` — détail d’un commercial (autorisations vérifiées).
+- `GET /performances/commercial/{user}/export-excel` — export détail commercial.
 
----
+### 4.3 Commercial terrain (`role:commercial` ou combiné selon route)
+- Ventes : liste, création, suppression (règles métier), `GET /ventes/export-excel`.
+- `POST /api/ventes` — enregistrement vente (API web + session + `role:commercial`).
+- Clients : édition / suppression des *mes clients* (routes préfixées).
 
-## 5. Front-end (vues et assets)
+### 4.4 Commercial terrain + téléphonique
+- `GET|POST … /mon-contrat`, accusés versements aides (`ContratPrestationController`).
 
-### Layout principal
-- `resources/views/layouts/app.blade.php` — navbar par rôle, Bootstrap, `gda-theme.css`, PWA.
-- `resources/views/layouts/guest.blade.php` — Breeze / Vite (pages auth alternatives).
+### 4.5 Commercial téléphonique uniquement
+- `/reporting-telephonique` — liste, saisie, enregistrement, suppression (délai), export Excel restreint.
 
-### Thème
-- `public/css/gda-theme.css` — variables CSS (couleurs BDM / GDA), `body.gda-app`, navbar, cartes, typographie (pile Futura + replis).
+### 4.6 Admin + direction
+- `/clients` — liste, fiche, export client (`Clients\ClientController`).
+- `/rapports` — liste campagnes, liens synthèse / ventes / clients / téléphonique / **export complet** par campagne.
+- `/rapports/export` — export ventes par période (legacy ; l’UI liste principale peut n’exposer que l’export par campagne).
+- Sous-routes `rapports/campagnes/{campagne}/…` : synthèse, export multi-sections, ventes filtrées, clients campagne, reporting téléphonique + fiche.
 
-### Zones Blade notables
-| Dossier / fichier | Rôle |
-|-------------------|------|
-| `resources/views/auth/login.blade.php` | Connexion (charte Gda Money / Campagne BDM) |
-| `resources/views/dashboard/*.blade.php` | Admin, Direction (`readOnly`), Commercial, **Telephonique** |
-| `resources/views/admin/**` | CRUD admin, campagnes `show` avec filtre période ventes |
-| `resources/views/commercial/**` | Ventes, clients terrain, contrat, **telephonique/** |
-| `resources/views/direction/**` | Liste campagnes direction |
-| `resources/views/clients/**` | Clients (admin/direction) |
-| `resources/views/rapports/**` | Rapports |
-| `resources/views/performance/**` | Performances |
-| `resources/views/contrats/prestation.blade.php` | Template HTML contrat |
-| `resources/views/exports/**` | Export client PDF / Word |
+### 4.7 Direction seule
+- `/direction/campagnes`, `/direction/campagnes/{campagne}`, `/direction/types-de-cartes`.
 
-### JavaScript / build
-- `resources/js/app.js` + Vite pour Breeze.
-- Scripts inline ou `@push('scripts')` sur certaines pages (ex. filtres période campagne).
+### 4.8 Admin seulement (`prefix admin`, `name admin.*`)
+- CRUD : `agences`, `users`, `types-cartes`, `campagnes` (+ actions arrêter / annuler / reprogrammer).
+- Versements aides, articles de contrat, **stocks** (approvisionner, ajuster, mouvements).
+- `journal-connexions` (`UserLoginLogController`).
+- `/admin/reporting-telephonique` — liste globale, fiche, export.
+
+### 4.9 API JSON
+- `GET /api/stocks/agence/{agenceId}` — stocks par agence (session).
+- `routes/api.php` — quasi vide ; la plupart des endpoints sont dans `web.php`.
+
+### 4.10 PWA
+- `GET /site.webmanifest` — nom `name` : Campagne BDM / config `app.name`.
 
 ---
 
-## 6. Base de données — tables et migrations
+## 5. Modules fonctionnels détaillés
 
-Les migrations s’exécutent **dans l’ordre du préfixe date**. La liste ci-dessous relie **fichier** → **objet créé ou modifié**.
+### 5.1 Ventes (`Commercial\VenteController`, `Api\VenteController`, `VenteService`)
+- Création avec contrôles stock, campagne active, rattachement client / type carte / agence.
+- Liste et export Excel pour profils autorisés.
+- Les ventes portent `campagne_id` pour statistiques et rapports.
 
-### 6.1 Laravel / cache / files
+### 5.2 Clients
+- **Commercial** : clients créés / rattachés au commercial ; modification / suppression sous conditions (délais métier dans le modèle).
+- **Admin / direction** : navigation `/clients/{id}`, exports (services dédiés, PDF/Word selon implémentation — voir `ClientExportService`, vues `exports/`).
 
-| Migration | Tables / effet |
-|-----------|----------------|
-| `0001_01_01_000000_create_users_table.php` | `users`, `password_reset_tokens`, `sessions` |
-| `0001_01_01_000001_create_cache_table.php` | `cache`, `cache_locks` |
-| `0001_01_01_000002_create_jobs_table.php` | `jobs`, `job_batches`, `failed_jobs` |
+### 5.3 Campagnes (`Admin\CampagneController`, `Direction\CampagneController`, modèle `Campagne`)
+- Statuts (planifiée, active, arrêtée, annulée…) ; synchronisation périodique **`Campagne::syncStatuts()`** (scheduler si configuré).
+- Liaison **agences** (ou *toutes agences*), **types** et remises, **prime meilleur vendeur**.
+- **Signataires** : pivot `campagne_commercial_contrat` (commerciaux terrain **et** téléphoniques).
+- **Contrat** : articles éditables (`CampagneContratArticle`), réponses `contrat_prestation_reponses`, PDF de prestation.
+- **Aides** : bénéficiaires, versements (`CampagneAideVersement`), accusés.
+- **Détail admin** : `CampagneDetailService` — stats et classements sur fenêtre de dates (recoupée aux bornes campagne).
 
-### 6.2 Métier BDM (ordre historique)
+### 5.4 Stocks (`Admin\StockController`, `Stock`, `MouvementStock`, `StockAlertService`)
+- Quantités par `agence_id` + `type_carte_id` ; mouvements tracés.
+- Alertes **stock faible** : route `alertes.stock-faible` (admin + direction).
 
-| Migration | Tables / colonnes |
-|-----------|-------------------|
-| `2025_03_23_000001_create_agences_table.php` | `agences` |
-| `2025_03_23_000002_add_bdm_columns_to_users_table.php` | `users` : téléphone, `role` (enum initial), `agence_id`, … |
-| `2025_03_23_000003_create_clients_table.php` | `clients` |
-| `2025_03_23_000004_create_stocks_table.php` | `stocks` |
-| `2025_03_23_000005_create_ventes_table.php` | `ventes` |
-| `2025_03_23_000006_create_mouvements_stock_table.php` | `mouvements_stock` |
-| `2025_03_23_000007_create_reclamations_table.php` | `reclamations` |
-| `2025_03_23_000008_create_primes_table.php` | `primes` |
-| `2025_03_23_000009_create_campagnes_table.php` | `campagnes` |
-| `2025_03_23_100000_add_prenom_and_nullable_email_to_users.php` | `users` |
-| `2025_03_23_110000_enhance_campagnes_table.php` | évolution `campagnes` ; `campagne_agence` (pivot) ; `campagne_actions` |
-| `2025_03_24_000000_create_types_cartes_and_migrate.php` | `types_cartes` ; adaptation `stocks` / `ventes` |
-| `2025_03_24_120000_drop_libelle_ordre_from_types_cartes.php` | `types_cartes` |
-| `2026_02_10_000001_add_remise_aide_campagne_and_users_actif.php` | `campagnes`, `users.actif` ; **`campagne_aide_beneficiaire`** (pivot) |
-| `2026_03_25_000000_add_remise_types_cartes_to_campagnes.php` | remises ; **`campagne_remise_type_carte`** |
-| `2026_03_27_120000_add_campagne_id_to_ventes_table.php` | `ventes.campagne_id` |
-| `2026_03_30_120000_campagne_prime_meilleur_vendeur_only.php` | ajustement champs campagne / primes |
-| `2026_03_31_100000_users_role_direction_replace_chef.php` | **MySQL** : ENUM `role` → `admin`, `commercial`, `direction` ; retrait `chef_agence` |
-| `2026_03_31_110000_clear_agences_chef_id.php` | `agences.chef_id` |
-| `2026_03_31_200000_contrats_prestation_aides_versements.php` | colonnes contrat sur `campagnes` ; **`campagne_commercial_contrat`** ; **`contrat_prestation_reponses`** ; **`campagne_aide_versements`** ; champs `users` adresse/pièce identité |
-| `2026_03_31_200000_add_commercial_telephonique_and_logs.php` | ENUM `users.role` + `commercial_telephonique` ; **`telephonique_rapports`** ; **`user_login_logs`** |
-| `2026_03_31_210000_campagne_contrat_articles.php` | **`campagne_contrat_articles`** |
+### 5.5 Reporting téléphonique
+- **Saisie** : `Commercial\TelephoniqueRapportController` — une fiche par jour / campagne (contraintes d’édition/suppression, cohérence des champs « non joignables »).
+- **Admin** : liste filtrable campagne / dates / téléopératrice, fiche détaillée, export structuré.
+- **Rapports campagne** : `RapportController` + `CampagneRapportService::telephoniqueRapportsPourCampagneQuery` — périmètre ventes campagne analogues (fiches liées ou orphelines rattachées par agence / rôle).
+- Table `telephonique_rapports` : indicateurs + `cartes_proposees` (JSON), `campagne_id` (migration dédiée).
 
-### 6.3 Pivots et tables clés (référence rapide)
+### 5.6 Rapports (`Admin\RapportController`, `CampagneRapportService`)
+- **Index** : liste des campagnes ; par campagne : **Synthèse**, **Ventes**, **Clients**, **Reporting téléphonique**, **Export complet** (classeur `.xlsx`).
+- **Export campagne** (`exportCampagne`) : sections CSV/XLSX (ventes, commerciaux, agences, types, semaines, mois) ou **`section=all`** : feuilles multiples (ventes détaillées, clients ayant vendu sur le périmètre, synthèses, **synthèse téléphonique** + **fiches téléphonique détail**).
+- **Synthèse campagne** : graphiques, KPI, filtres agence / commercial / période / type carte.
+- Filtre **ventes** : cohérence avec classements performances (`ventes.agence_id` quand filtre agence).
 
-| Table | Rôle |
-|-------|------|
-| `campagne_agence` | Campagne ↔ agences (si pas « toutes agences ») |
-| `campagne_aide_beneficiaire` | Bénéficiaires aide hebdo (sous-ensemble commerciaux) |
-| `campagne_remise_type_carte` | Types de cartes concernés par la remise % |
-| `campagne_commercial_contrat` | **Signataires** contrat (IDs user terrain + téléphonique) |
-| `contrat_prestation_reponses` | Réponse `accepte` / `rejete` / `en_attente` par campagne et user |
-| `campagne_aide_versements` | Versements carburant / crédit ; accusé réception |
-| `campagne_contrat_articles` | Articles du corps du contrat (titre, contenu) |
-| `telephonique_rapports` | Une ligne logique par `(user_id, date_rapport)` — indicateurs appels |
-| `user_login_logs` | Une ligne par connexion réussie (horodatage, IP, user-agent) |
+### 5.7 Performances (`PerformanceController`, `PrimeService`, `CampagneRapportService`)
+- **Contexte** : dates (campagne sélectionnée ou intervalle `du`/`au`), campagne optionnelle, agence (admin/direction), comparaison période précédente.
+- **Classement commerciaux** : `PrimeService` avec option **`ventesAgenceId`** pour aligner les comptages sur les ventes filtrées (même périmètre que les totaux à l’écran).
+- **Graphiques** (admin/direction, non vue « commercial seul » simplifiée) : top 5 commerciaux (barres horizontales), **parts des agences** (donut), **répartition par type de carte**.
+- **Tableaux** sous le classement commerciaux : **classement des agences**, **classement des types de cartes** (ventes, montant, **part % volume**).
+- **Colonne part %** également sur la liste des commerciaux (dénominateur = total ventes du périmètre).
+- **Export Excel** : feuilles Résumé, Classement commerciaux (+ part %), Classement agences, Types cartes, Par semaine, **Ventes détaillées**.
 
-> **Note** : le nom exact du pivot dans le code Eloquent pour les signataires est `campagne_commercial_contrat` (voir `Campagne::signatairesContrat()`).
+### 5.8 Primes (`PrimeService`, table `primes`)
+- Classements mensuels / par campagne pour calculs de primes (estimation **meilleur vendeur** affichée sur l’UI performances selon campagne active).
+
+### 5.9 Journal des connexions (`Admin\UserLoginLogController`, `UserLoginLog`)
+- Enregistrement après authentification réussie (horodatage, IP, user-agent).
+
+### 5.10 Contrat de prestation (`ContratPrestationService`, vues `contrats/`)
+- Acceptation / refus, prévisualisation, liens avec campagne et réponses stockées.
 
 ---
 
-## 7. Services et logique métier utiles
+## 6. Services métier (référence)
 
-- **`Campagne::syncStatuts()`** — planifié quotidiennement ; met à jour statuts de campagne et **réactive/désactive** commerciaux + téléphoniques signataires selon campagnes « vivantes ».
-- **`CampagneDetailService::buildShowData($campagne, $request)`** — stats ventes, classement, primes sur une **période** (toute campagne, semaine, mois, ou dates perso, recoupée aux bornes de la campagne).
-- **`PrimeService`** — classements mensuels pour performances / primes.
-- **`StockAlertService`** — alertes stock faible (dashboard admin/direction).
-
----
-
-## 8. Sécurité et bonnes pratiques
-
-- Mots de passe hashés ; pas d’exposition des secrets dans le dépôt.
-- CSRF sur formulaires web ; middleware `auth` + `role` sur les routes sensibles.
-- Journal des connexions : trace les **succès** de login (pas les échecs, sauf logs serveur / rate limit Laravel).
+| Service | Rôle principal |
+|---------|----------------|
+| `CampagneRapportService` | Synthèses campagne, requêtes ventes filtrées, agrégations par semaine/mois, téléphonique agrégé et requête liste fiches, périmètre utilisateurs campagne. |
+| `CampagneDetailService` | Assemblage données page détail campagne admin (stats, filtres dates). |
+| `SpreadsheetExportService` | Création classeurs multi-feuilles, tableaux structurés (titres, métadonnées, totaux), titres d’onglets sanitisés, téléchargement stream. |
+| `PrimeService` | `getClassementPourCampagne`, `getClassementBetween` avec filtre optionnel sur **`ventes.agence_id`**, rangs avec ex-aequo. |
+| `VenteService` | Règles création vente / stock. |
+| `StockAlertService` | Seuils et alertes. |
+| `ContratPrestationService` | Logique contrat / réponses. |
+| `ClientExportService` | Exports client (selon implémentation actuelle). |
 
 ---
 
-## 9. Commandes utiles
+## 7. Modèles Eloquent (`app/Models`)
+
+| Modèle | Tables / idées clés |
+|--------|---------------------|
+| `User` | Authentification, rôle, agence, relations ventes/clients/primes/signataires/rapports téléphonique/logs. |
+| `Agence` | Référentiel agences. |
+| `TypeCarte` | Codes types de cartes ; lié stocks et ventes. |
+| `Campagne` | Cœur métier ; relations agences, actions, signataires, articles, versements, téléphoniques. |
+| `CampagneAction`, `CampagneContratArticle`, `CampagneAideVersement`, `ContratPrestationReponse` | Compléments campagne / contrat / aides. |
+| `Client` | Fiche client terrain. |
+| `Vente` | Transaction de vente. |
+| `Stock`, `MouvementStock` | Inventaire et historique. |
+| `Prime` | Primes attribuées. |
+| `Reclamation` | Réclamations (module existant). |
+| `TelephoniqueRapport` | Fiche reporting téléphonique. |
+| `UserLoginLog` | Logs de connexion. |
+
+---
+
+## 8. Front-end
+
+- **Layout app** : `resources/views/layouts/app.blade.php` — menu conditionné par rôle (Performances, Rapports, Admin, Reporting téléphonique, etc.).
+- **Thème** : `public/css/gda-theme.css` — charte Gda / BDM.
+- **Vues notables** : `resources/views/admin/**`, `commercial/**`, `direction/**`, `dashboard/*.blade.php`, `rapports/**`, `performance/**`, `clients/**`, `auth/login.blade.php`.
+- **Graphiques** : Chart.js (CDN) sur pages performances / certains rapports — tooltips adaptés aux barres horizontales (`indexAxis: 'y'`).
+- **Scripts** : `@push('scripts')` sur pages concernées ; Breeze utilise Vite (`resources/js/app.js`).
+
+---
+
+## 9. Base de données et migrations
+
+Les migrations sont versionnées sous `database/migrations/`. Référence historique (non exhaustive des fichiers récents) :
+
+- Socle Laravel : `users`, `cache`, `jobs`, …
+- Métier : `agences`, `clients`, `stocks`, `ventes`, `mouvements_stock`, `reclamations`, `primes`, `campagnes` + pivots (`campagne_agence`, etc.), `types_cartes`, `ventes.campagne_id`, champs campagne (remises, prime, contrat, aides, articles).
+- **Direction / rôles** : ENUM `users.role` (`admin`, `commercial`, `commercial_telephonique`, `direction`) ; suppression ancien `chef_agence`.
+- **Téléphonique** : `telephonique_rapports` ; évolutions `cartes_proposees`, `campagne_id`.
+- **Traçabilité** : `user_login_logs`.
+
+Pour la liste exacte à jour : `ls database/migrations` ou `php artisan migrate:status`.
+
+> Environnement **MySQL** recommandé : certaines migrations utilisent `DB::statement` pour modifier les ENUM.
+
+---
+
+## 10. Sécurité
+
+- CSRF sur formulaires web ; middleware `auth` + `role` sur routes sensibles.
+- Vérifications **politiques métier** dans les contrôleurs (accès campagne, accès fiche téléphonique dans le périmètre campagne, détail commercial, etc.).
+- Mots de passe hashés (Breeze / Laravel).
+- Journal : connexions **réussies** côté `user_login_logs` (les échecs restent dans les logs applicatifs / rate limiting Laravel selon config).
+
+---
+
+## 11. Commandes utiles
 
 ```bash
+composer install
 php artisan migrate
 php artisan route:list
-php artisan schedule:list   # sync campagnes si planificateur configuré
-npm run build               # assets Vite (si modification Tailwind / JS)
+php artisan schedule:list          # si tâches planifiées (ex. sync campagnes)
+php artisan test
+npm install && npm run build       # assets Breeze / Vite
+php artisan serve                  # développement
 ```
 
----
-
-## 10. Fichier de suivi du code
-
-Ce document reflète l’état du dépôt à sa dernière mise à jour. Pour toute évolution (nouvelles migrations, routes), compléter les sections **§6** et **routes/web.php** en conséquence.
+Variables d’environnement : fichier `.env` (base, `APP_KEY`, mail, queue…).
 
 ---
 
-*Généré pour le projet Campagne BDM — documentation technique condensée.*
+## 12. Évolutions récentes documentées (à maintenir)
+
+- **Performances** : classements agences & types, parts % volume commerciaux, graphiques top 5 / agences / types, export Excel **global** multi-feuilles.
+- **Rapports** : export campagne **complet** (clients + fiches téléphonique détaillées + synthèses) ; UI sans export « par période » obligatoire sur l’index (route legacy possible).
+- **PrimeService** : paramètre **`ventesAgenceId`** pour aligner classement et KPI quand une agence est filtrée.
+- **Excel** : `phpoffice/phpspreadsheet` + `SpreadsheetExportService` pour rapports et performances.
+
+---
+
+*Document : vue d’ensemble opérationnelle + technique du dépôt **BDM**. À mettre à jour lors de nouvelles migrations, routes majeures ou modules.*

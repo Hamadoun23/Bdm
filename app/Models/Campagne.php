@@ -66,6 +66,11 @@ class Campagne extends Model
         return $this->hasMany(Vente::class);
     }
 
+    public function telephoniqueRapports(): HasMany
+    {
+        return $this->hasMany(TelephoniqueRapport::class);
+    }
+
     /** Vente autorisée pour une agence : campagne marquée active, non arrêtée / annulée, dans la fenêtre de dates, et concernant l’agence. */
     public function estOuverteAuxVentes(int $agenceId): bool
     {
@@ -161,6 +166,27 @@ class Campagne extends Model
         }
 
         return $types;
+    }
+
+    /**
+     * Campagne qui couvre une date pour une agence (reporting téléphonique, cohérence des fiches).
+     * Priorité à la campagne la plus récente par date de début.
+     */
+    public static function pourFicheTelephonique(?int $agenceId, Carbon|string $date): ?self
+    {
+        $d = $date instanceof Carbon ? $date->copy()->startOfDay() : Carbon::parse($date)->startOfDay();
+        $q = self::query()
+            ->whereDate('date_debut', '<=', $d)
+            ->whereDate('date_fin', '>=', $d)
+            ->whereNotIn('statut', [self::STATUT_ANNULEE]);
+        if ($agenceId !== null) {
+            $q->where(function ($w) use ($agenceId) {
+                $w->where('toutes_agences', true)
+                    ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $agenceId));
+            });
+        }
+
+        return $q->orderByDesc('date_debut')->first();
     }
 
     /** La remise % s’applique-t-elle à ce type de carte ? */

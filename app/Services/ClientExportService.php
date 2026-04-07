@@ -4,15 +4,19 @@ namespace App\Services;
 
 use App\Models\Client;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Response as ResponseFacade;
 use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class ClientExportService
 {
+    public function __construct(
+        private SpreadsheetExportService $spreadsheetExportService
+    ) {}
+
     public function downloadPdf(Client $client): SymfonyResponse
     {
-        $client->loadMissing(['user.agence', 'typeCarte', 'ventes.agence', 'ventes.typeCarte', 'ventes.user']);
+        $client->loadMissing(['user.agence', 'typeCarte', 'ventes', 'ventes.agence', 'ventes.typeCarte', 'ventes.user', 'ventes.campagne']);
 
         $filename = 'client_'.$client->id.'_'.now()->format('Y-m-d').'.pdf';
         $identite = $this->identiteForExports($client);
@@ -24,31 +28,39 @@ class ClientExportService
     }
 
     /**
-     * Fichier CSV (UTF-8 BOM) ouvrable dans Excel.
+     * Classeur Excel (.xlsx) structuré, UTF-8 natif.
      */
     public function downloadExcel(Client $client): SymfonyResponse
     {
-        $client->loadMissing(['user.agence', 'typeCarte', 'ventes.agence', 'ventes.typeCarte', 'ventes.user']);
+        $client->loadMissing(['user.agence', 'typeCarte', 'ventes', 'ventes.agence', 'ventes.typeCarte', 'ventes.user', 'ventes.campagne']);
 
-        $filename = 'client_'.$client->id.'_'.now()->format('Y-m-d').'.csv';
-        $headers = [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
-        ];
+        $kvRows = $this->clientKeyValueRows($client);
+        $rows = array_map(fn (array $r) => [$r[0], $r[1]], $kvRows);
 
-        $rows = $this->clientKeyValueRows($client);
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Fiche client'));
+        $this->spreadsheetExportService->fillSheet($sheet, ['Champ', 'Valeur'], $rows);
 
-        $callback = static function () use ($rows): void {
-            echo "\xEF\xBB\xBF";
-            $out = fopen('php://output', 'w');
-            fputcsv($out, ['Champ', 'Valeur'], ';');
-            foreach ($rows as [$k, $v]) {
-                fputcsv($out, [$k, $v], ';');
-            }
-            fclose($out);
-        };
+        if ($client->ventes->isNotEmpty()) {
+            $venteSheet = $spreadsheet->createSheet();
+            $venteSheet->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Ventes liées'));
+            $vHeaders = ['Date', 'Campagne', 'Type carte', 'Montant', 'Agence', 'Statut'];
+            $vRows = $client->ventes->map(fn ($v) => [
+                $v->created_at->format('d/m/Y H:i'),
+                $v->campagne?->nom ?? '—',
+                $v->typeCarte?->code ?? '—',
+                $v->montant ?? '',
+                $v->agence->nom ?? '—',
+                $v->statut_activation ?? '',
+            ])->all();
+            $this->spreadsheetExportService->fillSheet($venteSheet, $vHeaders, $vRows);
+        }
 
-        return ResponseFacade::stream($callback, 200, $headers);
+        $spreadsheet->setActiveSheetIndex(0);
+        $fn = 'client_'.$client->id.'_'.now()->format('Y-m-d').'.xlsx';
+
+        return $this->spreadsheetExportService->download($spreadsheet, $fn);
     }
 
     /**
@@ -56,7 +68,7 @@ class ClientExportService
      */
     public function downloadWord(Client $client): SymfonyResponse
     {
-        $client->loadMissing(['user.agence', 'typeCarte', 'ventes.agence', 'ventes.typeCarte', 'ventes.user']);
+        $client->loadMissing(['user.agence', 'typeCarte', 'ventes', 'ventes.agence', 'ventes.typeCarte', 'ventes.user', 'ventes.campagne']);
         $identite = $this->identiteForExports($client);
 
         $filename = 'client_'.$client->id.'_'.now()->format('Y-m-d').'.doc';

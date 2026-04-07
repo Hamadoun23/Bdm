@@ -6,6 +6,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h4 class="mb-0">Historique des ventes</h4>
     <div class="d-flex flex-wrap gap-2">
+        <a href="{{ route('ventes.export-excel') }}" class="btn btn-success" target="_blank">Exporter Excel (.xlsx)</a>
         <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Retour au Dashboard</a>
         @if(auth()->user()?->isCommercial())
         <a href="{{ route('ventes.create') }}" class="btn btn-primary">Nouvelle vente</a>

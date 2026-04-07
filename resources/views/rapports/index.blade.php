@@ -8,9 +8,13 @@
     <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Dashboard</a>
 </div>
 
-<p class="text-muted small mb-3">
-    Les ventes sont liées à la campagne en cours au moment de l’enregistrement. Sélectionnez une campagne pour voir ses ventes, puis la fiche des clients (export PDF / Excel / Word).
-</p>
+<div class="alert alert-light border mb-3 small">
+    <p class="mb-2"><strong>Usage direction / pilotage :</strong> le bouton <span class="badge bg-success">Export complet</span> sur chaque campagne génère un classeur Excel (ventes, clients, commerciaux, agences, types de carte, semaines, mois, fiches téléphonique + synthèse appels). Utilisez <span class="badge bg-success">Synthèse</span> pour les graphiques et des exports filtrés, et <span class="badge bg-primary">Liste ventes</span> pour le détail des ventes avec filtres.</p>
+    <p class="mb-2 text-muted">Les ventes sont enregistrées avec le <code>campagne_id</code> de la campagne active au moment de la saisie.</p>
+    @if($user->isAdmin())
+    <p class="mb-0"><a href="{{ route('admin.telephonique-rapports.index') }}" class="alert-link">Reporting téléphonique (toutes campagnes)</a> — vue globale. Depuis chaque campagne : bouton <strong>Reporting téléphonique</strong> ou entrée <strong>Synthèse</strong> pour le périmètre campagne.</p>
+    @endif
+</div>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header"><strong>Campagnes</strong></div>
@@ -22,7 +26,7 @@
                     <th>Période</th>
                     <th>Statut</th>
                     <th class="text-end">Ventes</th>
-                    <th></th>
+                    <th class="text-end" style="min-width: 320px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,8 +37,13 @@
                     <td><span class="badge bg-secondary">{{ $c->statut_effectif }}</span></td>
                     <td class="text-end">{{ $c->nb_ventes_rapport }}</td>
                     <td class="text-end">
-                        <a href="{{ route('rapports.campagnes.ventes', $c) }}" class="btn btn-sm btn-primary">Ventes</a>
-                        <a href="{{ route('rapports.campagnes.clients', $c) }}" class="btn btn-sm btn-outline-primary">Détail clients</a>
+                        <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
+                            <a href="{{ route('rapports.campagnes.export', ['campagne' => $c, 'section' => 'all', 'format' => 'xlsx']) }}" class="btn btn-sm btn-success" target="_blank" title="Classeur : ventes, clients, commerciaux, agences, types, semaines, mois, téléphonique">Export complet</a>
+                            <a href="{{ route('rapports.campagnes.synthese', $c) }}" class="btn btn-sm btn-outline-success">Synthèse</a>
+                            <a href="{{ route('rapports.campagnes.ventes', $c) }}" class="btn btn-sm btn-primary">Ventes</a>
+                            <a href="{{ route('rapports.campagnes.clients', $c) }}" class="btn btn-sm btn-outline-primary">Clients</a>
+                            <a href="{{ route('rapports.campagnes.reporting-telephonique', $c) }}" class="btn btn-sm btn-outline-info">Tél.</a>
+                        </div>
                     </td>
                 </tr>
                 @empty
@@ -42,40 +51,6 @@
                 @endforelse
             </tbody>
         </table>
-    </div>
-</div>
-
-<div class="card shadow-sm">
-    <div class="card-header">Export par période (CSV)</div>
-    <div class="card-body">
-        <form method="GET" action="{{ route('rapports.export') }}" target="_blank" class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Type de rapport</label>
-                <select name="type" class="form-select">
-                    <option value="mensuel">Mensuel</option>
-                    <option value="hebdomadaire">Hebdomadaire</option>
-                </select>
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Période</label>
-                <input type="month" name="date" class="form-control" value="{{ now()->format('Y-m') }}">
-                <small class="text-muted">Hebdomadaire : semaine contenant le 1er du mois choisi.</small>
-            </div>
-            @if($user->isAdmin() || $user->isDirection())
-            <div class="col-md-4">
-                <label class="form-label">Agence</label>
-                <select name="agence" class="form-select">
-                    <option value="">Toutes</option>
-                    @foreach(\App\Models\Agence::orderBy('nom')->get() as $a)
-                    <option value="{{ $a->id }}">{{ $a->nom }}</option>
-                    @endforeach
-                </select>
-            </div>
-            @endif
-            <div class="col-12">
-                <button type="submit" class="btn btn-outline-primary">Télécharger le CSV</button>
-            </div>
-        </form>
     </div>
 </div>
 @endsection

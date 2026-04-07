@@ -9,13 +9,13 @@
     <a href="{{ $isDirectionDetail ? route('direction.campagnes.index') : route('admin.campagnes.index') }}" class="btn btn-outline-secondary">← Retour</a>
 </div>
 
-@if($isDirectionDetail)
 <div class="alert alert-light border mb-3 small mb-4">
-    <strong>Raccourcis :</strong>
-    <a href="{{ route('rapports.campagnes.clients', $campagne) }}">Clients de cette campagne</a>
-    · <a href="{{ route('rapports.campagnes.ventes', $campagne) }}">Rapport ventes détaillé</a>
+    <strong>Raccourcis pilotage :</strong>
+    <a href="{{ route('rapports.campagnes.synthese', $campagne) }}">Synthèse & graphiques</a>
+    · <a href="{{ route('rapports.campagnes.ventes', $campagne) }}">Liste ventes</a>
+    · <a href="{{ route('rapports.campagnes.clients', $campagne) }}">Clients</a>
+    · <a href="{{ route('rapports.campagnes.reporting-telephonique', $campagne) }}">Reporting téléphonique</a>
 </div>
-@endif
 
 @php $statut = $campagne->statut_effectif; @endphp
 
@@ -293,6 +293,35 @@
         </script>
         @endpush
         <p class="small text-muted mb-0"><strong>{{ $periodeLib }}</strong> — Les montants se limitent aux ventes enregistrées sur la fenêtre affichée (recoupée avec les dates de campagne).</p>
+    </div>
+</div>
+
+@php
+    $tc = $telephoniqueCampagne ?? [
+        'nb_fiches' => 0, 'appels_emis' => 0, 'appels_joignables' => 0, 'appels_non_joignables' => 0,
+        'clients_interesses' => 0, 'clients_deja_servis' => 0,
+    ];
+    $qTelCampagne = [
+        'campagne' => $campagne,
+        'date_debut' => $periode_debut->format('Y-m-d'),
+        'date_fin' => $periode_fin->format('Y-m-d'),
+    ];
+@endphp
+<div class="card shadow-sm mb-4 border-info border-opacity-25">
+    <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <strong>Reporting téléphonique (même période d’analyse)</strong>
+        <a href="{{ route('rapports.campagnes.reporting-telephonique', $qTelCampagne) }}" class="btn btn-sm btn-outline-primary">Liste des fiches</a>
+    </div>
+    <div class="card-body py-3">
+        <div class="row g-2 small">
+            <div class="col-6 col-md-4">Fiches : <strong>{{ number_format($tc['nb_fiches']) }}</strong></div>
+            <div class="col-6 col-md-4">Appels émis : <strong>{{ number_format($tc['appels_emis']) }}</strong></div>
+            <div class="col-6 col-md-4">Joignables : <strong>{{ number_format($tc['appels_joignables']) }}</strong></div>
+            <div class="col-6 col-md-4">Non joignables : <strong>{{ number_format($tc['appels_non_joignables']) }}</strong></div>
+            <div class="col-6 col-md-4">Clients intéressés : <strong>{{ number_format($tc['clients_interesses']) }}</strong></div>
+            <div class="col-6 col-md-4">Déjà servis : <strong>{{ number_format($tc['clients_deja_servis']) }}</strong></div>
+        </div>
+        <p class="small text-muted mb-0 mt-2">Périmètre aligné sur la synthèse campagne : fiches rattachées à cette campagne ou sans <code>campagne_id</code> mais agence / dates cohérentes.</p>
     </div>
 </div>
 

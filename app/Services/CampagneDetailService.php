@@ -14,8 +14,12 @@ use Illuminate\Support\Collection;
 
 class CampagneDetailService
 {
+    public function __construct(
+        private CampagneRapportService $campagneRapportService
+    ) {}
+
     /**
-     * @return array{preset: string, periode_debut: Carbon, periode_fin: Carbon, campagne: Campagne, stats: array, classement: Collection, primes: Collection, typesCartes: Collection}
+     * @return array{preset: string, periode_debut: Carbon, periode_fin: Carbon, campagne: Campagne, stats: array, classement: Collection, primes: Collection, typesCartes: Collection, telephoniqueCampagne: array{nb_fiches: int, appels_emis: int, appels_joignables: int, appels_non_joignables: int, clients_interesses: int, clients_deja_servis: int}}
      */
     public function buildShowData(Campagne $campagne, ?Request $request = null): array
     {
@@ -105,9 +109,17 @@ class CampagneDetailService
         $periode_debut = $dateDebut;
         $periode_fin = $dateFin;
 
+        $telephoniqueCampagne = $this->campagneRapportService->agregatsTelephonique(
+            $campagne,
+            $dateDebut,
+            $dateFin,
+            null,
+            null
+        );
+
         return compact(
             'campagne', 'stats', 'classement', 'primes', 'typesCartes',
-            'preset', 'periode_debut', 'periode_fin'
+            'preset', 'periode_debut', 'periode_fin', 'telephoniqueCampagne'
         );
     }
 
