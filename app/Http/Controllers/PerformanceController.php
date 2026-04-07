@@ -33,11 +33,18 @@ class PerformanceController extends Controller
         Campagne::syncStatuts();
         $ctx = $this->performanceContext($request);
 
+        $user = $request->user();
+        $vueCommerciale = $user && ($user->isCommercial() || $user->isCommercialTelephonique());
+        // Admin / direction : filtre ventes par agence aligné sur le tableau. Commercial : pas de filtre sur ventes
+        // dans le JOIN du classement — sinon les autres agences du campagne ont 0 vente et le 1ᵉʳ / les rangs sont faux.
+        $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
+            ? $ctx['agenceId']
+            : null;
+
         $campagneRef = $ctx['campagneRef'];
-        $filtreVentesAgenceId = $ctx['agenceId'];
         $classementComplet = $campagneRef !== null
-            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgenceId)
-            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgenceId);
+            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
+            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
 
         $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
         $stats = $this->aggregatePerformanceStats($baseVentes);
@@ -73,8 +80,6 @@ class PerformanceController extends Controller
 
         $typesCartes = TypeCarte::orderBy('code')->get();
 
-        $user = $request->user();
-        $vueCommerciale = $user && ($user->isCommercial() || $user->isCommercialTelephonique());
         $vueChef = false;
 
         $campagnesSelect = $this->campagnesPourPerformancesSelect($ctx['agenceId'], $user);
@@ -84,15 +89,19 @@ class PerformanceController extends Controller
         $ligneCommercialConnecte = null;
 
         if ($vueCommerciale) {
-            $classementLigneTop1 = $classementComplet->first();
-            $idx = $classementComplet->search(fn ($c) => (int) $c['user_id'] === (int) $user->id);
-            $ligneCommercialConnecte = $idx !== false ? $classementComplet->values()[$idx] : null;
-            $mesVentesPeriode = (int) $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef)
+            // Même périmètre que le classement campagne : toutes les ventes du user sur la campagne (sans filtre agence sur ventes).
+            $mesVentesPeriode = (int) Vente::query()
                 ->where('user_id', $user->id)
+                ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
+                ->when($campagneRef !== null, fn ($q) => $q->where('campagne_id', $campagneRef->id))
+                ->when($campagneRef === null && $ctx['agenceId'] !== null, fn ($q) => $q->where('agence_id', $ctx['agenceId']))
                 ->count();
-            $monRang = $ligneCommercialConnecte['rang'] ?? null;
+
+            $sync = $this->leaderEtMaLigneCommercialPerformances($classementComplet, $user, $mesVentesPeriode);
+            $classementLigneTop1 = $sync['classementLigneTop1'];
+            $ligneCommercialConnecte = $sync['ligneCommercialConnecte'];
             $stats['mes_ventes'] = $mesVentesPeriode;
-            $stats['mon_rang'] = $monRang;
+            $stats['mon_rang'] = $ligneCommercialConnecte['rang'] ?? null;
         }
 
         return view('performance.index', [
@@ -206,10 +215,13 @@ class PerformanceController extends Controller
         $ctx = $this->performanceContext($request);
         $campagneRef = $ctx['campagneRef'];
 
-        $filtreVentesAgenceId = $ctx['agenceId'];
+        $viewer = $request->user();
+        $filtreVentesAgencePourClassement = ($viewer?->isAdmin() || $viewer?->isDirection())
+            ? $ctx['agenceId']
+            : null;
         $classement = $campagneRef !== null
-            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgenceId)
-            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgenceId);
+            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
+            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
 
         $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
         $stats = $this->aggregatePerformanceStats($baseVentes);
@@ -377,6 +389,19 @@ class PerformanceController extends Controller
         return false;
     }
 
+    /**
+     * Total des ventes servant de dénominateur pour « Part % volume » (vue commercial).
+     * Campagne choisie : toutes les ventes de cette campagne sur la période. Sinon : ventes de la période, filtre agence si défini.
+     */
+    private function totalVentesDenombrePourPartVolume(Carbon $dateDebut, Carbon $dateFin, ?Campagne $campagne, ?int $agenceId): int
+    {
+        return (int) Vente::query()
+            ->whereBetween('created_at', [$dateDebut, $dateFin])
+            ->when($campagne !== null, fn ($q) => $q->where('campagne_id', (int) $campagne->id))
+            ->when($campagne === null && $agenceId !== null, fn ($q) => $q->where('agence_id', $agenceId))
+            ->count();
+    }
+
     private function ventesQueryPerformance(Carbon $dateDebut, Carbon $dateFin, ?int $agenceId, ?Campagne $campagneRef): Builder
     {
         return Vente::query()
@@ -426,6 +451,69 @@ class PerformanceController extends Controller
         }
 
         return round(($current - $previous) / $previous * 100, 1);
+    }
+
+    /**
+     * Pour la vue commercial : 1re place et position du connecté sur le même classement que les ventes réelles.
+     * Le total du connecté est forcé sur le décompte `ventesQueryPerformance` (évite tout décalage avec le JOIN SQL).
+     *
+     * @return array{
+     *     classementLigneTop1: array{rang: int, user_id: int, user_name: string, total_ventes: int}|null,
+     *     ligneCommercialConnecte: array{rang: int, user_id: int, user_name: string, total_ventes: int}|null
+     * }
+     */
+    private function leaderEtMaLigneCommercialPerformances(Collection $classementCampagne, User $user, int $mesVentesReelles): array
+    {
+        $uid = (int) $user->id;
+        $displayName = $user->prenom ? trim($user->prenom.' '.$user->name) : $user->name;
+
+        $byUser = [];
+        foreach ($classementCampagne as $c) {
+            $id = (int) $c['user_id'];
+            $byUser[$id] = [
+                'user_id' => $id,
+                'user_name' => $c['user_name'],
+                'total_ventes' => (int) $c['total_ventes'],
+            ];
+        }
+
+        $byUser[$uid] = [
+            'user_id' => $uid,
+            'user_name' => $displayName,
+            'total_ventes' => $mesVentesReelles,
+        ];
+
+        $list = array_values($byUser);
+        usort($list, function (array $a, array $b) {
+            if ($a['total_ventes'] !== $b['total_ventes']) {
+                return $b['total_ventes'] <=> $a['total_ventes'];
+            }
+
+            return $a['user_id'] <=> $b['user_id'];
+        });
+
+        $withRang = [];
+        $rang = 1;
+        foreach ($list as $index => $row) {
+            if ($index > 0 && $row['total_ventes'] < $list[$index - 1]['total_ventes']) {
+                $rang = $index + 1;
+            }
+            $withRang[] = array_merge($row, ['rang' => $rang]);
+        }
+
+        $leader = $withRang[0] ?? null;
+        $maLigne = null;
+        foreach ($withRang as $wr) {
+            if ($wr['user_id'] === $uid) {
+                $maLigne = $wr;
+                break;
+            }
+        }
+
+        return [
+            'classementLigneTop1' => $leader,
+            'ligneCommercialConnecte' => $maLigne,
+        ];
     }
 
     /**

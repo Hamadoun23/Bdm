@@ -4,6 +4,13 @@
 
 @section('content')
 @php
+    $libelleRangPerf = static function (?int $r): string {
+        if ($r === null || $r < 1) {
+            return '—';
+        }
+
+        return $r === 1 ? '1ᵉʳ' : $r.'ᵉ';
+    };
     $perfExcelQuery = array_filter([
         'du' => request('du'),
         'au' => request('au'),
@@ -15,7 +22,9 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h4 class="mb-0">Tableau de bord des performances</h4>
     <div class="d-flex flex-wrap gap-2">
+        @unless($vueCommerciale)
         <a href="{{ route('performances.export-excel', $perfExcelQuery) }}" class="btn btn-success btn-sm" target="_blank" title="Résumé, classements commerciaux / agences / types, volumes par semaine, ventes détaillées — mêmes filtres que l’écran.">Exporter Excel — export global</a>
+        @endunless
         <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary btn-sm">Retour au Dashboard</a>
     </div>
 </div>
@@ -47,7 +56,7 @@
             @else
             <li><strong>Mes ventes :</strong> {{ number_format($stats['mes_ventes'] ?? 0) }}</li>
             @if(isset($stats['mon_rang']) && $stats['mon_rang'])
-            <li><strong>Mon rang :</strong> {{ $stats['mon_rang'] }}ᵉ</li>
+            <li><strong>Mon rang :</strong> {{ $libelleRangPerf((int) $stats['mon_rang']) }}</li>
             @endif
             @endif
             @if($compareEnabled && $compareDelta)
@@ -60,18 +69,6 @@
 <p class="small text-muted mb-2">
     <strong>Période affichée :</strong> {{ $libellePeriode ?? '—' }}
 </p>
-@if($vueCommerciale && !empty($classementLigneTop1))
-<p class="small mb-3 border-start border-3 border-warning ps-2">
-    <strong>1<sup>er</sup> du classement</strong>
-    @if(!empty($campagneRef))
-        — campagne « {{ $campagneRef->nom }} »
-    @endif
-    :
-    <strong>{{ $classementLigneTop1['user_name'] }}</strong>
-    — {{ $classementLigneTop1['total_ventes'] }} vente(s).
-</p>
-@endif
-
 <form method="GET" class="card shadow-sm mb-3">
     <div class="card-body row g-2 align-items-end">
         <div class="col-md-3 col-lg-2">
@@ -149,7 +146,7 @@
         <div class="card">
             <div class="card-body">
                 <h6>Mon rang</h6>
-                <h3>{{ isset($stats['mon_rang']) && $stats['mon_rang'] ? $stats['mon_rang'] . 'ᵉ' : '-' }}</h3>
+                <h3>{{ isset($stats['mon_rang']) && $stats['mon_rang'] ? $libelleRangPerf((int) $stats['mon_rang']) : '—' }}</h3>
             </div>
         </div>
     </div>
@@ -249,7 +246,12 @@
 @endif
 
 <div class="card shadow-sm">
-    <div class="card-header"><strong>Classement des commerciaux</strong></div>
+    <div class="card-header">
+        <strong>@if($vueCommerciale)1re place de la campagne et ma position @else Classement des commerciaux @endif</strong>
+        @if($vueCommerciale && !empty($campagneRef))
+            <span class="text-muted small fw-normal">— {{ $campagneRef->nom }}</span>
+        @endif
+    </div>
     <div class="table-responsive">
         <table class="table table-hover mb-0">
             <thead>
@@ -257,7 +259,9 @@
                     <th>Rang</th>
                     <th>Commercial</th>
                     <th class="text-end">Nombre de ventes</th>
+                    @unless($vueCommerciale)
                     <th class="text-end">Part % volume</th>
+                    @endunless
                     <th>Prime (estimée)</th>
                     @if(!$vueCommerciale)
                     <th class="text-end">Détail</th>
@@ -267,51 +271,43 @@
             <tbody>
                 @php
                     $campagnePrime = $campagneRef ?? \App\Models\Campagne::getActiveForAgence($agenceId);
-                    $totalVentesPerfClassement = (int) ($stats['total_ventes'] ?? 0);
+                    $totalVentesPerfClassement = !$vueCommerciale
+                        ? (int) ($stats['total_pourcent_volume'] ?? $stats['total_ventes'] ?? 0)
+                        : 0;
+                    $userEstPremier = $vueCommerciale && $classementLigneTop1 && (int) $user->id === (int) $classementLigneTop1['user_id'];
                 @endphp
                 @if($vueCommerciale)
                     @if($classementLigneTop1)
                         @php $c = $classementLigneTop1; @endphp
                     <tr>
-                        <td><span class="badge bg-warning text-dark">1<sup>er</sup></span></td>
-                        <td>{{ $c['user_name'] }}</td>
-                        <td class="text-end">{{ number_format($c['total_ventes']) }}</td>
-                        <td class="text-end">
-                            @if($totalVentesPerfClassement > 0)
-                                {{ number_format($c['total_ventes'] / $totalVentesPerfClassement * 100, 1, ',', ' ') }} %
-                            @else
-                                —
+                        <td><span class="badge bg-warning text-dark">Top 1</span></td>
+                        <td>
+                            {{ $c['user_name'] }}
+                            @if($userEstPremier)
+                                <span class="badge bg-secondary ms-1">vous</span>
                             @endif
                         </td>
+                        <td class="text-end">{{ number_format($c['total_ventes']) }}</td>
                         <td>
                             @if($campagnePrime){{ number_format($campagnePrime->prime_meilleur_vendeur) }} F
                             @else - @endif
                         </td>
                     </tr>
                     @endif
-                    @if($ligneCommercialConnecte)
-                    <tr class="table-secondary"><td colspan="5" class="small fw-bold">Ma position</td></tr>
+                    @if($ligneCommercialConnecte && ! $userEstPremier)
+                    <tr class="table-secondary"><td colspan="4" class="small fw-bold">Ma position</td></tr>
                     <tr class="table-info">
-                        <td><span class="badge bg-dark">{{ $ligneCommercialConnecte['rang'] }}ᵉ</span></td>
+                        <td><span class="badge bg-dark">{{ $libelleRangPerf((int) $ligneCommercialConnecte['rang']) }}</span></td>
                         <td>
                             {{ $ligneCommercialConnecte['user_name'] }}
-                            @if((int) $user->id === (int) $ligneCommercialConnecte['user_id'])
-                                <span class="badge bg-secondary ms-1">vous</span>
-                            @endif
+                            <span class="badge bg-secondary ms-1">vous</span>
                         </td>
                         <td class="text-end">{{ number_format($ligneCommercialConnecte['total_ventes']) }}</td>
-                        <td class="text-end">
-                            @if($totalVentesPerfClassement > 0)
-                                {{ number_format($ligneCommercialConnecte['total_ventes'] / $totalVentesPerfClassement * 100, 1, ',', ' ') }} %
-                            @else
-                                —
-                            @endif
-                        </td>
                         <td>-</td>
                     </tr>
                     @endif
                     @if(!$classementLigneTop1 && !$ligneCommercialConnecte)
-                    <tr><td colspan="5" class="text-center py-4">Aucun commercial à afficher.</td></tr>
+                    <tr><td colspan="4" class="text-center py-4">Aucun classement à afficher pour cette période.</td></tr>
                     @endif
                 @else
                     @foreach($classement as $c)
@@ -348,6 +344,7 @@
     </div>
 </div>
 
+@if(!$vueCommerciale)
 <div class="card shadow-sm mt-3">
     <div class="card-header"><strong>Classement des agences</strong></div>
     <div class="table-responsive">
@@ -415,6 +412,7 @@
         </table>
     </div>
 </div>
+@endif
 
 @unless($vueCommerciale)
 @push('scripts')

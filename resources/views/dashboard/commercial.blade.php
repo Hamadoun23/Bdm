@@ -64,6 +64,7 @@
     <button type="button" class="btn btn-primary btn-lg" disabled title="Aucune campagne active">Nouvelle vente</button>
     @endif
     <a href="{{ url('/ventes') }}" class="btn btn-outline-primary">Historique</a>
+    <a href="{{ route('commercial.contrat') }}" class="btn btn-outline-secondary">Mon contrat</a>
     <a href="{{ url('/performances') }}" class="btn btn-outline-secondary">Performances</a>
 </div>
 @endsection
