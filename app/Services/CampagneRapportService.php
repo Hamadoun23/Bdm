@@ -254,8 +254,8 @@ class CampagneRapportService
 
         return $rows->map(function ($row) use ($mode) {
             $cle = (string) $row->periode_cle;
-            if ($mode === 'semaine' && str_contains($cle, '-')) {
-                $libelle = 'Semaine '.$cle;
+            if ($mode === 'semaine') {
+                $libelle = $this->libelleSemaineIso($cle);
             } elseif ($mode === 'mois' && strlen($cle) === 7) {
                 $libelle = Carbon::createFromFormat('Y-m', $cle)->locale('fr')->translatedFormat('F Y');
             } else {
@@ -269,6 +269,60 @@ class CampagneRapportService
                 'total_montant' => (int) $row->somme,
             ];
         })->values();
+    }
+
+    /**
+     * Libellé lisible pour une clé de semaine :
+     * — MySQL YEARWEEK(d, 3) : entier AAAASS (ex. 202614 → 2026, semaine ISO 14) ;
+     * — SQLite strftime('%Y-W%W') : ex. 2026-W14.
+     */
+    private function libelleSemaineIso(string $cle): string
+    {
+        $cle = trim($cle);
+        $year = null;
+        $week = null;
+
+        if (preg_match('/^(\d{4})(\d{2})$/', $cle, $m)) {
+            $year = (int) $m[1];
+            $week = (int) $m[2];
+        } elseif (preg_match('/^(\d{4})-W(\d{1,2})$/i', $cle, $m)) {
+            $year = (int) $m[1];
+            $week = (int) $m[2];
+        }
+
+        if ($year !== null && $week !== null && $week >= 1 && $week <= 53) {
+            try {
+                $lun = (new Carbon)->setISODate($year, $week, 1)->locale('fr')->startOfDay();
+                $dim = (new Carbon)->setISODate($year, $week, 7)->locale('fr')->startOfDay();
+
+                return $this->libellePlageSemaineFr($lun, $dim);
+            } catch (\Throwable) {
+                return $cle;
+            }
+        }
+
+        if (str_contains($cle, '-')) {
+            return 'Semaine '.$cle;
+        }
+
+        return $cle;
+    }
+
+    /** Ex. « 30 mars – 5 avril 2026 » (mois du second jour avec majuscule). */
+    private function libellePlageSemaineFr(Carbon $lun, Carbon $dim): string
+    {
+        $debut = $lun->isoFormat('D MMMM');
+        if ($lun->year !== $dim->year) {
+            $debut .= ' '.$lun->isoFormat('YYYY');
+        }
+        $jourFin = $dim->isoFormat('D');
+        $moisFin = $dim->isoFormat('MMMM');
+        if ($moisFin !== '') {
+            $moisFin = mb_strtoupper(mb_substr($moisFin, 0, 1)).mb_substr($moisFin, 1);
+        }
+        $anFin = $dim->isoFormat('YYYY');
+
+        return $debut.' – '.$jourFin.' '.$moisFin.' '.$anFin;
     }
 
     /**

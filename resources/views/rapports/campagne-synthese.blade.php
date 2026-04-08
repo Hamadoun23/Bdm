@@ -232,11 +232,11 @@
     </div>
 </div>
 
-<ul class="nav nav-tabs mb-3" role="tablist">
-    <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-commerciaux" type="button">Commerciaux</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-agences" type="button">Agences</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-types" type="button">Types de carte</button></li>
-    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-temps" type="button">Semaines / Mois</button></li>
+<ul class="nav nav-tabs mb-3 flex-nowrap overflow-x-auto gap-1" role="tablist">
+    <li class="nav-item flex-shrink-0" role="presentation"><button class="nav-link active text-nowrap" data-bs-toggle="tab" data-bs-target="#tab-commerciaux" type="button">Commerciaux</button></li>
+    <li class="nav-item flex-shrink-0" role="presentation"><button class="nav-link text-nowrap" data-bs-toggle="tab" data-bs-target="#tab-agences" type="button">Agences</button></li>
+    <li class="nav-item flex-shrink-0" role="presentation"><button class="nav-link text-nowrap" data-bs-toggle="tab" data-bs-target="#tab-types" type="button">Types de carte</button></li>
+    <li class="nav-item flex-shrink-0" role="presentation"><button class="nav-link text-nowrap" data-bs-toggle="tab" data-bs-target="#tab-temps" type="button">Semaines / Mois</button></li>
 </ul>
 <div class="tab-content">
     <div class="tab-pane fade show active" id="tab-commerciaux">
@@ -297,27 +297,25 @@
         </div>
     </div>
     <div class="tab-pane fade" id="tab-temps">
-        <div class="row g-3">
-            <div class="col-md-6">
-                <h6 class="small text-muted">Par semaine (ISO)</h6>
-                <div class="table-responsive card shadow-sm">
-                    <table class="table table-sm mb-0"><thead><tr><th>Période</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
+        <div class="row g-3 align-items-stretch">
+            <div class="col-12 col-lg-6">
+                <div class="table-responsive card shadow-sm h-100">
+                    <table class="table table-hover table-sm mb-0 w-100"><thead class="table-light"><tr><th>Période</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
                     <tbody>
                         @forelse($synthese['par_semaine'] as $l)
-                        <tr><td>{{ $l['libelle'] }}</td><td class="text-end">{{ $l['total_ventes'] }}</td><td class="text-end">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td></tr>
+                        <tr><td class="text-wrap text-break">{{ $l['libelle'] }}</td><td class="text-end text-nowrap">{{ $l['total_ventes'] }}</td><td class="text-end text-nowrap">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td></tr>
                         @empty
                         <tr><td colspan="3" class="text-muted">—</td></tr>
                         @endforelse
                     </tbody></table>
                 </div>
             </div>
-            <div class="col-md-6">
-                <h6 class="small text-muted">Par mois</h6>
-                <div class="table-responsive card shadow-sm">
-                    <table class="table table-sm mb-0"><thead><tr><th>Mois</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
+            <div class="col-12 col-lg-6">
+                <div class="table-responsive card shadow-sm h-100">
+                    <table class="table table-hover table-sm mb-0 w-100"><thead class="table-light"><tr><th>Mois</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
                     <tbody>
                         @forelse($synthese['par_mois'] as $l)
-                        <tr><td>{{ $l['libelle'] }}</td><td class="text-end">{{ $l['total_ventes'] }}</td><td class="text-end">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td></tr>
+                        <tr><td class="text-wrap">{{ $l['libelle'] }}</td><td class="text-end text-nowrap">{{ $l['total_ventes'] }}</td><td class="text-end text-nowrap">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td></tr>
                         @empty
                         <tr><td colspan="3" class="text-muted">—</td></tr>
                         @endforelse
