@@ -12,6 +12,10 @@
             @csrf
             @method('PUT')
             <div class="mb-3">
+                <label class="form-label">Numérotation (ordre d’affichage) *</label>
+                <input type="number" name="ordre" class="form-control" min="0" value="{{ old('ordre', $agence->ordre) }}" required>
+            </div>
+            <div class="mb-3">
                 <label class="form-label">Nom *</label>
                 <input type="text" name="nom" class="form-control" value="{{ old('nom', $agence->nom) }}" required>
             </div>

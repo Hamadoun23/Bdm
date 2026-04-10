@@ -19,13 +19,13 @@ class VenteController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'success' => false,
                 'message' => 'Veuillez vous connecter.',
             ], 401);
         }
-        if (!$user->isCommercial() || !$user->agence_id) {
+        if (! $user->isCommercial() || ! $user->agence_id) {
             return response()->json([
                 'success' => false,
                 'message' => 'Accès non autorisé. Seuls les commerciaux peuvent enregistrer des ventes.',
@@ -65,7 +65,7 @@ class VenteController extends Controller
             ], 422);
         }
 
-        $data = $validator->safe()->except('carte_identite')->toArray();
+        $data = $validator->safe()->except('carte_identite');
         if (count($idsCampagnesOuvertes) === 1) {
             $data['campagne_id'] = $idsCampagnesOuvertes[0];
         }
@@ -75,6 +75,7 @@ class VenteController extends Controller
 
         try {
             $vente = $this->venteService->enregistrerVente($data, $user->id);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Vente enregistrée avec succès.',

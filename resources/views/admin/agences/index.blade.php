@@ -13,20 +13,16 @@
         <table class="table table-hover mb-0">
             <thead class="table-light">
                 <tr>
+                    <th class="text-end" style="width:5rem">N°</th>
                     <th>Nom</th>
-                    <th>Stocks</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($agences as $a)
                 <tr>
+                    <td class="text-end text-muted">{{ $a->ordre }}</td>
                     <td>{{ $a->nom }}</td>
-                    <td>
-                        @foreach($a->stocks as $s)
-                        <span class="badge bg-secondary">{{ $s->typeCarte?->code ?? '?' }}: {{ $s->quantite }}</span>
-                        @endforeach
-                    </td>
                     <td>
                         <a href="{{ route('admin.agences.edit', $a) }}" class="btn btn-sm btn-outline-primary">Modifier</a>
                         <form action="{{ route('admin.agences.destroy', $a) }}" method="POST" class="d-inline" onsubmit="return confirm('Supprimer cette agence ?')">

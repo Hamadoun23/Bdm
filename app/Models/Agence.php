@@ -9,7 +9,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Agence extends Model
 {
-    protected $fillable = ['nom', 'adresse', 'chef_id'];
+    protected $fillable = ['ordre', 'nom', 'adresse', 'chef_id'];
+
+    protected function casts(): array
+    {
+        return [
+            'ordre' => 'integer',
+        ];
+    }
 
     public function campagnes(): BelongsToMany
     {

@@ -20,7 +20,7 @@ class StockController extends Controller
 
     public function index(Request $request): View
     {
-        $agences = Agence::with(['stocks.typeCarte'])->get();
+        $agences = Agence::with(['stocks.typeCarte'])->orderBy('ordre')->orderBy('nom')->get();
         $alertes = $this->stockAlertService->getAlertes();
         $typesCartes = TypeCarte::orderBy('code')->get();
         return view('admin.stocks.index', compact('agences', 'alertes', 'typesCartes'));
@@ -94,7 +94,8 @@ class StockController extends Controller
             $query->where('agence_id', $agenceId);
         }
         $mouvements = $query->paginate(20);
-        $agences = Agence::all();
+        $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
+
         return view('admin.stocks.mouvements', compact('mouvements', 'agences'));
     }
 }

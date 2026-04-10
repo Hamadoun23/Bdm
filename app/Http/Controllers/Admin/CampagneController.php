@@ -11,6 +11,7 @@ use App\Models\ContratPrestationReponse;
 use App\Models\TypeCarte;
 use App\Models\User;
 use App\Services\CampagneDetailService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -27,7 +28,7 @@ class CampagneController extends Controller
 
     public function create(): View
     {
-        $agences = Agence::all();
+        $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
         $commerciaux = User::with('agence')->whereIn('role', ['commercial', 'commercial_telephonique'])->whereNotNull('agence_id')->orderBy('name')->get();
         $typesCartes = TypeCarte::orderBy('code')->get();
 
@@ -58,6 +59,11 @@ class CampagneController extends Controller
 
         if (! $toutesAgences && empty($agenceIds)) {
             return back()->withErrors(['agences' => 'Sélectionnez au moins une agence ou cochez "Toutes les agences".'])->withInput();
+        }
+
+        $errChevauchement = $this->validerPerimetreAgencesSansChevauchement(null, $request, $toutesAgences, $agenceIds);
+        if ($errChevauchement) {
+            return back()->withErrors($errChevauchement)->withInput();
         }
 
         $campagne = Campagne::create([
@@ -106,7 +112,7 @@ class CampagneController extends Controller
 
     public function edit(Campagne $campagne): View
     {
-        $agences = Agence::all();
+        $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
         $campagne->load(['beneficiairesAide', 'typesCartesRemise', 'signatairesContrat', 'contratArticles']);
         $commerciaux = User::with('agence')->whereIn('role', ['commercial', 'commercial_telephonique'])->whereNotNull('agence_id')->orderBy('name')->get();
         $typesCartes = TypeCarte::orderBy('code')->get();
@@ -138,6 +144,13 @@ class CampagneController extends Controller
 
         if (! $toutesAgences && empty($agenceIds)) {
             return back()->withErrors(['agences' => 'Sélectionnez au moins une agence ou cochez "Toutes les agences".'])->withInput();
+        }
+
+        if ($this->perimetreOuDatesCampagneModifies($campagne, $request, $toutesAgences, $agenceIds)) {
+            $errChevauchement = $this->validerPerimetreAgencesSansChevauchement($campagne, $request, $toutesAgences, $agenceIds);
+            if ($errChevauchement) {
+                return back()->withErrors($errChevauchement)->withInput();
+            }
         }
 
         $campagne->update([
@@ -256,6 +269,78 @@ class CampagneController extends Controller
         $campagne->delete();
 
         return redirect()->route('admin.campagnes.index')->with('success', 'Campagne supprimée.');
+    }
+
+    /**
+     * @param  list<int|string>  $agenceIds
+     */
+    private function perimetreOuDatesCampagneModifies(Campagne $campagne, Request $request, bool $toutesAgences, array $agenceIds): bool
+    {
+        if ($toutesAgences !== $campagne->toutes_agences) {
+            return true;
+        }
+        if ($request->date_debut !== $campagne->date_debut->format('Y-m-d')
+            || $request->date_fin !== $campagne->date_fin->format('Y-m-d')) {
+            return true;
+        }
+        if (! $toutesAgences) {
+            $nouveau = array_values(array_unique(array_map('intval', $agenceIds)));
+            sort($nouveau);
+            $ancien = $campagne->agences()->pluck('agences.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+
+            return $nouveau !== $ancien;
+        }
+
+        return false;
+    }
+
+    /**
+     * Interdit qu’une même agence soit couverte par deux campagnes actives dont les périodes se chevauchent.
+     *
+     * @param  list<int|string>  $agenceIds  Ignoré si $toutesAgences.
+     * @return array<string, string>|null
+     */
+    private function validerPerimetreAgencesSansChevauchement(?Campagne $campagne, Request $request, bool $toutesAgences, array $agenceIds): ?array
+    {
+        Campagne::syncStatuts();
+
+        $ids = $toutesAgences
+            ? Agence::query()->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : array_values(array_unique(array_map('intval', $agenceIds)));
+
+        $debut = Carbon::parse($request->date_debut)->startOfDay();
+        $fin = Carbon::parse($request->date_fin)->startOfDay();
+
+        $excludeId = $campagne?->id ?? 0;
+
+        $autres = Campagne::query()
+            ->where('id', '!=', $excludeId)
+            ->where('actif', true)
+            ->whereNotIn('statut', [Campagne::STATUT_ARRETEE, Campagne::STATUT_ANNULEE, Campagne::STATUT_TERMINEE])
+            ->whereDate('date_debut', '<=', $fin)
+            ->whereDate('date_fin', '>=', $debut)
+            ->get();
+
+        foreach ($autres as $autre) {
+            $autreIds = $autre->toutes_agences
+                ? Agence::query()->pluck('id')->map(fn ($id) => (int) $id)->all()
+                : $autre->agences()->pluck('agences.id')->map(fn ($id) => (int) $id)->all();
+            $conflits = array_values(array_intersect($ids, $autreIds));
+            if ($conflits === []) {
+                continue;
+            }
+            $noms = Agence::whereIn('id', $conflits)->orderBy('nom')->pluck('nom')->all();
+            $liste = implode(', ', array_slice($noms, 0, 8));
+            if (count($noms) > 8) {
+                $liste .= '…';
+            }
+
+            return [
+                'agences' => 'Cette campagne chevauche la période de « '.$autre->nom.' » (également active) : les agences '.$liste.' ne peuvent pas être sur les deux campagnes à la fois. Retirez « Toutes les agences » ou excluez ces agences d’une des campagnes.',
+            ];
+        }
+
+        return null;
     }
 
     /** @return array<string, array<int, mixed>> */

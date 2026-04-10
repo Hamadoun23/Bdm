@@ -14,23 +14,27 @@ class AgenceController extends Controller
 {
     public function index(): View
     {
-        $agences = Agence::with(['stocks.typeCarte'])->get();
+        $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
 
         return view('admin.agences.index', compact('agences'));
     }
 
     public function create(): View
     {
-        return view('admin.agences.create');
+        $ordreSuggest = (int) (Agence::max('ordre') ?? 0) + 1;
+
+        return view('admin.agences.create', compact('ordreSuggest'));
     }
 
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
+            'ordre' => 'required|integer|min:0',
             'nom' => 'required|string|max:255',
         ]);
 
         $agence = Agence::create([
+            'ordre' => (int) $request->input('ordre'),
             'nom' => $request->input('nom'),
             'adresse' => null,
             'chef_id' => null,
@@ -55,10 +59,12 @@ class AgenceController extends Controller
     public function update(Request $request, Agence $agence): RedirectResponse
     {
         $request->validate([
+            'ordre' => 'required|integer|min:0',
             'nom' => 'required|string|max:255',
         ]);
 
         $agence->update([
+            'ordre' => (int) $request->input('ordre'),
             'nom' => $request->input('nom'),
             'adresse' => null,
         ]);
