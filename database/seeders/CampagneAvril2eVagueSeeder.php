@@ -9,32 +9,38 @@ use App\Models\ContratPrestationReponse;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 /**
  * Campagne « Avril 2è vague » :9 avril → 8 mai (mois calendaire inclus),
  * périmètre restreint aux agences et commerciaux listés.
  *
- * Mot de passe par commercial : format M{XX}T@bdm (ex. M82T@bdm), XX =2 derniers chiffres du n° de téléphone en base.
+ * Mot de passe par commercial : en général M{XX}T@bdm (2 derniers chiffres du n°).
+ * Exception : identifiant téléphone seul + mot de passe sur 3 derniers chiffres (voir ligne TRAORE).
  */
 class CampagneAvril2eVagueSeeder extends Seeder
 {
     private const NOM_CAMPAGNE = 'Avril 2è vague';
 
-    /** @var list<array{noms: string, prenom: string, agence: string, tel: string}> */
+    /**
+     * @var list<array{noms: string, prenom: string, agence: string, tel: string, identifiant_tel_seul?: bool, mot_passe_last3?: bool}>
+     */
     private const COMMERCIAUX = [
         ['noms' => 'KONE', 'prenom' => 'Modibo', 'agence' => 'SEMA GESCO', 'tel' => '83840345'],
-        ['noms' => 'CISSE', 'prenom' => 'Kadidai CAMRA', 'agence' => 'MISSIRA', 'tel' => '72718370'],
         ['noms' => 'DIARRA', 'prenom' => 'Soumail', 'agence' => 'QUINZAMBOUGOU', 'tel' => '91105337'],
         ['noms' => 'TOUNKARA', 'prenom' => 'Mamadou', 'agence' => 'SEBENIKORO', 'tel' => '70122814'],
         ['noms' => 'KEITA', 'prenom' => 'Djelika', 'agence' => 'HAMDALLAYE', 'tel' => '72715555'],
         ['noms' => 'DIARRA', 'prenom' => 'Assetou YALCOYE', 'agence' => 'LAFIABOUGOU', 'tel' => '90983335'],
         ['noms' => 'COULIBALY', 'prenom' => 'Mamadou', 'agence' => 'TOROKOROBOUGOU', 'tel' => '76411856'],
         ['noms' => 'MACALOU', 'prenom' => 'Adama', 'agence' => 'MAGNAMBOUGOU', 'tel' => '71690729'],
-        ['noms' => 'DIALLO', 'prenom' => 'FATI', 'agence' => 'AZAR', 'tel' => '71514623'],
         ['noms' => 'TURE', 'prenom' => 'Imran', 'agence' => 'BOULKASSOULBOUGOU', 'tel' => '92574790'],
         ['noms' => 'BATHILY', 'prenom' => 'Maimouna', 'agence' => 'KATI', 'tel' => '65893863'],
+        ['noms' => 'TRAORE', 'prenom' => 'Youssouf', 'agence' => 'Kabala', 'tel' => '60032329', 'identifiant_tel_seul' => true, 'mot_passe_last3' => true],
     ];
+
+    /** Téléphones retirés de cette campagne (comptes supprimés s’ils n’ont aucune vente). */
+    private const TELEPHONES_RETIRES = ['72718370', '71514623'];
 
     public function run(): void
     {
@@ -48,13 +54,7 @@ class CampagneAvril2eVagueSeeder extends Seeder
             $agence = $this->findOrCreateAgence($row['agence']);
             $agenceIds[$agence->id] = $agence->id;
 
-            $tel = $this->normalizePhone($row['tel']);
-            $user = $this->findOrCreateCommercial(
-                noms: mb_strtoupper(trim($row['noms'])),
-                prenom: trim($row['prenom']),
-                agenceId: $agence->id,
-                telephone: $tel,
-            );
+            $user = $this->findOrCreateCommercial($row, $agence->id);
             $userIds[$user->id] = $user->id;
         }
 
@@ -87,6 +87,8 @@ class CampagneAvril2eVagueSeeder extends Seeder
             ]
         );
 
+        $this->retirerCommerciauxDeLaCampagne($campagne, self::TELEPHONES_RETIRES);
+
         $campagne->agences()->sync($agenceIds);
         $campagne->typesCartesRemise()->detach();
         $campagne->beneficiairesAide()->detach();
@@ -112,10 +114,52 @@ class CampagneAvril2eVagueSeeder extends Seeder
 
         $this->command->info('Campagne « '.self::NOM_CAMPAGNE.' » (ID '.$campagne->id.') : '.$dateDebut->format('d/m/Y').' → '.$dateFin->format('d/m/Y').'.');
         $this->command->info('Agences liées : '.count($agenceIds).' ; signataires : '.count($userIds).'.');
-        $this->command->info('Mot de passe : M{2 derniers chiffres du tél}T@bdm (ex. …8345 → M45T@bdm). Détail :');
+        $this->command->info('Détail connexion (commercial : n° téléphone dans le champ Identifiant) :');
         foreach (self::COMMERCIAUX as $row) {
             $tel = $this->normalizePhone($row['tel']);
-            $this->command->line('  '.mb_strtoupper(trim($row['noms'])).' ('.$tel.') : '.$this->motDePassePourTelephone($tel));
+            $identifiant = ! empty($row['identifiant_tel_seul'])
+                ? 'tél. '.$tel.' uniquement (e-mail technique '.$tel.'@identifiant.gda)'
+                : 'tél. '.$tel.' ou e-mail avril2.vague.'.$tel.'@import.gda';
+            $this->command->line('  '.mb_strtoupper(trim($row['noms'])).' — '.$identifiant.' — MDP : '.$this->motDePassePourLigne($row));
+        }
+    }
+
+    /**
+     * Détache de la campagne « Avril 2è vague » et supprime le compte s’il n’a aucune vente (sinon désactivation seulement).
+     */
+    private function retirerCommerciauxDeLaCampagne(Campagne $campagne, array $telephonesNumeriques): void
+    {
+        foreach ($telephonesNumeriques as $raw) {
+            $tel = $this->normalizePhone($raw);
+            if ($tel === '') {
+                continue;
+            }
+            $email = 'avril2.vague.'.$tel.'@import.gda';
+            $user = User::query()
+                ->where(function ($q) use ($tel, $email) {
+                    $q->where('telephone', $tel)->orWhere('email', $email);
+                })
+                ->first();
+            if (! $user) {
+                continue;
+            }
+
+            $campagne->signatairesContrat()->detach($user->id);
+            ContratPrestationReponse::query()
+                ->where('campagne_id', $campagne->id)
+                ->where('user_id', $user->id)
+                ->delete();
+
+            if ($user->ventes()->exists() || $user->clients()->exists()) {
+                $this->command->warn('Compte conservé (ventes ou clients liés) : '.$user->email.' — retiré des signataires de « '.self::NOM_CAMPAGNE.' ».');
+
+                continue;
+            }
+
+            DB::table('campagne_commercial_contrat')->where('user_id', $user->id)->delete();
+            DB::table('campagne_aide_beneficiaire')->where('user_id', $user->id)->delete();
+            $user->delete();
+            $this->command->info('Compte supprimé (aucune vente) : téléphone '.$tel);
         }
     }
 
@@ -149,18 +193,55 @@ class CampagneAvril2eVagueSeeder extends Seeder
         return 'M'.$suffix.'T@bdm';
     }
 
-    private function findOrCreateCommercial(string $noms, string $prenom, int $agenceId, string $telephone): User
+    /** Évite collision avec le format 2 chiffres (ex. Youssouf) : M +3 derniers chiffres + T@bdm. */
+    private function motDePassePourTelephoneDerniers3(string $telephoneNumerique): string
     {
-        $email = 'avril2.vague.'.$telephone.'@import.gda';
+        $tel = $this->normalizePhone($telephoneNumerique);
+        $suffix = substr($tel, -3);
+        if (strlen($suffix) < 3) {
+            $suffix = str_pad($suffix, 3, '0', STR_PAD_LEFT);
+        }
+
+        return 'M'.$suffix.'T@bdm';
+    }
+
+    private function motDePassePourLigne(array $row): string
+    {
+        $tel = $this->normalizePhone($row['tel']);
+
+        return ! empty($row['mot_passe_last3'])
+            ? $this->motDePassePourTelephoneDerniers3($tel)
+            : $this->motDePassePourTelephone($tel);
+    }
+
+    /** E-mail unique en base ; connexion possible au n° (voir LoginRequest). */
+    private function emailTechniquePourLigne(array $row, string $telephone): string
+    {
+        if (! empty($row['identifiant_tel_seul'])) {
+            return $telephone.'@identifiant.gda';
+        }
+
+        return 'avril2.vague.'.$telephone.'@import.gda';
+    }
+
+    private function findOrCreateCommercial(array $row, int $agenceId): User
+    {
+        $telephone = $this->normalizePhone($row['tel']);
+        $noms = mb_strtoupper(trim($row['noms']));
+        $prenom = trim($row['prenom']);
+        $email = $this->emailTechniquePourLigne($row, $telephone);
+        $emailLegacyAvril = 'avril2.vague.'.$telephone.'@import.gda';
+        $hash = Hash::make($this->motDePassePourLigne($row));
 
         $user = User::query()
-            ->where(function ($q) use ($telephone, $email) {
+            ->where(function ($q) use ($telephone, $email, $emailLegacyAvril, $row) {
                 $q->where('telephone', $telephone)
                     ->orWhere('email', $email);
+                if (! empty($row['identifiant_tel_seul'])) {
+                    $q->orWhere('email', $emailLegacyAvril);
+                }
             })
             ->first();
-
-        $hash = Hash::make($this->motDePassePourTelephone($telephone));
 
         if ($user) {
             $user->update([
@@ -168,6 +249,7 @@ class CampagneAvril2eVagueSeeder extends Seeder
                 'prenom' => $prenom,
                 'agence_id' => $agenceId,
                 'telephone' => $telephone,
+                'email' => $email,
                 'role' => 'commercial',
                 'password' => $hash,
             ]);
