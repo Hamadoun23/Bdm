@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Campagne;
 use App\Services\VenteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,6 +32,15 @@ class VenteController extends Controller
             ], 403);
         }
 
+        Campagne::syncStatuts();
+        $idsCampagnesOuvertes = Campagne::getActivesPourAgence((int) $user->agence_id)->pluck('id')->all();
+        if ($idsCampagnesOuvertes === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucune campagne ouverte pour votre agence : enregistrement de vente impossible.',
+            ], 400);
+        }
+
         $validator = Validator::make($request->all(), [
             'prenom' => 'required|string|max:100',
             'nom' => 'required|string|max:100',
@@ -38,6 +48,12 @@ class VenteController extends Controller
             'ville' => 'nullable|string|max:100',
             'quartier' => 'nullable|string|max:100',
             'type_carte_id' => ['required', Rule::exists('types_cartes', 'id')->where('actif', true)],
+            'campagne_id' => [
+                Rule::requiredIf(count($idsCampagnesOuvertes) > 1),
+                'nullable',
+                'integer',
+                Rule::in($idsCampagnesOuvertes),
+            ],
             'carte_identite' => 'nullable|file|mimes:jpg,jpeg,png,gif,webp,pdf|max:10240',
         ]);
 
@@ -49,7 +65,10 @@ class VenteController extends Controller
             ], 422);
         }
 
-        $data = $validator->safe()->except('carte_identite');
+        $data = $validator->safe()->except('carte_identite')->toArray();
+        if (count($idsCampagnesOuvertes) === 1) {
+            $data['campagne_id'] = $idsCampagnesOuvertes[0];
+        }
         if ($request->hasFile('carte_identite')) {
             $data['carte_identite'] = $request->file('carte_identite')->store('cartes-identite', 'public');
         }

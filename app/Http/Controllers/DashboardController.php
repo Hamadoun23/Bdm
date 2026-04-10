@@ -50,7 +50,8 @@ class DashboardController extends Controller
 
         Campagne::syncStatuts();
         $campagnesTotal = Campagne::count();
-        $campagneActive = Campagne::where('actif', true)->first();
+        $campagnesActivesListe = Campagne::where('actif', true)->orderByDesc('date_debut')->get();
+        $campagneActive = $campagnesActivesListe->first();
         $campagnesEnCours = Campagne::where('statut', Campagne::STATUT_EN_COURS)->count();
         $campagnesProgrammees = Campagne::where('statut', Campagne::STATUT_PROGRAMMEE)->count();
 
@@ -59,7 +60,7 @@ class DashboardController extends Controller
         return view('dashboard.admin', compact(
             'user',
             'ventesTotal', 'ventesMois', 'stocks', 'alertes',
-            'classement', 'campagnesTotal', 'campagneActive', 'campagnesEnCours', 'campagnesProgrammees',
+            'classement', 'campagnesTotal', 'campagneActive', 'campagnesActivesListe', 'campagnesEnCours', 'campagnesProgrammees',
             'readOnly'
         ));
     }
@@ -80,21 +81,23 @@ class DashboardController extends Controller
         $user->load('agence');
         Campagne::syncStatuts();
         $agenceId = $user->agence_id ? (int) $user->agence_id : null;
-        $campagneActive = $agenceId ? Campagne::getActiveForAgence($agenceId) : null;
-        $peutVendre = $agenceId && $campagneActive && $campagneActive->estOuverteAuxVentes($agenceId);
+        $campagnesOuvertes = $agenceId ? Campagne::getActivesPourAgence($agenceId) : collect();
+        $campagneActive = $campagnesOuvertes->first();
+        $peutVendre = $agenceId && $campagnesOuvertes->isNotEmpty();
 
         $stocks = $user->agence_id ? Stock::with('typeCarte')->where('agence_id', $user->agence_id)->get() : collect();
 
-        // Même logique que Performances : période = campagne active pour l’agence (pas le mois calendaire seul).
-        if ($campagneActive) {
-            $dateDebut = $campagneActive->date_debut->copy()->startOfDay();
-            $dateFin = $campagneActive->date_fin->copy()->endOfDay();
+        // Ventes : toutes les campagnes ouvertes pour l’agence ; classement sur la campagne principale (plus récente).
+        if ($campagnesOuvertes->isNotEmpty()) {
+            $idsCampagnes = $campagnesOuvertes->pluck('id')->all();
             $mesVentes = Vente::query()
                 ->where('user_id', $user->id)
-                ->where('campagne_id', $campagneActive->id)
-                ->whereBetween('created_at', [$dateDebut, $dateFin])
+                ->whereIn('campagne_id', $idsCampagnes)
                 ->count();
-            $classement = $this->primeService->getClassementPourCampagne($campagneActive, $dateDebut, $dateFin);
+            $campagneClassement = $campagneActive;
+            $dateDebut = $campagneClassement->date_debut->copy()->startOfDay();
+            $dateFin = $campagneClassement->date_fin->copy()->endOfDay();
+            $classement = $this->primeService->getClassementPourCampagne($campagneClassement, $dateDebut, $dateFin);
         } else {
             $mesVentes = Vente::query()
                 ->where('user_id', $user->id)
@@ -108,7 +111,7 @@ class DashboardController extends Controller
         $monRang = $rangIdx !== false ? (int) $classement->values()[$rangIdx]['rang'] : null;
 
         return view('dashboard.commercial', compact(
-            'user', 'mesVentes', 'stocks', 'classement', 'monRang', 'campagneActive', 'peutVendre'
+            'user', 'mesVentes', 'stocks', 'classement', 'monRang', 'campagneActive', 'campagnesOuvertes', 'peutVendre'
         ));
     }
 

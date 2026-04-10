@@ -273,24 +273,31 @@ class Campagne extends Model
         return $this->agences()->where('agence_id', $agenceId)->exists();
     }
 
-    /** Synchronise les statuts (programmee->en_cours, en_cours->terminee) et active automatiquement */
+    /**
+     * Synchronise les statuts et le drapeau {@see $actif} : plusieurs campagnes peuvent être actives en même temps
+     * si leurs périodes chevauchent aujourd’hui (sauf arrêt / annulation / fin de période).
+     */
     public static function syncStatuts(): void
     {
         $now = Carbon::now()->startOfDay();
-        // Marquer terminées
+
         Campagne::whereIn('statut', [self::STATUT_PROGRAMMEE, self::STATUT_EN_COURS])
             ->where('date_fin', '<', $now)
             ->update(['statut' => self::STATUT_TERMINEE, 'actif' => false]);
-        // Activer la campagne en cours (une seule : la plus récente par date_debut)
-        $campagneActivable = Campagne::whereIn('statut', [self::STATUT_PROGRAMMEE, self::STATUT_EN_COURS])
+
+        Campagne::query()->update(['actif' => false]);
+
+        Campagne::whereNotIn('statut', [self::STATUT_ARRETEE, self::STATUT_ANNULEE, self::STATUT_TERMINEE])
             ->where('date_debut', '<=', $now)
             ->where('date_fin', '>=', $now)
-            ->orderByDesc('date_debut')
-            ->first();
-        if ($campagneActivable) {
-            Campagne::where('actif', true)->where('id', '!=', $campagneActivable->id)->update(['actif' => false]);
-            $campagneActivable->update(['statut' => self::STATUT_EN_COURS, 'actif' => true]);
-        }
+            ->update([
+                'statut' => self::STATUT_EN_COURS,
+                'actif' => true,
+            ]);
+
+        Campagne::where('statut', self::STATUT_PROGRAMMEE)
+            ->where('date_debut', '>', $now)
+            ->update(['actif' => false]);
 
         self::resynchroniserActifsCommerciauxSelonCampagnesVivantes();
     }
@@ -324,18 +331,32 @@ class Campagne extends Model
         }
     }
 
-    /** Campagne active pour les primes, pour une agence donnée (null = toutes) */
-    public static function getActiveForAgence(?int $agenceId = null): ?Campagne
+    /**
+     * Campagnes ouvertes (actif + période courante après sync) concernant l’agence.
+     * Plusieurs entrées possibles ; tri par date de début décroissante (référence « principale » = first()).
+     *
+     * @return \Illuminate\Support\Collection<int, Campagne>
+     */
+    public static function getActivesPourAgence(?int $agenceId = null): Collection
     {
         self::syncStatuts();
-        $campagnes = Campagne::where('actif', true)->get();
-        foreach ($campagnes as $c) {
-            if ($agenceId === null || $c->concerneAgence($agenceId)) {
-                return $c;
-            }
+        $q = self::query()
+            ->where('actif', true)
+            ->orderByDesc('date_debut');
+        if ($agenceId !== null) {
+            $q->where(function ($w) use ($agenceId) {
+                $w->where('toutes_agences', true)
+                    ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $agenceId));
+            });
         }
 
-        return null;
+        return $q->get();
+    }
+
+    /** Première campagne active pour l’agence (la plus récente par date_debut) — compatibilité code existant. */
+    public static function getActiveForAgence(?int $agenceId = null): ?Campagne
+    {
+        return self::getActivesPourAgence($agenceId)->first();
     }
 
     /**

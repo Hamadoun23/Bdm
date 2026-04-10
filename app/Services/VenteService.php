@@ -34,10 +34,35 @@ class VenteService
         $agenceId = (int) $user->agence_id;
 
         Campagne::syncStatuts();
-        $campagne = Campagne::getActiveForAgence($agenceId);
-        if (! $campagne || ! $campagne->estOuverteAuxVentes($agenceId)) {
+        $ouvertes = Campagne::getActivesPourAgence($agenceId);
+        if ($ouvertes->isEmpty()) {
             throw new InvalidArgumentException(
                 'Aucune campagne en cours pour votre agence. Les ventes ne sont possibles que pendant une campagne active ; une campagne terminée ou arrêtée ne permet plus d’enregistrer de vente.'
+            );
+        }
+
+        $campagneIdDemande = isset($data['campagne_id']) ? (int) $data['campagne_id'] : null;
+        $campagne = null;
+        if ($ouvertes->count() > 1) {
+            if (! $campagneIdDemande) {
+                throw new InvalidArgumentException(
+                    'Plusieurs campagnes sont ouvertes : indiquez la campagne (sélection sur le formulaire).'
+                );
+            }
+            $campagne = $ouvertes->firstWhere('id', $campagneIdDemande);
+            if (! $campagne) {
+                throw new InvalidArgumentException('Campagne non reconnue ou non ouverte pour votre agence.');
+            }
+        } else {
+            $campagne = $ouvertes->first();
+            if ($campagneIdDemande && (int) $campagne->id !== $campagneIdDemande) {
+                throw new InvalidArgumentException('Campagne non reconnue ou non ouverte pour votre agence.');
+            }
+        }
+
+        if (! $campagne->estOuverteAuxVentes($agenceId)) {
+            throw new InvalidArgumentException(
+                'Cette campagne n’accepte pas les ventes pour votre agence pour le moment.'
             );
         }
 

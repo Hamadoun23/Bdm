@@ -8,12 +8,21 @@
 
 @if(!$peutVendre)
 <div class="alert alert-warning">
-    <strong>Ventes bloquées :</strong> aucune campagne active pour votre agence en ce moment, ou la campagne en cours est terminée / arrêtée.
-    Les ventes ne sont possibles que pendant une campagne ouverte.
+    <strong>Ventes bloquées :</strong> aucune campagne ouverte pour votre agence en ce moment, ou les campagnes concernées sont terminées / arrêtées.
+    Les ventes ne sont possibles que pendant au moins une campagne ouverte.
 </div>
 @else
 <div class="alert alert-success py-2 mb-3">
-    Campagne en cours : <strong>{{ $campagneActive->nom }}</strong> (jusqu’au {{ $campagneActive->date_fin->format('d/m/Y') }}).
+    @if(($campagnesOuvertes ?? collect())->count() > 1)
+        <strong>{{ $campagnesOuvertes->count() }} campagnes ouvertes</strong> — à l’enregistrement d’une vente, choisissez celle concernée.
+ <ul class="mb-0 mt-2 small ps-3">
+            @foreach($campagnesOuvertes as $c)
+            <li><strong>{{ $c->nom }}</strong> (jusqu’au {{ $c->date_fin->format('d/m/Y') }})</li>
+            @endforeach
+        </ul>
+    @else
+        Campagne en cours : <strong>{{ $campagneActive->nom }}</strong> (jusqu’au {{ $campagneActive->date_fin->format('d/m/Y') }}).
+    @endif
 </div>
 @endif
 
@@ -21,7 +30,7 @@
     <div class="col-md-4">
         <div class="card bg-primary text-white">
             <div class="card-body">
-                <h6>Mes ventes @if($campagneActive)<span class="small opacity-75">(campagne en cours)</span>@else<span class="small opacity-75">(mois en cours)</span>@endif</h6>
+                <h6>Mes ventes @if($campagneActive)<span class="small opacity-75">(@if(($campagnesOuvertes ?? collect())->count() > 1)campagnes ouvertes@elsecampagne en cours@endif)</span>@else<span class="small opacity-75">(mois en cours)</span>@endif</h6>
                 <h3>{{ $mesVentes }}</h3>
             </div>
         </div>

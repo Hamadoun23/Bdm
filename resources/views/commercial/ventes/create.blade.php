@@ -19,13 +19,32 @@
                 </div>
                 <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">Retour au Dashboard</a>
                 @else
-                @if($campagneActive)
+                @if($campagnesOuvertes->isNotEmpty())
                 <div class="alert alert-success py-2 small mb-3">
-                    Vente rattachée à la campagne <strong>{{ $campagneActive->nom }}</strong> (fin le {{ $campagneActive->date_fin->format('d/m/Y') }}).
+                    @if($campagnesOuvertes->count() === 1)
+ Vente rattachée à la campagne <strong>{{ $campagnesOuvertes->first()->nom }}</strong> (fin le {{ $campagnesOuvertes->first()->date_fin->format('d/m/Y') }}).
+                    @else
+                    <strong>Plusieurs campagnes ouvertes :</strong> sélectionnez celle de cette vente.
+                    @endif
                 </div>
                 @endif
                 <form id="form-vente">
                     @csrf
+                    @if($campagnesOuvertes->count() > 1)
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Campagne *</label>
+                        <div class="d-flex flex-column gap-2">
+                            @foreach($campagnesOuvertes as $c)
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="campagne_id" id="campagne{{ $c->id }}" value="{{ $c->id }}" {{ $loop->first ? 'required' : '' }} @checked($loop->first)>
+                                <label class="form-check-label" for="campagne{{ $c->id }}">{{ $c->nom }} <span class="text-muted">— fin {{ $c->date_fin->format('d/m/Y') }}</span></label>
+                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    @elseif($campagnesOuvertes->count() === 1)
+                    <input type="hidden" name="campagne_id" value="{{ $campagnesOuvertes->first()->id }}">
+                    @endif
                     <div class="mb-3">
                         <label class="form-label fw-bold">Type de carte *</label>
                         <div class="d-flex flex-column gap-2">

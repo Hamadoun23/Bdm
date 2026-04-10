@@ -92,12 +92,13 @@ class VenteController extends Controller
         Campagne::syncStatuts();
         $user = $request->user();
         $agenceId = $user->agence_id ? (int) $user->agence_id : null;
-        $campagneActive = $agenceId ? Campagne::getActiveForAgence($agenceId) : null;
-        $peutVendre = $agenceId && $campagneActive && $campagneActive->estOuverteAuxVentes($agenceId);
+        $campagnesOuvertes = $agenceId ? Campagne::getActivesPourAgence($agenceId) : collect();
+        $campagneActive = $campagnesOuvertes->first();
+        $peutVendre = $agenceId && $campagnesOuvertes->isNotEmpty();
 
         $typesCartes = TypeCarte::actifs()->get();
 
-        return view('commercial.ventes.create', compact('typesCartes', 'campagneActive', 'peutVendre'));
+        return view('commercial.ventes.create', compact('typesCartes', 'campagneActive', 'campagnesOuvertes', 'peutVendre'));
     }
 
     public function destroy(Request $request, Vente $vente): RedirectResponse

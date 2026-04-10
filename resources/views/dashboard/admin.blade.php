@@ -66,10 +66,14 @@
                     <span class="fs-4 fw-bold">{{ $campagnesTotal }}</span>
                     <small class="opacity-90">total</small>
                 </div>
-                @if($campagneActive)
+                @if(isset($campagnesActivesListe) && $campagnesActivesListe->isNotEmpty())
                 <div class="small opacity-90">
-                    <strong>Active :</strong> {{ $campagneActive->nom }}<br>
-                    <small>{{ $campagneActive->date_debut->format('d/m/Y') }} - {{ $campagneActive->date_fin->format('d/m/Y') }}</small>
+                    <strong>Active(s) :</strong>
+                    <ul class="mb-0 ps-3 mt-1">
+                        @foreach($campagnesActivesListe as $ca)
+                        <li>{{ $ca->nom }} <small class="text-white-50">({{ $ca->date_debut->format('d/m/Y') }} – {{ $ca->date_fin->format('d/m/Y') }})</small></li>
+                        @endforeach
+                    </ul>
                 </div>
                 @else
                 <div class="small opacity-90">
