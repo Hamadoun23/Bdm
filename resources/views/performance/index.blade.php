@@ -206,7 +206,20 @@
     $sumVentesTypesPerf = collect($stats['par_type'] ?? [])->sum();
     $sumVentesAgencesPerf = $ventesParAgenceChart->sum('ventes');
     $totalVentesPerf = (int) ($stats['total_ventes'] ?? 0);
+    $perfPeriodSlug = \Illuminate\Support\Str::slug(\Illuminate\Support\Str::ascii(\Illuminate\Support\Str::limit($libellePeriode ?? 'periode', 48, '')), '-');
+    $perfExportConfig = [
+        'fileBase' => 'graphiques-performances-'.($campagneIdSelected ?: 'ref').'-'.($perfPeriodSlug !== '' ? $perfPeriodSlug : 'export-'.now()->format('Ymd-His')),
+        'docTitle' => 'Performances — '.($libellePeriode ?? '—'),
+        'items' => [
+            ['id' => 'chartPerfTopCommerciaux', 'title' => 'Top commercial — ventes'],
+            ['id' => 'chartPerfAgences', 'title' => 'Répartition — part des agences (% ventes)'],
+            ['id' => 'chartPerfTypes', 'title' => 'Répartition — ventes par type de carte'],
+        ],
+    ];
 @endphp
+<div class="d-flex justify-content-end mb-2 flex-wrap gap-2" data-gda-export='@json($perfExportConfig)'>
+    <button type="button" class="btn btn-sm btn-outline-primary gda-export-word">Exporter les graphiques (Word)</button>
+</div>
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">
@@ -417,6 +430,7 @@
 @unless($vueCommerciale)
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ asset('js/gda-chart-export.js') }}"></script>
 <script>
 (function () {
     var nf = new Intl.NumberFormat('fr-FR');
@@ -520,6 +534,9 @@
                 scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return nf.format(v); } } } }
             }
         });
+    }
+    if (typeof gdaInitChartExports === 'function') {
+        gdaInitChartExports();
     }
 })();
 </script>

@@ -172,7 +172,19 @@
     }
     $totalVentesCommGraph = (int) $chartCommerciauxRows->sum('total_ventes');
     $totalVentesAgGraph = (int) $chartAgencesRows->sum('total_ventes');
+    $syntheseExportConfig = [
+        'fileBase' => 'graphiques-synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d'),
+        'docTitle' => 'Synthèse — '.$campagne->nom.' ('.$dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y').')',
+        'items' => [
+            ['id' => 'chartSyntheseTypes', 'title' => 'Mix des ventes par type de carte'],
+            ['id' => 'chartSyntheseCommerciaux', 'title' => 'Top vendeurs — part du total'],
+            ['id' => 'chartSyntheseAgences', 'title' => 'Part des agences (plus de ventes)'],
+        ],
+    ];
 @endphp
+<div class="d-flex justify-content-end mb-2 flex-wrap gap-2" data-gda-export='@json($syntheseExportConfig)'>
+    <button type="button" class="btn btn-sm btn-outline-primary gda-export-word">Exporter les graphiques (Word)</button>
+</div>
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">
@@ -328,6 +340,7 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ asset('js/gda-chart-export.js') }}"></script>
 <script>
 (function () {
     var nf = new Intl.NumberFormat('fr-FR');
@@ -439,6 +452,9 @@
                 },
             }
         });
+    }
+    if (typeof gdaInitChartExports === 'function') {
+        gdaInitChartExports();
     }
 })();
 </script>
