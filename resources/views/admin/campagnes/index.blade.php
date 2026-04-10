@@ -21,7 +21,6 @@
                 <tr>
                     <th>Nom</th>
                     <th>Période</th>
-                    <th>Agences</th>
                     <th>Prime 1<sup>er</sup></th>
                     <th>Statut</th>
                     <th>Actions</th>
@@ -32,13 +31,6 @@
                 <tr>
                     <td>{{ $c->nom }}</td>
                     <td>{{ $c->date_debut->format('d/m/Y') }} - {{ $c->date_fin->format('d/m/Y') }}</td>
-                    <td>
-                        @if($c->toutes_agences)
-                        <span class="text-muted">Toutes</span>
-                        @else
-                        {{ $c->agences->pluck('nom')->join(', ') ?: '-' }}
-                        @endif
-                    </td>
                     <td>{{ number_format($c->prime_meilleur_vendeur) }} F</td>
                     <td>
                         @php $statut = $c->statut_effectif; @endphp

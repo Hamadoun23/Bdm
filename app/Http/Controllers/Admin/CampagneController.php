@@ -20,7 +20,7 @@ class CampagneController extends Controller
     public function index(): View
     {
         Campagne::syncStatuts();
-        $campagnes = Campagne::with('agences')->orderByDesc('date_debut')->paginate(10);
+        $campagnes = Campagne::query()->orderByDesc('date_debut')->paginate(10);
 
         return view('admin.campagnes.index', compact('campagnes'));
     }
