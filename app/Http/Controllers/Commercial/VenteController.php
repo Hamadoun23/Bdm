@@ -54,7 +54,7 @@ class VenteController extends Controller
         $ventes = $query->get();
 
         $includeCommercial = $user && ($user->isAdmin() || $user->isDirection());
-        $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant'];
+        $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte'];
         if ($includeCommercial) {
             array_push($headers, 'Commercial', 'Agence');
         }
@@ -67,7 +67,6 @@ class VenteController extends Controller
                 $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
                 $v->client->telephone ?? '',
                 $v->typeCarte?->code ?? '—',
-                $v->montant ?? '',
             ];
             if ($includeCommercial) {
                 $base[] = $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '';

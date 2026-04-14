@@ -49,7 +49,6 @@
                         <tr>
                             <th>Date</th>
                             <th>Type</th>
-                            <th>Montant</th>
                             <th>Commercial</th>
                             <th>Agence</th>
                             <th>Activation</th>
@@ -60,13 +59,12 @@
                         <tr>
                             <td>{{ $v->created_at->format('d/m/Y H:i') }}</td>
                             <td>{{ $v->typeCarte?->code ?? '?' }}</td>
-                            <td>{{ $v->montant !== null ? number_format($v->montant) . ' F' : '—' }}</td>
                             <td>{{ $v->user->name ?? '—' }}</td>
                             <td>{{ $v->agence->nom ?? '—' }}</td>
                             <td><span class="badge bg-light text-dark">{{ $v->statut_activation }}</span></td>
                         </tr>
                         @empty
-                        <tr><td colspan="6" class="text-center py-3 text-muted">Aucune vente.</td></tr>
+                        <tr><td colspan="5" class="text-center py-3 text-muted">Aucune vente.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

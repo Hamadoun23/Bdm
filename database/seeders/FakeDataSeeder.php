@@ -98,7 +98,6 @@ class FakeDataSeeder extends Seeder
                 'user_id' => $commercial->id,
                 'agence_id' => $agenceId,
                 'type_carte_id' => $typeCarteId,
-                'montant' => rand(5000, 50000),
                 'statut_activation' => $statut,
                 'created_at' => now()->subDays(rand(0, 60)),
             ]);

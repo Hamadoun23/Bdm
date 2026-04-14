@@ -59,7 +59,6 @@ class RapportController extends Controller
         );
         $resumeListe = [
             'count' => (clone $base)->count(),
-            'montant' => (int) (clone $base)->sum('montant'),
         ];
 
         $ventes = (clone $base)
@@ -277,7 +276,7 @@ class RapportController extends Controller
             return Response::stream(function () use ($ventes) {
                 $file = fopen('php://output', 'w');
                 fwrite($file, "\xEF\xBB\xBF");
-                fputcsv($file, ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'], ';');
+                fputcsv($file, ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'], ';');
                 foreach ($ventes as $v) {
                     fputcsv($file, [
                         $v->created_at->format('d/m/Y H:i'),
@@ -285,7 +284,6 @@ class RapportController extends Controller
                         $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
                         $v->client->telephone ?? '',
                         $v->typeCarte?->code ?? '-',
-                        $v->montant ?? '',
                         $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
                         $v->agence->nom ?? '',
                         $v->statut_activation ?? '',
@@ -301,29 +299,29 @@ class RapportController extends Controller
             $file = fopen('php://output', 'w');
             fwrite($file, "\xEF\xBB\xBF");
             if ($section === 'commerciaux') {
-                fputcsv($file, ['Rang', 'Commercial', 'Agence', 'Ventes', 'Montant FCFA'], ';');
+                fputcsv($file, ['Rang', 'Commercial', 'Agence', 'Ventes'], ';');
                 foreach ($synthese['commerciaux'] as $l) {
-                    fputcsv($file, [$l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'], $l['total_montant']], ';');
+                    fputcsv($file, [$l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes']], ';');
                 }
             } elseif ($section === 'agences') {
-                fputcsv($file, ['Agence', 'Ventes', 'Montant FCFA', 'Part % volume', 'Nb commericaux ratt.'], ';');
+                fputcsv($file, ['Agence', 'Ventes', 'Part % volume', 'Nb commericaux ratt.'], ';');
                 foreach ($synthese['agences'] as $l) {
-                    fputcsv($file, [$l['agence_nom'], $l['total_ventes'], $l['total_montant'], $l['pct_volume'], $l['nb_commerciaux']], ';');
+                    fputcsv($file, [$l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux']], ';');
                 }
             } elseif ($section === 'types') {
-                fputcsv($file, ['Type carte', 'Ventes', 'Montant FCFA', 'Part % volume'], ';');
+                fputcsv($file, ['Type carte', 'Ventes', 'Part % volume'], ';');
                 foreach ($synthese['par_type_carte'] as $l) {
-                    fputcsv($file, [$l['code'], $l['total_ventes'], $l['total_montant'], $l['pct_volume']], ';');
+                    fputcsv($file, [$l['code'], $l['total_ventes'], $l['pct_volume']], ';');
                 }
             } elseif ($section === 'semaines') {
-                fputcsv($file, ['Période', 'Ventes', 'Montant FCFA'], ';');
+                fputcsv($file, ['Période', 'Ventes'], ';');
                 foreach ($synthese['par_semaine'] as $l) {
-                    fputcsv($file, [$l['libelle'], $l['total_ventes'], $l['total_montant']], ';');
+                    fputcsv($file, [$l['libelle'], $l['total_ventes']], ';');
                 }
             } elseif ($section === 'mois') {
-                fputcsv($file, ['Mois', 'Ventes', 'Montant FCFA'], ';');
+                fputcsv($file, ['Mois', 'Ventes'], ';');
                 foreach ($synthese['par_mois'] as $l) {
-                    fputcsv($file, [$l['libelle'], $l['total_ventes'], $l['total_montant']], ';');
+                    fputcsv($file, [$l['libelle'], $l['total_ventes']], ';');
                 }
             }
             fclose($file);
@@ -348,14 +346,13 @@ class RapportController extends Controller
                 ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
                 ->orderBy('created_at')
                 ->get();
-            $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'];
+            $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'];
             $rows = $ventes->map(fn ($v) => [
                 $v->created_at->format('d/m/Y H:i'),
                 $v->campagne?->nom ?? '-',
                 $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
                 $v->client->telephone ?? '',
                 $v->typeCarte?->code ?? '-',
-                $v->montant ?? '',
                 $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
                 $v->agence->nom ?? '',
                 $v->statut_activation ?? '',
@@ -365,44 +362,44 @@ class RapportController extends Controller
         }
 
         if ($section === 'commerciaux') {
-            $headers = ['Rang', 'Commercial', 'Agence', 'Ventes', 'Montant FCFA'];
+            $headers = ['Rang', 'Commercial', 'Agence', 'Ventes'];
             $rows = $synthese['commerciaux']->map(fn ($l) => [
-                $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'], $l['total_montant'],
+                $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'],
             ])->all();
 
             return $this->spreadsheetSingleSheet('Commerciaux', $headers, $rows, $baseName);
         }
 
         if ($section === 'agences') {
-            $headers = ['Agence', 'Ventes', 'Montant FCFA', 'Part % volume', 'Nb commerciaux rattachés'];
+            $headers = ['Agence', 'Ventes', 'Part % volume', 'Nb commerciaux rattachés'];
             $rows = $synthese['agences']->map(fn ($l) => [
-                $l['agence_nom'], $l['total_ventes'], $l['total_montant'], $l['pct_volume'], $l['nb_commerciaux'],
+                $l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux'],
             ])->all();
 
             return $this->spreadsheetSingleSheet('Agences', $headers, $rows, $baseName);
         }
 
         if ($section === 'types') {
-            $headers = ['Type carte', 'Ventes', 'Montant FCFA', 'Part % volume'];
+            $headers = ['Type carte', 'Ventes', 'Part % volume'];
             $rows = $synthese['par_type_carte']->map(fn ($l) => [
-                $l['code'], $l['total_ventes'], $l['total_montant'], $l['pct_volume'],
+                $l['code'], $l['total_ventes'], $l['pct_volume'],
             ])->all();
 
             return $this->spreadsheetSingleSheet('Types de carte', $headers, $rows, $baseName);
         }
 
         if ($section === 'semaines') {
-            $headers = ['Période', 'Ventes', 'Montant FCFA'];
+            $headers = ['Période', 'Ventes'];
             $rows = $synthese['par_semaine']->map(fn ($l) => [
-                $l['libelle'], $l['total_ventes'], $l['total_montant'],
+                $l['libelle'], $l['total_ventes'],
             ])->all();
 
             return $this->spreadsheetSingleSheet('Par semaine', $headers, $rows, $baseName);
         }
 
-        $headers = ['Mois', 'Ventes', 'Montant FCFA'];
+        $headers = ['Mois', 'Ventes'];
         $rows = $synthese['par_mois']->map(fn ($l) => [
-            $l['libelle'], $l['total_ventes'], $l['total_montant'],
+            $l['libelle'], $l['total_ventes'],
         ])->all();
 
         return $this->spreadsheetSingleSheet('Par mois', $headers, $rows, $baseName);
@@ -430,7 +427,6 @@ class RapportController extends Controller
             ->map(fn ($group) => [
                 'client' => $group->first()->client,
                 'nb_ventes' => $group->count(),
-                'montant' => $group->sum('montant'),
             ])
             ->sortBy(fn (array $x) => Str::lower($x['client']->nom.' '.$x['client']->prenom))
             ->values();
@@ -495,88 +491,86 @@ class RapportController extends Controller
                 'title' => 'Ventes détaillées',
                 'document_title' => 'Rapport campagne — Ventes détaillées',
                 'meta_lines' => $metaExport,
-                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'],
+                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'],
                 'rows' => $ventes->map(fn ($v) => [
                     $v->created_at->format('d/m/Y H:i'),
                     $v->campagne?->nom ?? '-',
                     $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
                     $v->client->telephone ?? '',
                     $v->typeCarte?->code ?? '-',
-                    $v->montant ?? '',
                     $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
                     $v->agence->nom ?? '',
                     $v->statut_activation ?? '',
                 ])->all(),
                 'totals_row' => [
-                    'TOTAUX ('.$ventes->count().' ligne(s))', '', '', '', '', $ventes->sum('montant'), '', '', '',
+                    'TOTAUX ('.$ventes->count().' ligne(s))', '', '', '', '', '', '', '',
                 ],
             ],
             [
                 'title' => 'Clients',
                 'document_title' => 'Rapport campagne — Clients (au moins une vente dans le périmètre)',
                 'meta_lines' => $metaExport,
-                'headers' => ['Client', 'Téléphone', 'Ville', 'Quartier', 'Nb ventes', 'Montant total FCFA'],
+                'headers' => ['Client', 'Téléphone', 'Ville', 'Quartier', 'Nb ventes'],
                 'rows' => $clientsParVente->map(fn (array $x) => [
                     trim($x['client']->prenom.' '.$x['client']->nom),
                     $x['client']->telephone ?? '',
                     $x['client']->ville ?? '',
                     $x['client']->quartier ?? '',
                     $x['nb_ventes'],
-                    $x['montant'],
                 ])->all(),
                 'totals_row' => [
-                    'TOTAUX ('.$clientsParVente->count().' client(s))', '', '', '', $ventes->count(), $ventes->sum('montant'),
+                    'TOTAUX ('.$clientsParVente->count().' client(s))', '', '', '', $ventes->count(),
                 ],
             ],
             [
                 'title' => 'Commerciaux',
                 'document_title' => 'Rapport campagne — Synthèse commerciaux',
                 'meta_lines' => $metaExport,
-                'headers' => ['Rang', 'Commercial', 'Agence', 'Ventes', 'Montant FCFA'],
+                'headers' => ['Rang', 'Commercial', 'Agence', 'Ventes'],
                 'rows' => $synthese['commerciaux']->map(fn ($l) => [
-                    $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'], $l['total_montant'],
+                    $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'],
                 ])->all(),
-                'totals_row' => ['', '', 'TOTAUX', $synthese['commerciaux']->sum('total_ventes'), $synthese['commerciaux']->sum('total_montant')],
+                'totals_row' => ['', '', 'TOTAUX', $synthese['commerciaux']->sum('total_ventes')],
             ],
             [
                 'title' => 'Agences',
                 'document_title' => 'Rapport campagne — Synthèse agences',
                 'meta_lines' => $metaExport,
-                'headers' => ['Agence', 'Ventes', 'Montant FCFA', 'Part % volume', 'Nb commerciaux'],
+                'headers' => ['Agence', 'Ventes', 'Part % volume', 'Nb commerciaux'],
                 'rows' => $synthese['agences']->map(fn ($l) => [
-                    $l['agence_nom'], $l['total_ventes'], $l['total_montant'], $l['pct_volume'], $l['nb_commerciaux'],
+                    $l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux'],
                 ])->all(),
-                'totals_row' => ['TOTAUX', $synthese['agences']->sum('total_ventes'), $synthese['agences']->sum('total_montant'), '', ''],
+                'totals_row' => ['TOTAUX', $synthese['agences']->sum('total_ventes'), '', ''],
             ],
             [
                 'title' => 'Types de carte',
                 'document_title' => 'Rapport campagne — Types de carte',
                 'meta_lines' => $metaExport,
-                'headers' => ['Type carte', 'Ventes', 'Montant FCFA', 'Part % volume'],
+                'headers' => ['Type carte', 'Ventes', 'Part % volume'],
                 'rows' => $synthese['par_type_carte']->map(fn ($l) => [
-                    $l['code'], $l['total_ventes'], $l['total_montant'], $l['pct_volume'],
+                    $l['code'], $l['total_ventes'], $l['pct_volume'],
                 ])->all(),
-                'totals_row' => ['TOTAUX', $synthese['par_type_carte']->sum('total_ventes'), $synthese['par_type_carte']->sum('total_montant'), ''],
+                'totals_row' => ['TOTAUX', $synthese['par_type_carte']->sum('total_ventes'), ''],
             ],
             [
                 'title' => 'Par semaine',
                 'document_title' => 'Rapport campagne — Volume par semaine',
                 'meta_lines' => $metaExport,
-                'headers' => ['Période', 'Ventes', 'Montant FCFA'],
+                'headers' => ['Période', 'Ventes'],
                 'rows' => $synthese['par_semaine']->map(fn ($l) => [
-                    $l['libelle'], $l['total_ventes'], $l['total_montant'],
+                    $l['libelle'], $l['total_ventes'],
                 ])->all(),
-                'totals_row' => ['TOTAUX', $synthese['par_semaine']->sum('total_ventes'), $synthese['par_semaine']->sum('total_montant')],
+                'totals_row' => ['TOTAUX', $synthese['par_semaine']->sum('total_ventes')],
             ],
             [
                 'title' => 'Par mois',
                 'document_title' => 'Rapport campagne — Volume par mois',
                 'meta_lines' => $metaExport,
-                'headers' => ['Mois', 'Ventes', 'Montant FCFA'],
+                'headers' => ['Mois', 'Ventes'],
                 'rows' => $synthese['par_mois']->map(fn ($l) => [
-                    $l['libelle'], $l['total_ventes'], $l['total_montant'],
+                    $l['libelle'], $l['total_ventes'],
                 ])->all(),
-                'totals_row' => ['TOTAUX', $synthese['par_mois']->sum('total_ventes'), $synthese['par_mois']->sum('total_montant')],
+                'totals_row' => ['TOTAUX', $synthese['par_mois']->sum('total_ventes')],
             ],
             [
                 'title' => 'Synthèse téléphonique',
@@ -699,14 +693,13 @@ class RapportController extends Controller
 
         $format = strtolower((string) $request->query('format', 'csv'));
         if ($format === 'xlsx') {
-            $hdr = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'];
+            $hdr = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'];
             $rows = $ventes->map(fn ($v) => [
                 $v->created_at->format('d/m/Y H:i'),
                 $v->campagne?->nom ?? '-',
                 trim($v->client->prenom.' '.$v->client->nom),
                 $v->client->telephone ?? '',
                 $v->typeCarte?->code ?? '-',
-                $v->montant ?? '',
                 $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
                 $v->agence->nom ?? '',
                 $v->statut_activation,
@@ -728,7 +721,7 @@ class RapportController extends Controller
 
         $callback = function () use ($ventes) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'], ';');
+            fputcsv($file, ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'], ';');
             foreach ($ventes as $v) {
                 fputcsv($file, [
                     $v->created_at->format('d/m/Y H:i'),
@@ -736,7 +729,6 @@ class RapportController extends Controller
                     $v->client->prenom.' '.$v->client->nom,
                     $v->client->telephone ?? '',
                     $v->typeCarte?->code ?? '-',
-                    $v->montant ?? '',
                     $v->user->name ?? '',
                     $v->agence->nom ?? '',
                     $v->statut_activation,

@@ -57,10 +57,9 @@ class CampagneDetailService
 
         $stats = [
             'total_ventes' => (clone $queryVentes)->count(),
-            'montant_total' => (clone $queryVentes)->sum('montant'),
-            'par_type' => (clone $queryVentes)->selectRaw('type_carte_id, COUNT(*) as nb, SUM(montant) as mt')
+            'par_type' => (clone $queryVentes)->selectRaw('type_carte_id, COUNT(*) as nb')
                 ->groupBy('type_carte_id')->get()->keyBy('type_carte_id'),
-            'par_agence' => (clone $queryVentes)->selectRaw('agence_id, COUNT(*) as nb, SUM(montant) as mt')
+            'par_agence' => (clone $queryVentes)->selectRaw('agence_id, COUNT(*) as nb')
                 ->groupBy('agence_id')->get(),
         ];
         $agenceIds = $stats['par_agence']->pluck('agence_id')->filter()->unique();
@@ -72,7 +71,7 @@ class CampagneDetailService
         });
 
         $classementRaw = (clone $queryVentes)
-            ->selectRaw('user_id, COUNT(*) as total_ventes, SUM(montant) as montant_total')
+            ->selectRaw('user_id, COUNT(*) as total_ventes')
             ->groupBy('user_id')
             ->orderByDesc('total_ventes')
             ->get();
@@ -87,7 +86,6 @@ class CampagneDetailService
                 'rang' => $i + 1,
                 'user_name' => $name,
                 'total_ventes' => $row->total_ventes,
-                'montant_total' => $row->montant_total,
             ];
         })->values();
 

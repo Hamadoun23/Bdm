@@ -44,34 +44,6 @@
                     <tr><th class="text-muted" style="width: 140px;">Période</th><td>{{ $campagne->date_debut->format('d/m/Y') }} → {{ $campagne->date_fin->format('d/m/Y') }}</td></tr>
                     <tr><th class="text-muted">Agences</th><td>{{ $campagne->toutes_agences ? 'Toutes les agences' : $campagne->agences->pluck('nom')->join(', ') }}</td></tr>
                     <tr><th class="text-muted">Prime du meilleur vendeur</th><td>{{ number_format($campagne->prime_meilleur_vendeur) }} FCFA</td></tr>
-                    <tr>
-                        <th class="text-muted">Remise ventes</th>
-                        <td>
-                            @if($campagne->remise_pourcentage !== null && (float) $campagne->remise_pourcentage > 0)
-                                @php
-                                    $rpRemise = (float) $campagne->remise_pourcentage;
-                                    $rpRemiseTxt = $rpRemise == floor($rpRemise)
-                                        ? number_format($rpRemise, 0, ',', ' ')
-                                        : number_format($rpRemise, 2, ',', ' ');
-                                @endphp
-                                {{ $rpRemiseTxt }}&nbsp;%
-                                @if($campagne->remise_tous_types_cartes)
-                                    <span class="text-muted"> — tous les types de cartes</span>
-                                @else
-                                    <span class="text-muted"> — types :</span>
-                                    <ul class="small mb-0 mt-1">
-                                        @forelse($campagne->typesCartesRemise as $tc)
-                                        <li>{{ $tc->code }} ({{ number_format($tc->prix) }} F)</li>
-                                        @empty
-                                        <li class="text-warning">Aucun type sélectionné (corrigez la campagne).</li>
-                                        @endforelse
-                                    </ul>
-                                @endif
-                            @else
-                                Aucune
-                            @endif
-                        </td>
-                    </tr>
                     <tr><th class="text-muted">Aide hebdo.</th><td>
                         @if($campagne->aide_hebdo_active)
                             {{ number_format($campagne->aide_hebdo_montant) }} F / semaine (carburant {{ number_format($campagne->aide_hebdo_carburant) }} F + crédit {{ number_format($campagne->aide_hebdo_credit_tel) }} F).
@@ -292,7 +264,7 @@
         })();
         </script>
         @endpush
-        <p class="small text-muted mb-0"><strong>{{ $periodeLib }}</strong> — Les montants se limitent aux ventes enregistrées sur la fenêtre affichée (recoupée avec les dates de campagne).</p>
+        <p class="small text-muted mb-0"><strong>{{ $periodeLib }}</strong> — Les ventes prises en compte sont celles enregistrées sur la fenêtre affichée (recoupée avec les dates de campagne).</p>
     </div>
 </div>
 
@@ -338,24 +310,16 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card bg-success text-white">
-                    <div class="card-body py-3">
-                        <h6 class="mb-0">Montant total</h6>
-                        <h3 class="mb-0">{{ number_format($stats['montant_total']) }} F</h3>
-                    </div>
-                </div>
-            </div>
         </div>
         <div class="row mb-3">
             <div class="col-md-6">
                 <h6>Ventes par type de carte</h6>
                 <table class="table table-sm table-striped">
-                    <thead class="table-light"><tr><th>Type</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
+                    <thead class="table-light"><tr><th>Type</th><th class="text-end">Nombre</th></tr></thead>
                     <tbody>
                         @foreach($typesCartes as $tc)
                         @php $p = $stats['par_type'][$tc->id] ?? null; @endphp
-                        <tr><td>{{ $tc->code }}</td><td class="text-end">{{ $p?->nb ?? 0 }}</td><td class="text-end">{{ $p ? number_format($p->mt) : 0 }} F</td></tr>
+                        <tr><td>{{ $tc->code }}</td><td class="text-end">{{ $p?->nb ?? 0 }}</td></tr>
                         @endforeach
                     </tbody>
                 </table>
@@ -363,13 +327,13 @@
             <div class="col-md-6">
                 <h6>Ventes par agence</h6>
                 <table class="table table-sm table-striped">
-                    <thead class="table-light"><tr><th>Agence</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
+                    <thead class="table-light"><tr><th>Agence</th><th class="text-end">Nombre</th></tr></thead>
                     <tbody>
                         @foreach($stats['par_agence'] as $pa)
-                        <tr><td>{{ $pa->agence_nom }}</td><td class="text-end">{{ $pa->nb }}</td><td class="text-end">{{ number_format($pa->mt) }} F</td></tr>
+                        <tr><td>{{ $pa->agence_nom }}</td><td class="text-end">{{ $pa->nb }}</td></tr>
                         @endforeach
                         @if($stats['par_agence']->isEmpty())
-                        <tr><td colspan="3" class="text-muted text-center">Aucune vente</td></tr>
+                        <tr><td colspan="2" class="text-muted text-center">Aucune vente</td></tr>
                         @endif
                     </tbody>
                 </table>
@@ -378,18 +342,17 @@
         <h6>Classement des commerciaux</h6>
         <div class="table-responsive">
             <table class="table table-hover table-striped mb-0">
-                <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
+                <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th class="text-end">Ventes</th></tr></thead>
                 <tbody>
                     @foreach($classement as $c)
                     <tr>
                         <td>@if($c['rang']==1)<span class="badge bg-warning text-dark">Top 1</span>@elseif($c['rang']==2)<span class="badge bg-secondary">Top 2</span>@else{{ $c['rang'] }}@endif</td>
                         <td>{{ $c['user_name'] }}</td>
                         <td class="text-end">{{ $c['total_ventes'] }}</td>
-                        <td class="text-end">{{ number_format($c['montant_total']) }} F</td>
                     </tr>
                     @endforeach
                     @if($classement->isEmpty())
-                    <tr><td colspan="4" class="text-muted text-center">Aucune vente sur la période</td></tr>
+                    <tr><td colspan="3" class="text-muted text-center">Aucune vente sur la période</td></tr>
                     @endif
                 </tbody>
             </table>

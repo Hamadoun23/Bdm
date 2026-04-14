@@ -23,7 +23,6 @@
                         <th>Date</th>
                         <th>Client</th>
                         <th>Type carte</th>
-                        <th>Montant</th>
                         @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
                         <th>Commercial</th>
                         <th>Agence</th>
@@ -39,7 +38,6 @@
                         <td>{{ $v->created_at->format('d/m/Y H:i') }}</td>
                         <td>{{ $v->client->prenom }} {{ $v->client->nom }}</td>
                         <td><span class="badge bg-info">{{ $v->typeCarte?->code ?? '?' }}</span></td>
-                        <td>{{ $v->montant ? number_format($v->montant) . ' F' : '-' }}</td>
                         @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
                         <td>{{ $v->user->name ?? '-' }}</td>
                         <td>{{ $v->agence->nom ?? '-' }}</td>
@@ -66,7 +64,7 @@
                         @endif
                     </tr>
                     @empty
-                    <tr><td colspan="{{ auth()->user()?->isCommercial() ? 5 : 6 }}" class="text-center py-4">Aucune vente.</td></tr>
+                    <tr><td colspan="{{ auth()->user()?->isCommercial() ? 4 : 5 }}" class="text-center py-4">Aucune vente.</td></tr>
                     @endforelse
                 </tbody>
             </table>

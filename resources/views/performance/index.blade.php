@@ -45,14 +45,6 @@
                     <span class="text-muted">(nouvelle activité vs 0 sur la période précédente)</span>
                 @endif
             </li>
-            <li><strong>Chiffre d’affaires (somme des montants) :</strong> {{ number_format($stats['total_montant'] ?? 0, 0, ',', ' ') }} F
-                @if(isset($stats['panier_moyen']) && $stats['panier_moyen'] !== null)
-                    — <span class="text-muted">panier moyen {{ number_format($stats['panier_moyen'], 1, ',', ' ') }} F / vente</span>
-                @endif
-                @if($compareEnabled && $compareDelta && $compareDelta['montant_pct'] !== null)
-                    <span class="text-muted">({{ $compareDelta['montant_pct'] >= 0 ? '+' : '' }}{{ number_format($compareDelta['montant_pct'], 1, ',', ' ') }} % vs période précédente)</span>
-                @endif
-            </li>
             @else
             <li><strong>Mes ventes :</strong> {{ number_format($stats['mes_ventes'] ?? 0) }}</li>
             @if(isset($stats['mon_rang']) && $stats['mon_rang'])
@@ -161,31 +153,6 @@
                 @if($compareEnabled && $statsPrev)
                 <p class="small mb-0 opacity-75">Avant : {{ number_format($statsPrev['total_ventes']) }}</p>
                 @endif
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card bg-dark text-white h-100">
-            <div class="card-body">
-                <h6 class="small">CA (somme montants)</h6>
-                <h3 class="mb-0">{{ number_format($stats['total_montant'] ?? 0, 0, ',', ' ') }} F</h3>
-                @if($compareEnabled && $statsPrev)
-                <p class="small mb-0 opacity-75">Avant : {{ number_format($statsPrev['total_montant'], 0, ',', ' ') }} F</p>
-                @endif
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-3">
-        <div class="card h-100">
-            <div class="card-body">
-                <h6 class="small text-muted">Panier moyen</h6>
-                <h3 class="mb-0">
-                    @if(isset($stats['panier_moyen']) && $stats['panier_moyen'] !== null)
-                        {{ number_format($stats['panier_moyen'], 1, ',', ' ') }} F
-                    @else
-                        —
-                    @endif
-                </h3>
             </div>
         </div>
     </div>
@@ -367,7 +334,6 @@
                     <th>Rang</th>
                     <th>Agence</th>
                     <th class="text-end">Nombre de ventes</th>
-                    <th class="text-end">Montant (FCFA)</th>
                     <th class="text-end">Part % volume</th>
                 </tr>
             </thead>
@@ -381,11 +347,10 @@
                     </td>
                     <td>{{ $a['agence_nom'] }}</td>
                     <td class="text-end">{{ number_format($a['total_ventes']) }}</td>
-                    <td class="text-end">{{ number_format($a['total_montant'], 0, ',', ' ') }}</td>
                     <td class="text-end">{{ number_format($a['pct_volume'], 1, ',', ' ') }} %</td>
                 </tr>
                 @empty
-                <tr><td colspan="5" class="text-center py-4 text-muted">Aucune vente sur la période et les filtres choisis.</td></tr>
+                <tr><td colspan="4" class="text-center py-4 text-muted">Aucune vente sur la période et les filtres choisis.</td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -401,7 +366,6 @@
                     <th>Rang</th>
                     <th>Type de carte</th>
                     <th class="text-end">Nombre de ventes</th>
-                    <th class="text-end">Montant (FCFA)</th>
                     <th class="text-end">Part % volume</th>
                 </tr>
             </thead>
@@ -415,11 +379,10 @@
                     </td>
                     <td><code class="small">{{ $t['code'] }}</code></td>
                     <td class="text-end">{{ number_format($t['total_ventes']) }}</td>
-                    <td class="text-end">{{ number_format($t['total_montant'], 0, ',', ' ') }}</td>
                     <td class="text-end">{{ number_format($t['pct_volume'], 1, ',', ' ') }} %</td>
                 </tr>
                 @empty
-                <tr><td colspan="5" class="text-center py-4 text-muted">Aucune vente sur la période et les filtres choisis.</td></tr>
+                <tr><td colspan="4" class="text-center py-4 text-muted">Aucune vente sur la période et les filtres choisis.</td></tr>
                 @endforelse
             </tbody>
         </table>

@@ -80,7 +80,7 @@
         <div class="row g-2 mb-4">
             @foreach($typesCampagne as $tc)
             <div class="col-6 col-md-4 col-lg-3">
-                <label class="form-label small">{{ $tc->code }} <span class="text-muted">({{ number_format($tc->prix) }} F)</span> *</label>
+                <label class="form-label small">{{ $tc->code }} *</label>
                 <input type="number" name="propose[{{ $tc->id }}]" min="0" step="1" class="form-control form-control-sm @error('propose.'.$tc->id) is-invalid @enderror" value="{{ old('propose.'.$tc->id, $rapport?->nombreProposePourType((int) $tc->id) ?? 0) }}" required @if($rapportVerrouille) readonly @endif>
                 @error('propose.'.$tc->id)<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
@@ -166,7 +166,7 @@
             inp.classList.toggle('is-invalid', over);
         });
         if (over) {
-            njAnalyseFeedback.textContent = 'Total section 5 : ' + sum + ' — maximum autorisé (non joignables) : ' + cap + '. Ajustez les montants.';
+            njAnalyseFeedback.textContent = 'Total section 5 : ' + sum + ' — maximum autorisé (non joignables) : ' + cap + '. Ajustez les quantités.';
             njAnalyseFeedback.classList.remove('d-none');
         } else {
             njAnalyseFeedback.classList.add('d-none');

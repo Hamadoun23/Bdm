@@ -43,9 +43,9 @@ class ResetBusinessDataSeeder extends Seeder
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
 
         foreach ([
-            ['code' => 'ADAN', 'prix' => 12000, 'actif' => true],
-            ['code' => 'LAFIA', 'prix' => 18000, 'actif' => true],
-            ['code' => 'ELITE', 'prix' => 35000, 'actif' => true],
+            ['code' => 'ADAN', 'actif' => true],
+            ['code' => 'LAFIA', 'actif' => true],
+            ['code' => 'ELITE', 'actif' => true],
         ] as $row) {
             TypeCarte::create($row);
         }
@@ -114,7 +114,6 @@ class ResetBusinessDataSeeder extends Seeder
                 'user_id' => $commercial->id,
                 'agence_id' => $agenceId,
                 'type_carte_id' => $typeCarteId,
-                'montant' => TypeCarte::find($typeCarteId)?->prix ?? rand(5000, 50000),
                 'statut_activation' => $statut,
                 'created_at' => now()->subDays(rand(0, 45)),
             ]);

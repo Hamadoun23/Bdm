@@ -51,7 +51,7 @@
                             @foreach($typesCartes as $tc)
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="type_carte_id" id="tc{{ $tc->id }}" value="{{ $tc->id }}" {{ $loop->first ? 'required' : '' }}>
-                                <label class="form-check-label" for="tc{{ $tc->id }}">{{ $tc->code }} — {{ number_format($tc->prix) }} F</label>
+                                <label class="form-check-label" for="tc{{ $tc->id }}">{{ $tc->code }}</label>
                             </div>
                             @endforeach
                         </div>

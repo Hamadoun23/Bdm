@@ -13,10 +13,6 @@
                 <input type="text" name="code" class="form-control" value="{{ old('code') }}" required placeholder="Ex: VIP, ADAN, GDA">
                 <small class="text-muted">Identifiant unique (lettres, chiffres ; sera normalisé en majuscules)</small>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Prix conseillé (FCFA) *</label>
-                <input type="number" name="prix" class="form-control" value="{{ old('prix', 0) }}" min="0" required>
-            </div>
             <input type="hidden" name="actif" value="0">
             <div class="form-check mb-3">
                 <input type="checkbox" name="actif" value="1" class="form-check-input" id="actif" {{ old('actif', true) ? 'checked' : '' }}>

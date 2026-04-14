@@ -10,10 +10,6 @@
         <form method="POST" action="{{ route('admin.types-cartes.update', $typeCarte) }}">
             @csrf
             @method('PUT')
-            <div class="mb-3">
-                <label class="form-label">Prix conseillé (FCFA) *</label>
-                <input type="number" name="prix" class="form-control" value="{{ old('prix', $typeCarte->prix) }}" min="0" required>
-            </div>
             <input type="hidden" name="actif" value="0">
             <div class="form-check mb-3">
                 <input type="checkbox" name="actif" value="1" class="form-check-input" id="actif" {{ old('actif', $typeCarte->actif) ? 'checked' : '' }}>

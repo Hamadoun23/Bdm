@@ -73,7 +73,6 @@ class PerformanceController extends Controller
             $statsPrev = $this->aggregatePerformanceStats($basePrev);
             $compareDelta = [
                 'ventes_pct' => $this->pctVariation($stats['total_ventes'], $statsPrev['total_ventes']),
-                'montant_pct' => $this->pctVariation($stats['total_montant'], $statsPrev['total_montant']),
                 'libelle' => 'Période de comparaison : '.$prevDebut->format('d/m/Y').' → '.$prevFin->format('d/m/Y').' ('.$nbJoursCalendaires.' j. inclus)',
             ];
         }
@@ -167,7 +166,7 @@ class PerformanceController extends Controller
             ->get();
 
         $parType = (clone $ventesBase)
-            ->selectRaw('type_carte_id, COUNT(*) as total, COALESCE(SUM(montant), 0) as montant_total')
+            ->selectRaw('type_carte_id, COUNT(*) as total')
             ->groupBy('type_carte_id')
             ->get()
             ->keyBy('type_carte_id');
@@ -233,8 +232,6 @@ class PerformanceController extends Controller
             ['Date fin (filtre)', $ctx['dateFin']->format('d/m/Y')],
             ['Campagne (filtre ventes)', $campagneRef?->nom ?? '—'],
             ['Total ventes', $stats['total_ventes']],
-            ['Montant total (FCFA)', $stats['total_montant']],
-            ['Panier moyen (FCFA)', $stats['panier_moyen'] ?? '—'],
         ];
 
         $totalVentesExport = (int) ($stats['total_ventes'] ?? 0);
@@ -244,17 +241,17 @@ class PerformanceController extends Controller
             return [$c['rang'], $c['user_name'], $c['total_ventes'], $pct];
         })->all();
 
-        $semRows = $parSemaine->map(fn ($l) => [$l['libelle'], $l['total_ventes'], $l['total_montant']])->all();
+        $semRows = $parSemaine->map(fn ($l) => [$l['libelle'], $l['total_ventes']])->all();
 
         $classementAgences = $this->classementAgencesPourPerformances($baseVentes);
         $classementTypesCartes = $this->classementTypesCartesPourPerformances($baseVentes);
 
         $agencesRows = $classementAgences->map(fn (array $r) => [
-            $r['rang'], $r['agence_nom'], $r['total_ventes'], $r['total_montant'], $r['pct_volume'],
+            $r['rang'], $r['agence_nom'], $r['total_ventes'], $r['pct_volume'],
         ])->all();
 
         $typesRows = $classementTypesCartes->map(fn (array $r) => [
-            $r['rang'], $r['code'], $r['total_ventes'], $r['total_montant'], $r['pct_volume'],
+            $r['rang'], $r['code'], $r['total_ventes'], $r['pct_volume'],
         ])->all();
 
         $ventesDetail = (clone $baseVentes)
@@ -268,7 +265,6 @@ class PerformanceController extends Controller
             $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
             $v->client?->telephone ?? '',
             $v->typeCarte?->code ?? '—',
-            $v->montant ?? '',
             $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
             $v->agence->nom ?? '—',
             $v->statut_activation ?? '',
@@ -287,22 +283,22 @@ class PerformanceController extends Controller
             ],
             [
                 'title' => 'Classement agences',
-                'headers' => ['Rang', 'Agence', 'Ventes', 'Montant FCFA', 'Part % volume'],
+                'headers' => ['Rang', 'Agence', 'Ventes', 'Part % volume'],
                 'rows' => $agencesRows,
             ],
             [
                 'title' => 'Types cartes',
-                'headers' => ['Rang', 'Type carte', 'Ventes', 'Montant FCFA', 'Part % volume'],
+                'headers' => ['Rang', 'Type carte', 'Ventes', 'Part % volume'],
                 'rows' => $typesRows,
             ],
             [
                 'title' => 'Par semaine',
-                'headers' => ['Période', 'Ventes', 'Montant FCFA'],
+                'headers' => ['Période', 'Ventes'],
                 'rows' => $semRows,
             ],
             [
                 'title' => 'Ventes détail',
-                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Montant', 'Commercial', 'Agence', 'Statut'],
+                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'],
                 'rows' => $ventesDetailRows,
             ],
         ];
@@ -349,13 +345,12 @@ class PerformanceController extends Controller
             ['Nombre de ventes exportées', $ventes->count()],
         ];
 
-        $headers = ['Date', 'Campagne', 'Client', 'Type carte', 'Montant FCFA', 'Agence', 'Statut activation'];
+        $headers = ['Date', 'Campagne', 'Client', 'Type carte', 'Agence', 'Statut activation'];
         $rows = $ventes->map(fn (Vente $v) => [
             $v->created_at->format('d/m/Y H:i'),
             $v->campagne?->nom ?? '—',
             $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
             $v->typeCarte?->code ?? '—',
-            $v->montant ?? '',
             $v->agence->nom ?? '—',
             $v->statut_activation ?? '',
         ])->all();
@@ -411,18 +406,14 @@ class PerformanceController extends Controller
     }
 
     /**
-     * @return array{total_ventes: int, total_montant: int, panier_moyen: float|null, par_type: Collection}
+     * @return array{total_ventes: int, par_type: Collection}
      */
     private function aggregatePerformanceStats(Builder $statsQuery): array
     {
         $totalVentes = (clone $statsQuery)->count();
-        $totalMontant = (int) (clone $statsQuery)->sum('montant');
-        $panierMoyen = $totalVentes > 0 ? round($totalMontant / $totalVentes, 1) : null;
 
         return [
             'total_ventes' => $totalVentes,
-            'total_montant' => $totalMontant,
-            'panier_moyen' => $panierMoyen,
             'par_type' => (clone $statsQuery)
                 ->selectRaw('type_carte_id, COUNT(*) as total')
                 ->groupBy('type_carte_id')
@@ -552,12 +543,12 @@ class PerformanceController extends Controller
     }
 
     /**
-     * @return Collection<int, array{rang: int, agence_nom: string, total_ventes: int, total_montant: int, pct_volume: float}>
+     * @return Collection<int, array{rang: int, agence_nom: string, total_ventes: int, pct_volume: float}>
      */
     private function classementAgencesPourPerformances(Builder $baseVentes): Collection
     {
         $rows = (clone $baseVentes)
-            ->selectRaw('agence_id, COUNT(*) as total_ventes, COALESCE(SUM(montant), 0) as total_montant')
+            ->selectRaw('agence_id, COUNT(*) as total_ventes')
             ->groupBy('agence_id')
             ->orderByDesc('total_ventes')
             ->orderBy('agence_id')
@@ -579,10 +570,9 @@ class PerformanceController extends Controller
                 ? 'Sans agence'
                 : (string) ($noms[(int) $id] ?? ('Agence #'.$id));
             $tv = (int) $r->total_ventes;
-            $tm = (int) $r->total_montant;
             $pct = $totalVentes > 0 ? round($tv / $totalVentes * 100, 1) : 0.0;
 
-            return ['agence_nom' => $nom, 'total_ventes' => $tv, 'total_montant' => $tm, 'pct_volume' => $pct];
+            return ['agence_nom' => $nom, 'total_ventes' => $tv, 'pct_volume' => $pct];
         })->values();
 
         $lignes = collect();
@@ -598,12 +588,12 @@ class PerformanceController extends Controller
     }
 
     /**
-     * @return Collection<int, array{rang: int, code: string, total_ventes: int, total_montant: int, pct_volume: float}>
+     * @return Collection<int, array{rang: int, code: string, total_ventes: int, pct_volume: float}>
      */
     private function classementTypesCartesPourPerformances(Builder $baseVentes): Collection
     {
         $rows = (clone $baseVentes)
-            ->selectRaw('type_carte_id, COUNT(*) as total_ventes, COALESCE(SUM(montant), 0) as total_montant')
+            ->selectRaw('type_carte_id, COUNT(*) as total_ventes')
             ->groupBy('type_carte_id')
             ->orderByDesc('total_ventes')
             ->orderBy('type_carte_id')
@@ -625,10 +615,9 @@ class PerformanceController extends Controller
                 ? '—'
                 : (string) ($codes[(int) $id] ?? ('#'.$id));
             $tv = (int) $r->total_ventes;
-            $tm = (int) $r->total_montant;
             $pct = $totalVentes > 0 ? round($tv / $totalVentes * 100, 1) : 0.0;
 
-            return ['code' => $code, 'total_ventes' => $tv, 'total_montant' => $tm, 'pct_volume' => $pct];
+            return ['code' => $code, 'total_ventes' => $tv, 'pct_volume' => $pct];
         })->values();
 
         $lignes = collect();

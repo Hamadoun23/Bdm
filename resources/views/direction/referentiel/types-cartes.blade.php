@@ -14,17 +14,15 @@
             <thead class="table-light">
                 <tr>
                     <th>Code</th>
-                    <th class="text-end">Prix catalogue</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($typesCartes as $tc)
                 <tr>
                     <td><strong>{{ $tc->code }}</strong></td>
-                    <td class="text-end">{{ number_format($tc->prix) }} FCFA</td>
                 </tr>
                 @empty
-                <tr><td colspan="2" class="text-muted">Aucun type enregistré.</td></tr>
+                <tr><td class="text-muted">Aucun type enregistré.</td></tr>
                 @endforelse
             </tbody>
         </table>

@@ -95,14 +95,6 @@
     <div class="col-6 col-md-4 col-lg-2">
         <div class="card h-100">
             <div class="card-body py-3">
-                <h6 class="small text-muted mb-1">Montant total</h6>
-                <h4 class="mb-0">{{ number_format($r['total_montant'], 0, ',', ' ') }} F</h4>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="card h-100">
-            <div class="card-body py-3">
                 <h6 class="small text-muted mb-1">Commerciaux (périmètre)</h6>
                 <h4 class="mb-0">{{ $r['nb_commerciaux_perimetre'] }}</h4>
             </div>
@@ -254,7 +246,7 @@
     <div class="tab-pane fade show active" id="tab-commerciaux">
         <div class="table-responsive card shadow-sm">
             <table class="table table-hover table-sm mb-0">
-                <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th>Agence</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
+                <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th>Agence</th><th class="text-end">Ventes</th></tr></thead>
                 <tbody>
                     @foreach($synthese['commerciaux'] as $l)
                     <tr @class(['table-warning' => $l['total_ventes'] === 0])>
@@ -262,7 +254,6 @@
                         <td>{{ $l['user_name'] }}</td>
                         <td>{{ $l['agence_nom'] ?? '—' }}</td>
                         <td class="text-end">{{ number_format($l['total_ventes']) }}</td>
-                        <td class="text-end">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td>
                     </tr>
                     @endforeach
                 </tbody>
@@ -272,18 +263,17 @@
     <div class="tab-pane fade" id="tab-agences">
         <div class="table-responsive card shadow-sm">
             <table class="table table-hover table-sm mb-0">
-                <thead class="table-light"><tr><th>Agence</th><th class="text-end">Ventes</th><th class="text-end">Montant</th><th class="text-end">Part %</th><th class="text-end">Nb commerciaux</th></tr></thead>
+                <thead class="table-light"><tr><th>Agence</th><th class="text-end">Ventes</th><th class="text-end">Part %</th><th class="text-end">Nb commerciaux</th></tr></thead>
                 <tbody>
                     @forelse($synthese['agences'] as $l)
                     <tr>
                         <td>{{ $l['agence_nom'] }}</td>
                         <td class="text-end">{{ number_format($l['total_ventes']) }}</td>
-                        <td class="text-end">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td>
                         <td class="text-end">{{ number_format($l['pct_volume'], 2, ',', ' ') }} %</td>
                         <td class="text-end">{{ $l['nb_commerciaux'] }}</td>
                     </tr>
                     @empty
-                    <tr><td colspan="5" class="text-center text-muted py-4">Aucune vente sur cette période.</td></tr>
+                    <tr><td colspan="4" class="text-center text-muted py-4">Aucune vente sur cette période.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -292,17 +282,16 @@
     <div class="tab-pane fade" id="tab-types">
         <div class="table-responsive card shadow-sm">
             <table class="table table-hover table-sm mb-0">
-                <thead class="table-light"><tr><th>Type</th><th class="text-end">Ventes</th><th class="text-end">Montant</th><th class="text-end">Part %</th></tr></thead>
+                <thead class="table-light"><tr><th>Type</th><th class="text-end">Ventes</th><th class="text-end">Part %</th></tr></thead>
                 <tbody>
                     @forelse($synthese['par_type_carte'] as $l)
                     <tr>
                         <td><span class="badge bg-secondary">{{ $l['code'] }}</span></td>
                         <td class="text-end">{{ number_format($l['total_ventes']) }}</td>
-                        <td class="text-end">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td>
                         <td class="text-end">{{ number_format($l['pct_volume'], 2, ',', ' ') }} %</td>
                     </tr>
                     @empty
-                    <tr><td colspan="4" class="text-center text-muted py-4">Aucune vente.</td></tr>
+                    <tr><td colspan="3" class="text-center text-muted py-4">Aucune vente.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -312,24 +301,24 @@
         <div class="row g-3 align-items-stretch">
             <div class="col-12 col-lg-6">
                 <div class="table-responsive card shadow-sm h-100">
-                    <table class="table table-hover table-sm mb-0 w-100"><thead class="table-light"><tr><th>Période</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
+                    <table class="table table-hover table-sm mb-0 w-100"><thead class="table-light"><tr><th>Période</th><th class="text-end">Ventes</th></tr></thead>
                     <tbody>
                         @forelse($synthese['par_semaine'] as $l)
-                        <tr><td class="text-wrap text-break">{{ $l['libelle'] }}</td><td class="text-end text-nowrap">{{ $l['total_ventes'] }}</td><td class="text-end text-nowrap">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td></tr>
+                        <tr><td class="text-wrap text-break">{{ $l['libelle'] }}</td><td class="text-end text-nowrap">{{ $l['total_ventes'] }}</td></tr>
                         @empty
-                        <tr><td colspan="3" class="text-muted">—</td></tr>
+                        <tr><td colspan="2" class="text-muted">—</td></tr>
                         @endforelse
                     </tbody></table>
                 </div>
             </div>
             <div class="col-12 col-lg-6">
                 <div class="table-responsive card shadow-sm h-100">
-                    <table class="table table-hover table-sm mb-0 w-100"><thead class="table-light"><tr><th>Mois</th><th class="text-end">Ventes</th><th class="text-end">Montant</th></tr></thead>
+                    <table class="table table-hover table-sm mb-0 w-100"><thead class="table-light"><tr><th>Mois</th><th class="text-end">Ventes</th></tr></thead>
                     <tbody>
                         @forelse($synthese['par_mois'] as $l)
-                        <tr><td class="text-wrap">{{ $l['libelle'] }}</td><td class="text-end text-nowrap">{{ $l['total_ventes'] }}</td><td class="text-end text-nowrap">{{ number_format($l['total_montant'], 0, ',', ' ') }}</td></tr>
+                        <tr><td class="text-wrap">{{ $l['libelle'] }}</td><td class="text-end text-nowrap">{{ $l['total_ventes'] }}</td></tr>
                         @empty
-                        <tr><td colspan="3" class="text-muted">—</td></tr>
+                        <tr><td colspan="2" class="text-muted">—</td></tr>
                         @endforelse
                     </tbody></table>
                 </div>

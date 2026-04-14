@@ -14,7 +14,7 @@ class Vente extends Model
 
     protected $fillable = [
         'client_id', 'user_id', 'agence_id', 'campagne_id',
-        'type_carte_id', 'montant', 'statut_activation',
+        'type_carte_id', 'statut_activation',
     ];
 
     public function campagne(): BelongsTo

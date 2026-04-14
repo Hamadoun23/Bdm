@@ -53,8 +53,6 @@
                 $aideOn = filter_var(old('aide_hebdo_active', $campagne->aide_hebdo_active), FILTER_VALIDATE_BOOLEAN);
                 $aideTous = filter_var(old('aide_hebdo_tous_commerciaux', $campagne->aide_hebdo_tous_commerciaux), FILTER_VALIDATE_BOOLEAN);
                 $benefIds = old('aide_beneficiaires', $campagne->signatairesContrat->pluck('id')->toArray());
-                $remiseTousTypes = filter_var(old('remise_tous_types_cartes', $campagne->remise_tous_types_cartes ?? true), FILTER_VALIDATE_BOOLEAN);
-                $remiseTypeIds = old('remise_types_cartes', $campagne->typesCartesRemise->pluck('id')->toArray());
             @endphp
 
             <hr class="my-4">
@@ -116,33 +114,6 @@
             @if($campagne->contrat_publie_at)
                 <p class="small text-muted mb-0">Dernière publication : {{ $campagne->contrat_publie_at->format('d/m/Y H:i') }}</p>
             @endif
-
-            <hr class="my-4">
-            <h6 class="text-primary">Remise sur les ventes</h6>
-            <p class="text-muted small">Pendant la campagne active, le prix catalogue peut être réduit selon le pourcentage. Choisissez si la remise s’applique à tous les types de cartes ou seulement à certains.</p>
-            <div class="mb-3">
-                <label class="form-label">Remise (%)</label>
-                <input type="number" name="remise_pourcentage" class="form-control" value="{{ old('remise_pourcentage', $campagne->remise_pourcentage) }}" min="0" max="100" step="0.01" placeholder="0 = pas de remise">
-            </div>
-            <input type="hidden" name="remise_tous_types_cartes" value="0">
-            <div class="form-check mb-2">
-                <input type="checkbox" name="remise_tous_types_cartes" value="1" class="form-check-input" id="remise_tous_types" {{ $remiseTousTypes ? 'checked' : '' }} onchange="toggleRemiseTypes(this)">
-                <label class="form-check-label" for="remise_tous_types">Appliquer la remise à <strong>tous</strong> les types de cartes</label>
-            </div>
-            <div id="wrap-remise-types" style="display: {{ $remiseTousTypes ? 'none' : 'block' }}">
-                <label class="form-label">Types de cartes concernés par la remise</label>
-                <div class="border rounded p-2" style="max-height: 220px; overflow-y: auto;">
-                    @forelse($typesCartes as $tc)
-                    <div class="form-check">
-                        <input type="checkbox" name="remise_types_cartes[]" value="{{ $tc->id }}" class="form-check-input" id="remtc{{ $tc->id }}" {{ in_array((string) $tc->id, array_map('strval', $remiseTypeIds)) ? 'checked' : '' }}>
-                        <label class="form-check-label" for="remtc{{ $tc->id }}">{{ $tc->code }} — {{ number_format($tc->prix) }} F</label>
-                    </div>
-                    @empty
-                    <p class="text-muted small mb-0">Aucun type de carte.</p>
-                    @endforelse
-                </div>
-                @error('remise_types_cartes')<small class="text-danger d-block">{{ $message }}</small>@enderror
-            </div>
 
             <hr class="my-4">
             <h6 class="text-primary">Coût / aide hebdomadaire commerciaux</h6>
@@ -235,10 +206,6 @@ function toggleAideChamps(el) {
 function toggleBeneficiaires(el) {
     document.getElementById('wrap-beneficiaires').style.display = el.checked ? 'none' : 'block';
     if (el.checked) document.querySelectorAll('#wrap-beneficiaires input[type=checkbox]').forEach(c => c.checked = false);
-}
-function toggleRemiseTypes(el) {
-    document.getElementById('wrap-remise-types').style.display = el.checked ? 'none' : 'block';
-    if (el.checked) document.querySelectorAll('#wrap-remise-types input[type=checkbox]').forEach(c => c.checked = false);
 }
 </script>
 @endsection

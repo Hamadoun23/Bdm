@@ -75,9 +75,9 @@ class FreshMinimalSeeder extends Seeder
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
 
         foreach ([
-            ['code' => 'ADAN', 'prix' => 12000, 'actif' => true],
-            ['code' => 'LAFIA', 'prix' => 18000, 'actif' => true],
-            ['code' => 'ELITE', 'prix' => 35000, 'actif' => true],
+            ['code' => 'ADAN', 'actif' => true],
+            ['code' => 'LAFIA', 'actif' => true],
+            ['code' => 'ELITE', 'actif' => true],
         ] as $row) {
             TypeCarte::create($row);
         }

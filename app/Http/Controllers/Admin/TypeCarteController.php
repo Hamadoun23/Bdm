@@ -28,7 +28,6 @@ class TypeCarteController extends Controller
     {
         $request->validate([
             'code' => 'required|string|max:50',
-            'prix' => 'required|integer|min:0',
             'actif' => 'boolean',
         ]);
 
@@ -42,7 +41,6 @@ class TypeCarteController extends Controller
 
         TypeCarte::create([
             'code' => $code,
-            'prix' => (int) $request->prix,
             'actif' => $request->boolean('actif'),
         ]);
 
@@ -57,12 +55,10 @@ class TypeCarteController extends Controller
     public function update(Request $request, TypeCarte $types_carte): RedirectResponse
     {
         $request->validate([
-            'prix' => 'required|integer|min:0',
             'actif' => 'boolean',
         ]);
 
         $types_carte->update([
-            'prix' => (int) $request->prix,
             'actif' => $request->boolean('actif', true),
         ]);
 

@@ -18,18 +18,16 @@
             <thead class="table-light">
                 <tr>
                     <th>Code</th>
-                    <th class="text-end">Prix (FCFA)</th>
                     <th>Actif</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($types as $t)
-                <tr>
+                               <tr>
                     <td><code>{{ $t->code }}</code></td>
-                    <td class="text-end">{{ number_format($t->prix) }}</td>
                     <td>@if($t->actif)<span class="badge bg-success">Oui</span>@else<span class="badge bg-secondary">Non</span>@endif</td>
-                    <td>
+                    <td class="text-nowrap">
                         <a href="{{ route('admin.types-cartes.edit', $t) }}" class="btn btn-sm btn-outline-primary">Modifier</a>
                         <form action="{{ route('admin.types-cartes.destroy', $t) }}" method="POST" class="d-inline" onsubmit="return confirm('Supprimer ce type ?')">
                             @csrf

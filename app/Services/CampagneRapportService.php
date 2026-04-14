@@ -24,17 +24,16 @@ class CampagneRapportService
      *     date_fin: Carbon,
      *     resume: array{
      *         total_ventes: int,
-     *         total_montant: int,
      *         nb_commerciaux_perimetre: int,
      *         nb_avec_ventes: int,
      *         nb_zero_vente: int,
      *         nb_agences_avec_ventes: int
      *     },
-     *     commerciaux: Collection<int, array{user_id: int, user_name: string, agence_id: int|null, agence_nom: string|null, total_ventes: int, total_montant: int, rang: int}>,
-     *     agences: Collection<int, array{agence_id: int|null, agence_nom: string, total_ventes: int, total_montant: int, pct_volume: float, nb_commerciaux: int}>,
-     *     par_type_carte: Collection<int, array{type_carte_id: int|null, code: string, total_ventes: int, total_montant: int, pct_volume: float}>,
-     *     par_semaine: Collection<int, array{cle: string, libelle: string, total_ventes: int, total_montant: int}>,
-     *     par_mois: Collection<int, array{cle: string, libelle: string, total_ventes: int, total_montant: int}>
+     *     commerciaux: Collection<int, array{user_id: int, user_name: string, agence_id: int|null, agence_nom: string|null, total_ventes: int, rang: int}>,
+     *     agences: Collection<int, array{agence_id: int|null, agence_nom: string, total_ventes: int, pct_volume: float, nb_commerciaux: int}>,
+     *     par_type_carte: Collection<int, array{type_carte_id: int|null, code: string, total_ventes: int, pct_volume: float}>,
+     *     par_semaine: Collection<int, array{cle: string, libelle: string, total_ventes: int}>,
+     *     par_mois: Collection<int, array{cle: string, libelle: string, total_ventes: int}>
      * }
      */
     public function synthese(
@@ -51,7 +50,6 @@ class CampagneRapportService
         $ventesBase = $this->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
 
         $totalVentes = (clone $ventesBase)->count();
-        $totalMontant = (int) (clone $ventesBase)->sum('montant');
 
         $usersQuery = $this->usersPerimetreQuery($campagne);
         if ($filtreAgenceId !== null) {
@@ -64,7 +62,7 @@ class CampagneRapportService
         $nbCommerciauxPerimetre = (clone $usersQuery)->count();
 
         $agregaVent = Vente::query()
-            ->selectRaw('ventes.user_id, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme')
+            ->selectRaw('ventes.user_id, COUNT(ventes.id) as cnt')
             ->where('ventes.campagne_id', $campagne->id)
             ->whereBetween('ventes.created_at', [$dateDebut, $dateFin])
             ->when($filtreAgenceId !== null, fn ($q) => $q->where('ventes.agence_id', $filtreAgenceId))
@@ -73,7 +71,7 @@ class CampagneRapportService
 
         $commerciauxRows = (clone $usersQuery)
             ->leftJoinSub($agregaVent, 'v', 'users.id', '=', 'v.user_id')
-            ->selectRaw('users.id as user_id, users.name, users.prenom, users.agence_id, COALESCE(v.cnt, 0) as total_ventes, COALESCE(v.somme, 0) as total_montant')
+            ->selectRaw('users.id as user_id, users.name, users.prenom, users.agence_id, COALESCE(v.cnt, 0) as total_ventes')
             ->orderByDesc('total_ventes')
             ->orderBy('users.id')
             ->get();
@@ -94,7 +92,6 @@ class CampagneRapportService
                 'agence_id' => $row->agence_id ? (int) $row->agence_id : null,
                 'agence_nom' => $agence?->nom,
                 'total_ventes' => (int) $row->total_ventes,
-                'total_montant' => (int) $row->total_montant,
                 'rang' => $rangCompetition,
             ]);
         }
@@ -103,7 +100,7 @@ class CampagneRapportService
         $nbZeroVente = $commerciaux->where('total_ventes', 0)->count();
 
         $agencesData = (clone $ventesBase)
-            ->selectRaw('ventes.agence_id, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme')
+            ->selectRaw('ventes.agence_id, COUNT(ventes.id) as cnt')
             ->groupBy('ventes.agence_id')
             ->get();
 
@@ -124,7 +121,6 @@ class CampagneRapportService
                 'agence_id' => (int) $row->agence_id,
                 'agence_nom' => $nom,
                 'total_ventes' => (int) $row->cnt,
-                'total_montant' => (int) $row->somme,
                 'pct_volume' => $pct,
                 'nb_commerciaux' => $nbCommerciauxAgence,
             ]);
@@ -132,7 +128,7 @@ class CampagneRapportService
         $agences = $agences->sortByDesc('total_ventes')->values();
 
         $typesData = (clone $ventesBase)
-            ->selectRaw('ventes.type_carte_id, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme')
+            ->selectRaw('ventes.type_carte_id, COUNT(ventes.id) as cnt')
             ->groupBy('ventes.type_carte_id')
             ->get();
 
@@ -146,7 +142,6 @@ class CampagneRapportService
                 'type_carte_id' => $row->type_carte_id ? (int) $row->type_carte_id : null,
                 'code' => $tc?->code ?? '?',
                 'total_ventes' => (int) $row->cnt,
-                'total_montant' => (int) $row->somme,
                 'pct_volume' => $pct,
             ]);
         }
@@ -160,7 +155,6 @@ class CampagneRapportService
             'date_fin' => $dateFin,
             'resume' => [
                 'total_ventes' => $totalVentes,
-                'total_montant' => $totalMontant,
                 'nb_commerciaux_perimetre' => $nbCommerciauxPerimetre,
                 'nb_avec_ventes' => $nbAvecVentes,
                 'nb_zero_vente' => $nbZeroVente,
@@ -194,7 +188,7 @@ class CampagneRapportService
      * Agrégation temporelle sur une requête ventes déjà filtrée (performances, exports croisés).
      *
      * @param  'semaine'|'mois'  $mode
-     * @return Collection<int, array{cle: string, libelle: string, total_ventes: int, total_montant: int}>
+     * @return Collection<int, array{cle: string, libelle: string, total_ventes: int}>
      */
     public function agregerVentesParPeriode(Builder $ventesBase, string $mode): Collection
     {
@@ -219,7 +213,7 @@ class CampagneRapportService
     }
 
     /**
-     * @return Collection<int, array{cle: string, libelle: string, total_ventes: int, total_montant: int}>
+     * @return Collection<int, array{cle: string, libelle: string, total_ventes: int}>
      */
     private function agregerParPeriode(Builder $ventesBase, string $mode): Collection
     {
@@ -228,24 +222,24 @@ class CampagneRapportService
 
         if ($mode === 'semaine') {
             if ($driver === 'mysql') {
-                $rows = $q->selectRaw('YEARWEEK(ventes.created_at, 3) as periode_cle, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme')
+                $rows = $q->selectRaw('YEARWEEK(ventes.created_at, 3) as periode_cle, COUNT(ventes.id) as cnt')
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             } else {
-                $rows = $q->selectRaw("strftime('%Y-W%W', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme")
+                $rows = $q->selectRaw("strftime('%Y-W%W', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             }
         } else {
             if ($driver === 'mysql') {
-                $rows = $q->selectRaw("DATE_FORMAT(ventes.created_at, '%Y-%m') as periode_cle, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme")
+                $rows = $q->selectRaw("DATE_FORMAT(ventes.created_at, '%Y-%m') as periode_cle, COUNT(ventes.id) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             } else {
-                $rows = $q->selectRaw("strftime('%Y-%m', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt, COALESCE(SUM(ventes.montant), 0) as somme")
+                $rows = $q->selectRaw("strftime('%Y-%m', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
@@ -266,7 +260,6 @@ class CampagneRapportService
                 'cle' => $cle,
                 'libelle' => $libelle,
                 'total_ventes' => (int) $row->cnt,
-                'total_montant' => (int) $row->somme,
             ];
         })->values();
     }

@@ -9,12 +9,11 @@ class TypeCarte extends Model
 {
     protected $table = 'types_cartes';
 
-    protected $fillable = ['code', 'prix', 'actif'];
+    protected $fillable = ['code', 'actif'];
 
     protected function casts(): array
     {
         return [
-            'prix' => 'integer',
             'actif' => 'boolean',
         ];
     }

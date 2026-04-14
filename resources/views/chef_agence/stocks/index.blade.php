@@ -96,7 +96,7 @@
                         <label class="form-label">Type de carte</label>
                         <select name="type_carte_id" class="form-select" required>
                             @foreach($typesDisponibles as $tc)
-                            <option value="{{ $tc->id }}">{{ $tc->code }} (prix ref. {{ number_format($tc->prix) }} F)</option>
+                            <option value="{{ $tc->id }}">{{ $tc->code }}</option>
                             @endforeach
                         </select>
                     </div>

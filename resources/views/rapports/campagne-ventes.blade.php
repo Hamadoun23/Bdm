@@ -83,15 +83,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body py-2">
-                <h6 class="small text-muted mb-0">Somme des montants</h6>
-                <strong class="fs-5">{{ number_format($resumeListe['montant'], 0, ',', ' ') }} F</strong>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4 d-flex align-items-center">
+    <div class="col-md-8 d-flex align-items-center">
         <a href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'ventes', 'format' => 'xlsx'], $qListe)) }}" class="btn btn-success btn-sm" target="_blank">Excel (.xlsx)</a>
         <a href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'ventes'], $qListe)) }}" class="btn btn-outline-primary btn-sm" target="_blank">CSV</a>
     </div>
@@ -105,7 +97,6 @@
                     <th>Date</th>
                     <th>Client</th>
                     <th>Type carte</th>
-                    <th>Montant</th>
                     <th>Commercial</th>
                     <th>Agence</th>
                     <th>Activation</th>
@@ -117,14 +108,13 @@
                     <td>{{ $v->created_at->format('d/m/Y H:i') }}</td>
                     <td>{{ $v->client->prenom }} {{ $v->client->nom }}</td>
                     <td><span class="badge bg-info">{{ $v->typeCarte?->code ?? '?' }}</span></td>
-                    <td>{{ $v->montant !== null ? number_format($v->montant) . ' F' : '—' }}</td>
                     <td>{{ $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '—' }}</td>
                     <td>{{ $v->agence->nom ?? '—' }}</td>
                     <td><span class="badge bg-light text-dark">{{ $v->statut_activation }}</span></td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" class="text-center py-4">
+                    <td colspan="6" class="text-center py-4">
                         Aucune vente ne correspond aux critères.
                     </td>
                 </tr>

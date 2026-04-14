@@ -45,12 +45,11 @@ class ClientExportService
         if ($client->ventes->isNotEmpty()) {
             $venteSheet = $spreadsheet->createSheet();
             $venteSheet->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Ventes liées'));
-            $vHeaders = ['Date', 'Campagne', 'Type carte', 'Montant', 'Agence', 'Statut'];
+            $vHeaders = ['Date', 'Campagne', 'Type carte', 'Agence', 'Statut'];
             $vRows = $client->ventes->map(fn ($v) => [
                 $v->created_at->format('d/m/Y H:i'),
                 $v->campagne?->nom ?? '—',
                 $v->typeCarte?->code ?? '—',
-                $v->montant ?? '',
                 $v->agence->nom ?? '—',
                 $v->statut_activation ?? '',
             ])->all();

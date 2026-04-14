@@ -70,12 +70,7 @@ class VenteService
             ->where('type_carte_id', $typeCarteId)
             ->first();
 
-        $montant = (int) $typeCarte->prix;
-        if ($campagne->estActivePourPrimes($agenceId) && $campagne->remiseSappliqueAuType($typeCarteId)) {
-            $montant = $campagne->montantApresRemise((int) $typeCarte->prix);
-        }
-
-        return DB::transaction(function () use ($data, $user, $agenceId, $typeCarteId, $typeCarte, $stock, $montant, $campagne) {
+        return DB::transaction(function () use ($data, $user, $agenceId, $typeCarteId, $stock, $campagne) {
             $client = Client::create([
                 'prenom' => $data['prenom'],
                 'nom' => $data['nom'],
@@ -94,7 +89,6 @@ class VenteService
                 'agence_id' => $agenceId,
                 'campagne_id' => $campagne->id,
                 'type_carte_id' => $typeCarteId,
-                'montant' => $montant,
                 'statut_activation' => 'vendue',
             ]);
 

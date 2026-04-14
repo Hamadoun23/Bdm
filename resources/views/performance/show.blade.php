@@ -38,7 +38,7 @@
 </div>
 
 <div class="card shadow-sm mb-4">
-    <div class="card-header"><strong>Cartes vendues (volume et montants)</strong></div>
+    <div class="card-header"><strong>Cartes vendues (volume)</strong></div>
     <div class="card-body">
         @if($parType->isEmpty())
             <p class="text-muted mb-0">Aucune vente sur cette période.</p>
@@ -49,7 +49,6 @@
                         <tr>
                             <th>Type de carte</th>
                             <th class="text-end">Quantité</th>
-                            <th class="text-end">Montant total (FCFA)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -59,7 +58,6 @@
                                 <tr>
                                     <td>{{ $tc->code }}</td>
                                     <td class="text-end">{{ $row->total }}</td>
-                                    <td class="text-end">{{ number_format((int) $row->montant_total, 0, ',', ' ') }}</td>
                                 </tr>
                             @endif
                         @endforeach
@@ -112,7 +110,6 @@
                         <th>Date</th>
                         <th>Client</th>
                         <th>Carte vendue</th>
-                        <th class="text-end">Montant (FCFA)</th>
                         <th>Agence</th>
                     </tr>
                 </thead>
@@ -128,7 +125,6 @@
                                 @endif
                             </td>
                             <td>{{ $v->typeCarte?->code ?? '—' }}</td>
-                            <td class="text-end">{{ number_format((int) $v->montant, 0, ',', ' ') }}</td>
                             <td>{{ $v->agence?->nom ?? '—' }}</td>
                         </tr>
                     @endforeach

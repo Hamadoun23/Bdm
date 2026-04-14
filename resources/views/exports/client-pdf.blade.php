@@ -42,8 +42,7 @@
         <p class="vente">
             {{ $v->created_at->format('d/m/Y H:i') }} —
             {{ $v->typeCarte?->code ?? '?' }} —
-            @if($v->montant !== null){{ number_format((int) $v->montant) }} F@else — @endif
-            — {{ $v->user->name ?? '—' }} ({{ $v->agence->nom ?? '—' }}) — {{ $v->statut_activation }}
+            {{ $v->user->name ?? '—' }} ({{ $v->agence->nom ?? '—' }}) — {{ $v->statut_activation }}
         </p>
     @empty
         <p class="muted">Aucune vente.</p>

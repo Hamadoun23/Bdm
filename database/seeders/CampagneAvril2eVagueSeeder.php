@@ -37,10 +37,12 @@ class CampagneAvril2eVagueSeeder extends Seeder
         ['noms' => 'TURE', 'prenom' => 'Imran', 'agence' => 'BOULKASSOULBOUGOU', 'tel' => '92574790'],
         ['noms' => 'BATHILY', 'prenom' => 'Maimouna', 'agence' => 'KATI', 'tel' => '65893863'],
         ['noms' => 'TRAORE', 'prenom' => 'Youssouf', 'agence' => 'Kabala', 'tel' => '60032329', 'identifiant_tel_seul' => true, 'mot_passe_last3' => true],
+        ['noms' => 'DEMBELE', 'prenom' => 'Mama', 'agence' => 'BS', 'tel' => '71514623'],
+        ['noms' => 'COULIBALY', 'prenom' => 'Hawa', 'agence' => 'AZAR', 'tel' => '79790604'],
     ];
 
     /** Téléphones retirés de cette campagne (comptes supprimés s’ils n’ont aucune vente). */
-    private const TELEPHONES_RETIRES = ['72718370', '71514623'];
+    private const TELEPHONES_RETIRES = ['72718370'];
 
     public function run(): void
     {
@@ -173,7 +175,9 @@ class CampagneAvril2eVagueSeeder extends Seeder
             return $existing;
         }
 
-        return Agence::create(['nom' => $n]);
+        $ordre = (int) (Agence::query()->max('ordre') ?? 0) + 1;
+
+        return Agence::create(['nom' => $n, 'ordre' => $ordre]);
     }
 
     private function normalizePhone(string $raw): string
