@@ -9,12 +9,14 @@ use App\Models\TypeCarte;
 use App\Models\User;
 use App\Models\Vente;
 use App\Services\CampagneRapportService;
+use App\Services\GraphiquesDashboardExportService;
 use App\Services\PrimeService;
 use App\Services\SpreadsheetExportService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -25,7 +27,8 @@ class PerformanceController extends Controller
     public function __construct(
         private PrimeService $primeService,
         private CampagneRapportService $campagneRapportService,
-        private SpreadsheetExportService $spreadsheetExportService
+        private SpreadsheetExportService $spreadsheetExportService,
+        private GraphiquesDashboardExportService $graphiquesDashboardExportService
     ) {}
 
     public function index(Request $request): View
@@ -307,6 +310,96 @@ class PerformanceController extends Controller
         $fn = 'performances_'.now()->format('Y-m-d_His').'.xlsx';
 
         return $this->spreadsheetExportService->download($spreadsheet, $fn);
+    }
+
+    public function exportGraphiquesExcel(Request $request): StreamedResponse
+    {
+        Campagne::syncStatuts();
+        $user = $request->user();
+        if ($user && ($user->isCommercial() || $user->isCommercialTelephonique())) {
+            abort(403);
+        }
+
+        $ctx = $this->performanceContext($request);
+        $campagneRef = $ctx['campagneRef'];
+        $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
+            ? $ctx['agenceId']
+            : null;
+        $classementComplet = $campagneRef !== null
+            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
+            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
+
+        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
+        $stats = $this->aggregatePerformanceStats($baseVentes);
+
+        $topCommerciauxChart = $classementComplet
+            ->filter(fn (array $c) => ($c['total_ventes'] ?? 0) > 0)
+            ->take(5)
+            ->map(fn (array $c) => [
+                'label' => $c['user_name'],
+                'ventes' => (int) $c['total_ventes'],
+            ])
+            ->values();
+
+        $ventesParAgenceChart = $this->ventesParAgencePourChart($baseVentes);
+        $typesCartes = TypeCarte::orderBy('code')->get();
+
+        $perfPeriodSlug = Str::slug(Str::ascii(Str::limit($ctx['libellePeriode'] ?? 'periode', 48, '')), '-');
+        $fileBase = 'graphiques-performances-'.($ctx['campagneIdSelected'] ?: 'ref').'-'.($perfPeriodSlug !== '' ? $perfPeriodSlug : 'export-'.now()->format('Ymd-His'));
+
+        return $this->graphiquesDashboardExportService->downloadPerformancesExcel(
+            $ctx['libellePeriode'] ?? '—',
+            $stats,
+            $topCommerciauxChart,
+            $ventesParAgenceChart,
+            $typesCartes,
+            $fileBase
+        );
+    }
+
+    public function exportGraphiquesWord(Request $request): StreamedResponse
+    {
+        Campagne::syncStatuts();
+        $user = $request->user();
+        if ($user && ($user->isCommercial() || $user->isCommercialTelephonique())) {
+            abort(403);
+        }
+
+        $ctx = $this->performanceContext($request);
+        $campagneRef = $ctx['campagneRef'];
+        $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
+            ? $ctx['agenceId']
+            : null;
+        $classementComplet = $campagneRef !== null
+            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
+            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
+
+        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
+        $stats = $this->aggregatePerformanceStats($baseVentes);
+
+        $topCommerciauxChart = $classementComplet
+            ->filter(fn (array $c) => ($c['total_ventes'] ?? 0) > 0)
+            ->take(5)
+            ->map(fn (array $c) => [
+                'label' => $c['user_name'],
+                'ventes' => (int) $c['total_ventes'],
+            ])
+            ->values();
+
+        $ventesParAgenceChart = $this->ventesParAgencePourChart($baseVentes);
+        $typesCartes = TypeCarte::orderBy('code')->get();
+
+        $perfPeriodSlug = Str::slug(Str::ascii(Str::limit($ctx['libellePeriode'] ?? 'periode', 48, '')), '-');
+        $fileBase = 'graphiques-performances-'.($ctx['campagneIdSelected'] ?: 'ref').'-'.($perfPeriodSlug !== '' ? $perfPeriodSlug : 'export-'.now()->format('Ymd-His'));
+
+        return $this->graphiquesDashboardExportService->downloadPerformancesWord(
+            $ctx['libellePeriode'] ?? '—',
+            $stats,
+            $topCommerciauxChart,
+            $ventesParAgenceChart,
+            $typesCartes,
+            $fileBase
+        );
     }
 
     public function exportCommercialExcel(Request $request, User $user): StreamedResponse

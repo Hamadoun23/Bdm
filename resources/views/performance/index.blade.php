@@ -22,8 +22,13 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h4 class="mb-0">Tableau de bord des performances</h4>
     <div class="d-flex flex-wrap gap-2">
+        @if(auth()->user()?->isAdmin() || auth()->user()?->isDirection())
+        <a href="{{ route('rapports.index') }}#cumul-campagnes" class="btn btn-dark btn-sm" title="Sélectionner des campagnes et afficher un cumul (ventes, commerciaux, agences, cartes, clients)">Cumul</a>
+        @endif
         @unless($vueCommerciale)
         <a href="{{ route('performances.export-excel', $perfExcelQuery) }}" class="btn btn-success btn-sm" target="_blank" title="Résumé, classements commerciaux / agences / types, volumes par semaine, ventes détaillées — mêmes filtres que l’écran.">Exporter Excel — export global</a>
+        <a href="{{ route('performances.export-graphiques-excel', $perfExcelQuery) }}" class="btn btn-outline-success btn-sm" target="_blank" title="Classeur avec graphiques modifiables (Excel natifs)">Excel — graphiques</a>
+        <a href="{{ route('performances.export-graphiques-word', $perfExcelQuery) }}" class="btn btn-outline-primary btn-sm" target="_blank" title="Document Word avec graphiques modifiables">Word — graphiques</a>
         @endunless
         <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary btn-sm">Retour au Dashboard</a>
     </div>
@@ -173,19 +178,10 @@
     $sumVentesTypesPerf = collect($stats['par_type'] ?? [])->sum();
     $sumVentesAgencesPerf = $ventesParAgenceChart->sum('ventes');
     $totalVentesPerf = (int) ($stats['total_ventes'] ?? 0);
-    $perfPeriodSlug = \Illuminate\Support\Str::slug(\Illuminate\Support\Str::ascii(\Illuminate\Support\Str::limit($libellePeriode ?? 'periode', 48, '')), '-');
-    $perfExportConfig = [
-        'fileBase' => 'graphiques-performances-'.($campagneIdSelected ?: 'ref').'-'.($perfPeriodSlug !== '' ? $perfPeriodSlug : 'export-'.now()->format('Ymd-His')),
-        'docTitle' => 'Performances — '.($libellePeriode ?? '—'),
-        'items' => [
-            ['id' => 'chartPerfTopCommerciaux', 'title' => 'Top commercial — ventes'],
-            ['id' => 'chartPerfAgences', 'title' => 'Répartition — part des agences (% ventes)'],
-            ['id' => 'chartPerfTypes', 'title' => 'Répartition — ventes par type de carte'],
-        ],
-    ];
 @endphp
-<div class="d-flex justify-content-end mb-2 flex-wrap gap-2" data-gda-export='@json($perfExportConfig)'>
-    <button type="button" class="btn btn-sm btn-outline-primary gda-export-word">Exporter les graphiques (Word)</button>
+<div class="d-flex justify-content-end mb-2 flex-wrap gap-2">
+    <a href="{{ route('performances.export-graphiques-excel', $perfExcelQuery) }}" class="btn btn-sm btn-success" target="_blank" title="Classeur .xlsx : graphiques modifiables dans Excel">Export graphiques (Excel)</a>
+    <a href="{{ route('performances.export-graphiques-word', $perfExcelQuery) }}" class="btn btn-sm btn-outline-primary" target="_blank" title="Document Word : graphiques natifs modifiables">Export graphiques (Word)</a>
 </div>
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
@@ -393,7 +389,6 @@
 @unless($vueCommerciale)
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="{{ asset('js/gda-chart-export.js') }}"></script>
 <script>
 (function () {
     var nf = new Intl.NumberFormat('fr-FR');

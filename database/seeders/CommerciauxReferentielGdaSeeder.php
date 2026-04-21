@@ -3,8 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Agence;
-use App\Models\Stock;
-use App\Models\TypeCarte;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\File;
@@ -157,17 +155,6 @@ class CommerciauxReferentielGdaSeeder extends Seeder
             json_encode($credentials, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
         );
         $this->command->info('Fichier confidentiel (mots de passe en clair) : storage/app/commerciaux_gda_credentials.json');
-
-        if (TypeCarte::query()->exists()) {
-            foreach (Agence::query()->whereIn('nom', collect($lignes)->pluck('site')->unique())->pluck('id') as $agenceId) {
-                foreach (TypeCarte::orderBy('code')->pluck('id') as $typeId) {
-                    Stock::firstOrCreate(
-                        ['agence_id' => $agenceId, 'type_carte_id' => $typeId],
-                        ['quantite' => 50],
-                    );
-                }
-            }
-        }
 
         $this->command->info('Commerciaux référentiel GDA : '.count($lignes).' comptes (connexion : identifiant = n° téléphone, 8 caractères dont la séquence @bdm).');
     }

@@ -19,7 +19,7 @@ return new class extends Migration
         'TOROKOROBOUGOU',
         'MAGNAMBOUGOU',
         'AZAR',
-        'BOULKASSOULBOUGOU',
+        'Senou',
         'KATI',
     ];
 

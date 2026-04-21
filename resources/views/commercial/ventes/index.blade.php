@@ -51,7 +51,7 @@
                                     <span class="btn btn-sm btn-outline-secondary disabled" tabindex="-1" title="Modification impossible après {{ \App\Models\Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES }} h suivant la création de la fiche client.">Modifier</span>
                                 @endif
                                 @if($v->peutEtreSupprimeeParCommercial())
-                                    <form method="POST" action="{{ route('ventes.destroy', $v) }}" class="d-inline" onsubmit="return confirm('Supprimer cette vente et la fiche client associée ? Le stock sera réintégré si applicable.');">
+                                    <form method="POST" action="{{ route('ventes.destroy', $v) }}" class="d-inline" onsubmit="return confirm('Supprimer cette vente et la fiche client associée ?');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>

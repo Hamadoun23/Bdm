@@ -4,8 +4,11 @@
 
 @section('content')
 <div class="card shadow-sm">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="mb-0">Modifier {{ $user->name }}</h5>
+        @if($user->isCommercial() || $user->isCommercialTelephonique())
+            <a href="{{ route('admin.users.transfert-agence', $user) }}" class="btn btn-outline-primary btn-sm">Transfert d’agence / ventes</a>
+        @endif
     </div>
     <div class="card-body">
         <form method="POST" action="{{ route('admin.users.update', $user) }}">

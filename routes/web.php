@@ -5,7 +5,6 @@ use App\Http\Controllers\Admin\CampagneAideVersementController;
 use App\Http\Controllers\Admin\CampagneContratArticleController;
 use App\Http\Controllers\Admin\CampagneController;
 use App\Http\Controllers\Admin\RapportController;
-use App\Http\Controllers\Admin\StockController;
 use App\Http\Controllers\Admin\TelephoniqueRapportController as AdminTelephoniqueRapportController;
 use App\Http\Controllers\Admin\TypeCarteController;
 use App\Http\Controllers\Admin\UserController;
@@ -58,7 +57,6 @@ Route::get('/', function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::middleware('role:admin,direction')->get('/alertes-stock-faible', [DashboardController::class, 'alertesStockFaible'])->name('alertes.stock-faible');
     // Ventes terrain : commerciaux + lecture admin/direction
     Route::get('/ventes', [CommercialVenteController::class, 'index'])->name('ventes.index')->middleware('role:admin,direction,commercial');
     Route::get('/ventes/export-excel', [CommercialVenteController::class, 'exportExcel'])->name('ventes.export-excel')->middleware('role:admin,direction,commercial');
@@ -100,9 +98,13 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::middleware('role:admin,direction')->prefix('rapports')->name('rapports.')->group(function () {
+        Route::get('/cumul', [RapportController::class, 'cumul'])->name('cumul');
+        Route::get('/cumul/export', [RapportController::class, 'exportCumul'])->name('cumul.export');
         Route::get('/', [RapportController::class, 'index'])->name('index');
         Route::get('/export', [RapportController::class, 'export'])->name('export');
         Route::get('/campagnes/{campagne}/synthese', [RapportController::class, 'campagneSynthese'])->name('campagnes.synthese');
+        Route::get('/campagnes/{campagne}/synthese/export-graphiques-excel', [RapportController::class, 'exportSyntheseGraphiquesExcel'])->name('campagnes.synthese.export-graphiques-excel');
+        Route::get('/campagnes/{campagne}/synthese/export-graphiques-word', [RapportController::class, 'exportSyntheseGraphiquesWord'])->name('campagnes.synthese.export-graphiques-word');
         Route::get('/campagnes/{campagne}/export', [RapportController::class, 'exportCampagne'])->name('campagnes.export');
         Route::get('/campagnes/{campagne}/ventes', [RapportController::class, 'campagneVentes'])->name('campagnes.ventes');
         Route::get('/campagnes/{campagne}/clients', [RapportController::class, 'campagneClients'])->name('campagnes.clients');
@@ -121,6 +123,8 @@ Route::middleware('auth')->group(function () {
     // Admin
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::resource('agences', AgenceController::class)->except('show');
+        Route::get('users/{user}/transfert-agence', [UserController::class, 'transfertAgenceForm'])->name('users.transfert-agence');
+        Route::post('users/{user}/transfert-agence', [UserController::class, 'transfertAgenceApply'])->name('users.transfert-agence.apply');
         Route::resource('users', UserController::class)->parameters(['users' => 'user'])->except('show');
         Route::resource('types-cartes', TypeCarteController::class)->except(['show']);
         Route::resource('campagnes', CampagneController::class);
@@ -132,11 +136,6 @@ Route::middleware('auth')->group(function () {
         Route::post('campagnes/{campagne}/contrat-articles', [CampagneContratArticleController::class, 'store'])->name('campagnes.contrat-articles.store');
         Route::put('campagnes/{campagne}/contrat-articles/{article}', [CampagneContratArticleController::class, 'update'])->name('campagnes.contrat-articles.update');
         Route::delete('campagnes/{campagne}/contrat-articles/{article}', [CampagneContratArticleController::class, 'destroy'])->name('campagnes.contrat-articles.destroy');
-        Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
-        Route::post('stocks/approvisionner', [StockController::class, 'approvisionner'])->name('stocks.approvisionner');
-        Route::post('stocks/ajuster', [StockController::class, 'ajuster'])->name('stocks.ajuster');
-        Route::get('stocks/mouvements', [StockController::class, 'mouvements'])->name('stocks.mouvements');
-        Route::get('stocks/mouvements/{agenceId}', [StockController::class, 'mouvements'])->name('stocks.mouvements.agence');
         Route::get('journal-connexions', [UserLoginLogController::class, 'index'])->name('login-logs.index');
         Route::get('reporting-telephonique/export', [AdminTelephoniqueRapportController::class, 'export'])->name('telephonique-rapports.export');
         Route::get('reporting-telephonique', [AdminTelephoniqueRapportController::class, 'index'])->name('telephonique-rapports.index');
@@ -145,10 +144,11 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/performances', [PerformanceController::class, 'index'])->name('performances.index');
     Route::get('/performances/export-excel', [PerformanceController::class, 'exportExcel'])->name('performances.export-excel');
+    Route::get('/performances/export-graphiques-excel', [PerformanceController::class, 'exportGraphiquesExcel'])->name('performances.export-graphiques-excel');
+    Route::get('/performances/export-graphiques-word', [PerformanceController::class, 'exportGraphiquesWord'])->name('performances.export-graphiques-word');
     Route::get('/performances/commercial/{user}/export-excel', [PerformanceController::class, 'exportCommercialExcel'])->name('performances.commercial.export-excel');
     Route::get('/performances/commercial/{user}', [PerformanceController::class, 'show'])->name('performances.commercial.show');
 
-    Route::get('/api/stocks/agence/{agenceId}', [App\Http\Controllers\Api\StockController::class, 'byAgence'])->name('api.stocks.agence');
 });
 
 require __DIR__.'/auth.php';

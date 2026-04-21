@@ -4,8 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Agence;
 use App\Models\Campagne;
-use App\Models\Stock;
-use App\Models\TypeCarte;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -37,14 +35,6 @@ class BdmSeeder extends Seeder
             'role' => 'commercial',
             'agence_id' => $agence->id,
         ]);
-
-        foreach (TypeCarte::orderBy('code')->get() as $tc) {
-            Stock::create([
-                'type_carte_id' => $tc->id,
-                'quantite' => 100,
-                'agence_id' => $agence->id,
-            ]);
-        }
 
         Campagne::create([
             'nom' => 'Campagne 2025',

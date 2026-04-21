@@ -23,17 +23,11 @@ class SoloAdminSeeder extends Seeder
         if (Schema::hasTable('reclamations')) {
             DB::table('reclamations')->truncate();
         }
-        if (Schema::hasTable('mouvements_stock')) {
-            DB::table('mouvements_stock')->truncate();
-        }
         if (Schema::hasTable('ventes')) {
             DB::table('ventes')->truncate();
         }
         if (Schema::hasTable('clients')) {
             DB::table('clients')->truncate();
-        }
-        if (Schema::hasTable('stocks')) {
-            DB::table('stocks')->truncate();
         }
         if (Schema::hasTable('primes')) {
             DB::table('primes')->truncate();

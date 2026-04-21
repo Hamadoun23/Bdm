@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Agence;
 use App\Models\Campagne;
-use App\Models\Stock;
 use App\Models\TypeCarte;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -26,17 +25,11 @@ class FreshMinimalSeeder extends Seeder
         if (Schema::hasTable('reclamations')) {
             DB::table('reclamations')->truncate();
         }
-        if (Schema::hasTable('mouvements_stock')) {
-            DB::table('mouvements_stock')->truncate();
-        }
         if (Schema::hasTable('ventes')) {
             DB::table('ventes')->truncate();
         }
         if (Schema::hasTable('clients')) {
             DB::table('clients')->truncate();
-        }
-        if (Schema::hasTable('stocks')) {
-            DB::table('stocks')->truncate();
         }
         if (Schema::hasTable('primes')) {
             DB::table('primes')->truncate();
@@ -136,16 +129,6 @@ class FreshMinimalSeeder extends Seeder
             ]);
         }
 
-        foreach ([$agenceDakar, $agenceThies] as $agence) {
-            foreach (TypeCarte::orderBy('code')->get() as $tc) {
-                Stock::create([
-                    'agence_id' => $agence->id,
-                    'type_carte_id' => $tc->id,
-                    'quantite' => 200,
-                ]);
-            }
-        }
-
         Campagne::create([
             'nom' => 'Campagne '.now()->format('Y'),
             'date_debut' => now()->startOfMonth(),
@@ -157,10 +140,9 @@ class FreshMinimalSeeder extends Seeder
             'remise_tous_types_cartes' => true,
         ]);
 
-        $this->command->info('OK : 2 agences, 1 admin, 6 commerciaux, 3 types de cartes, stocks à 200/unité/agence, 1 campagne.');
+        $this->command->info('OK : 2 agences, 1 admin, 6 commerciaux, 3 types de cartes, 1 campagne.');
         $this->command->info('Connexion admin : admin@bdm.com / password');
         $this->command->info('Commerciaux Dakar : dakar1@bdm.com … dakar3@bdm.com / password');
         $this->command->info('Commerciaux Thiès : thies1@bdm.com … thies3@bdm.com / password');
-        $this->command->info('Sans chef d\'agence : gérez les stocks via l\'admin (écran Stocks) ou ajoutez un rôle plus tard.');
     }
 }

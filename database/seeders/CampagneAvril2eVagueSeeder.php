@@ -34,7 +34,7 @@ class CampagneAvril2eVagueSeeder extends Seeder
         ['noms' => 'DIARRA', 'prenom' => 'Assetou YALCOYE', 'agence' => 'LAFIABOUGOU', 'tel' => '90983335'],
         ['noms' => 'COULIBALY', 'prenom' => 'Mamadou', 'agence' => 'TOROKOROBOUGOU', 'tel' => '76411856'],
         ['noms' => 'MACALOU', 'prenom' => 'Adama', 'agence' => 'MAGNAMBOUGOU', 'tel' => '71690729'],
-        ['noms' => 'TURE', 'prenom' => 'Imran', 'agence' => 'BOULKASSOULBOUGOU', 'tel' => '92574790'],
+        ['noms' => 'TOURE', 'prenom' => 'Imran', 'agence' => 'Senou', 'tel' => '92574790'],
         ['noms' => 'BATHILY', 'prenom' => 'Maimouna', 'agence' => 'KATI', 'tel' => '65893863'],
         ['noms' => 'TRAORE', 'prenom' => 'Youssouf', 'agence' => 'Kabala', 'tel' => '60032329', 'identifiant_tel_seul' => true, 'mot_passe_last3' => true],
         ['noms' => 'DEMBELE', 'prenom' => 'Mama', 'agence' => 'BS', 'tel' => '71514623'],

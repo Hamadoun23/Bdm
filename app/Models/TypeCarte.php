@@ -18,19 +18,9 @@ class TypeCarte extends Model
         ];
     }
 
-    public function stocks(): HasMany
-    {
-        return $this->hasMany(Stock::class);
-    }
-
     public function ventes(): HasMany
     {
         return $this->hasMany(Vente::class);
-    }
-
-    public function mouvementsStock(): HasMany
-    {
-        return $this->hasMany(MouvementStock::class, 'type_carte_id');
     }
 
     public function scopeActifs($query)
@@ -41,7 +31,6 @@ class TypeCarte extends Model
     public function peutEtreSupprime(): bool
     {
         return $this->ventes()->count() === 0
-            && $this->mouvementsStock()->count() === 0
             && $this->clients()->count() === 0;
     }
 

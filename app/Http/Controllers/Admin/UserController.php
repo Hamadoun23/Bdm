@@ -5,17 +5,26 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Agence;
 use App\Models\Campagne;
+use App\Models\CommercialAgenceTransfert;
 use App\Models\ContratPrestationReponse;
 use App\Models\User;
+use App\Models\Vente;
+use App\Services\TransfertVentesAgenceService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use InvalidArgumentException;
 
 class UserController extends Controller
 {
+    public function __construct(
+        private TransfertVentesAgenceService $transfertVentesAgenceService
+    ) {}
+
     public function index(Request $request): View
     {
         $query = User::with('agence')->whereIn('role', ['commercial', 'commercial_telephonique', 'direction']);
@@ -194,5 +203,119 @@ class UserController extends Controller
         $user->delete();
 
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur supprimé.');
+    }
+
+    public function transfertAgenceForm(Request $request, User $user): View
+    {
+        if (! $user->isCommercial() && ! $user->isCommercialTelephonique()) {
+            abort(404);
+        }
+
+        $query = Vente::query()
+            ->where('user_id', $user->id)
+            ->with(['campagne', 'agence', 'typeCarte', 'client']);
+
+        if ($request->filled('du')) {
+            $query->whereDate('created_at', '>=', Carbon::parse($request->du)->startOfDay());
+        }
+        if ($request->filled('au')) {
+            $query->whereDate('created_at', '<=', Carbon::parse($request->au)->endOfDay());
+        }
+        if ($request->filled('campagne_id')) {
+            $query->where('campagne_id', (int) $request->campagne_id);
+        }
+        if ($request->filled('agence_id')) {
+            $query->where('agence_id', (int) $request->agence_id);
+        }
+
+        $ventes = $query->orderByDesc('created_at')->paginate(25)->withQueryString();
+
+        $campagnes = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id')->get();
+        $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
+
+        return view('admin.users.transfert-agence', compact('user', 'ventes', 'campagnes', 'agences'));
+    }
+
+    public function transfertAgenceApply(Request $request, User $user): RedirectResponse
+    {
+        if (! $user->isCommercial() && ! $user->isCommercialTelephonique()) {
+            abort(404);
+        }
+
+        $request->validate([
+            'agence_cible_id' => 'required|exists:agences,id',
+            'vente_ids' => 'nullable|array',
+            'vente_ids.*' => ['integer', Rule::exists('ventes', 'id')->where('user_id', $user->id)],
+            'maj_profil' => 'boolean',
+            'note' => 'nullable|string|max:2000',
+        ]);
+
+        $agenceCibleId = (int) $request->agence_cible_id;
+        $venteIds = array_values(array_filter(array_map('intval', $request->input('vente_ids', []))));
+        $majProfil = $request->boolean('maj_profil');
+
+        if ($venteIds === [] && ! $majProfil) {
+            return back()->withErrors(['vente_ids' => 'Cochez au moins une vente et/ou activez « Mettre à jour l’agence du profil ».'])->withInput();
+        }
+
+        $admin = $request->user();
+        if (! $admin || ! $admin->isAdmin()) {
+            abort(403);
+        }
+
+        $profilAvant = $user->agence_id ? (int) $user->agence_id : null;
+        $snapshotsResult = ['count' => 0, 'snapshots' => []];
+
+        try {
+            if ($venteIds !== []) {
+                $snapshotsResult = $this->transfertVentesAgenceService->reattribuerVentes(
+                    $user,
+                    $venteIds,
+                    $agenceCibleId,
+                    $admin
+                );
+                if ($snapshotsResult['count'] === 0 && ! $majProfil) {
+                    return back()->withErrors([
+                        'transfert' => 'Aucune vente n’a été modifiée (déjà rattachées à l’agence cible). Cochez « Mettre à jour l’agence du profil » si vous souhaitez seulement changer le profil.',
+                    ])->withInput();
+                }
+            }
+
+            if ($majProfil) {
+                $user->update(['agence_id' => $agenceCibleId]);
+            }
+
+            if ($snapshotsResult['count'] > 0 || $majProfil) {
+                CommercialAgenceTransfert::query()->create([
+                    'commercial_user_id' => $user->id,
+                    'admin_user_id' => $admin->id,
+                    'nouvelle_agence_id' => $agenceCibleId,
+                    'snapshots' => $snapshotsResult['snapshots'],
+                    'profil_agence_avant' => $majProfil ? $profilAvant : null,
+                    'profil_agence_apres' => $majProfil ? $agenceCibleId : null,
+                    'note' => $request->note,
+                ]);
+            }
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['transfert' => $e->getMessage()])->withInput();
+        }
+
+        $msg = [];
+        if ($snapshotsResult['count'] > 0) {
+            $msg[] = $snapshotsResult['count'].' vente(s) réattribuée(s).';
+        }
+        if ($majProfil) {
+            $msg[] = 'Agence du profil mise à jour.';
+        }
+
+        return redirect()
+            ->route('admin.users.transfert-agence', array_filter([
+                'user' => $user->id,
+                'du' => $request->du,
+                'au' => $request->au,
+                'campagne_id' => $request->campagne_id,
+                'agence_id' => $request->agence_id,
+            ], fn ($v) => $v !== null && $v !== ''))
+            ->with('success', implode(' ', $msg));
     }
 }

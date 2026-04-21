@@ -11,10 +11,15 @@ use App\Models\TypeCarte;
 use App\Models\User;
 use App\Models\Vente;
 use App\Services\CampagneRapportService;
+use App\Services\GraphiquesDashboardExportService;
 use App\Services\SpreadsheetExportService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -24,7 +29,8 @@ class RapportController extends Controller
 {
     public function __construct(
         private CampagneRapportService $campagneRapportService,
-        private SpreadsheetExportService $spreadsheetExportService
+        private SpreadsheetExportService $spreadsheetExportService,
+        private GraphiquesDashboardExportService $graphiquesDashboardExportService
     ) {}
 
     public function index(Request $request): View
@@ -40,6 +46,595 @@ class RapportController extends Controller
         }
 
         return view('rapports.index', compact('campagnes', 'user'));
+    }
+
+    /**
+     * Vue cumulée : ventes, commerciaux, agences, types de carte et clients sur plusieurs campagnes sélectionnées.
+     */
+    public function cumul(Request $request): View|RedirectResponse
+    {
+        $raw = $request->input('campagne_ids', []);
+        if (! is_array($raw)) {
+            $raw = $raw !== null && $raw !== '' ? [(int) $raw] : [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $raw), fn (int $i) => $i > 0)));
+
+        if ($ids === []) {
+            return redirect()->route('rapports.index')
+                ->with('warning', 'Cochez au moins une campagne, puis cliquez sur « Voir le cumul ».');
+        }
+
+        $validator = Validator::make(
+            ['campagne_ids' => $ids],
+            ['campagne_ids' => 'required|array|min:1', 'campagne_ids.*' => 'exists:campagnes,id']
+        );
+        if ($validator->fails()) {
+            return redirect()->route('rapports.index')
+                ->with('warning', 'Sélection de campagnes invalide.');
+        }
+
+        Campagne::syncStatuts();
+        $campagnes = Campagne::query()->whereIn('id', $ids)->orderByDesc('date_debut')->orderByDesc('id')->get();
+        $campagneIds = $campagnes->pluck('id')->all();
+
+        $baseVente = Vente::query()->whereIn('campagne_id', $campagneIds);
+
+        $totalVentes = (clone $baseVente)->count();
+
+        $ventes = (clone $baseVente)
+            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+            ->orderByDesc('created_at')
+            ->paginate(30)
+            ->withQueryString();
+
+        $parCommercial = (clone $baseVente)
+            ->selectRaw('user_id, COUNT(*) as total')
+            ->groupBy('user_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $usersById = User::query()
+            ->whereIn('id', $parCommercial->pluck('user_id'))
+            ->get()
+            ->keyBy('id');
+
+        $parAgence = (clone $baseVente)
+            ->selectRaw('agence_id, COUNT(*) as total')
+            ->groupBy('agence_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $idsAgencesPourLibelles = $parAgence->pluck('agence_id')
+            ->merge($usersById->pluck('agence_id'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $agencesById = Agence::query()
+            ->whereIn('id', $idsAgencesPourLibelles)
+            ->get()
+            ->keyBy('id');
+
+        $parTypeCarte = (clone $baseVente)
+            ->selectRaw('type_carte_id, COUNT(*) as total')
+            ->groupBy('type_carte_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $typesById = TypeCarte::query()
+            ->whereIn('id', $parTypeCarte->pluck('type_carte_id')->filter())
+            ->get()
+            ->keyBy('id');
+
+        $clientIds = (clone $baseVente)->distinct()->pluck('client_id')->filter()->values();
+
+        $countsByClientId = (clone $baseVente)
+            ->selectRaw('client_id, COUNT(*) as cnt')
+            ->groupBy('client_id')
+            ->get()
+            ->pluck('cnt', 'client_id');
+
+        $clients = Client::query()
+            ->with(['user.agence', 'typeCarte'])
+            ->whereIn('id', $clientIds)
+            ->orderBy('nom')
+            ->orderBy('prenom')
+            ->get();
+
+        foreach ($clients as $cl) {
+            $cl->setAttribute('nb_ventes_cumul', (int) ($countsByClientId[$cl->id] ?? 0));
+        }
+
+        $nbClientsDistincts = $clients->count();
+        $nbCommerciauxAvecVentes = $parCommercial->count();
+        $nbAgencesAvecVentes = $parAgence->filter(fn ($r) => $r->agence_id !== null)->count();
+
+        $parSemaine = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVente, 'semaine');
+        $parMois = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVente, 'mois');
+
+        $typesCarteKpi = collect();
+        foreach ($parTypeCarte as $row) {
+            $code = $row->type_carte_id ? ($typesById->get($row->type_carte_id)?->code ?? '?') : '—';
+            $t = (int) $row->total;
+            $typesCarteKpi->push([
+                'code' => $code,
+                'total' => $t,
+                'pct' => $totalVentes > 0 ? round(100 * $t / $totalVentes, 1) : 0.0,
+            ]);
+        }
+
+        $dateDebutGraph = $campagnes->min(fn (Campagne $c) => $c->date_debut)->copy()->startOfDay();
+        $dateFinGraph = $campagnes->max(fn (Campagne $c) => $c->date_fin)->copy()->endOfDay();
+
+        return view('rapports.cumul', compact(
+            'campagnes',
+            'campagneIds',
+            'totalVentes',
+            'nbClientsDistincts',
+            'nbCommerciauxAvecVentes',
+            'nbAgencesAvecVentes',
+            'ventes',
+            'parCommercial',
+            'usersById',
+            'parAgence',
+            'agencesById',
+            'parTypeCarte',
+            'typesById',
+            'clients',
+            'typesCarteKpi',
+            'parSemaine',
+            'parMois',
+            'dateDebutGraph',
+            'dateFinGraph'
+        ));
+    }
+
+    /**
+     * Export CSV / XLSX / graphiques (multi-campagnes) — mêmes paramètres que {@see cumul()}.
+     */
+    public function exportCumul(Request $request): StreamedResponse|RedirectResponse
+    {
+        $validated = $this->validatedCumulIds($request);
+        if ($validated instanceof RedirectResponse) {
+            return $validated;
+        }
+        $ids = $validated;
+
+        Campagne::syncStatuts();
+        $campagnes = Campagne::query()->whereIn('id', $ids)->orderByDesc('date_debut')->orderByDesc('id')->get();
+        $campagneIds = $campagnes->pluck('id')->all();
+        $baseVente = Vente::query()->whereIn('campagne_id', $campagneIds);
+
+        $totalVentes = (clone $baseVente)->count();
+
+        $parCommercial = (clone $baseVente)
+            ->selectRaw('user_id, COUNT(*) as total')
+            ->groupBy('user_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $usersById = User::query()
+            ->whereIn('id', $parCommercial->pluck('user_id'))
+            ->get()
+            ->keyBy('id');
+
+        $parAgence = (clone $baseVente)
+            ->selectRaw('agence_id, COUNT(*) as total')
+            ->groupBy('agence_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $idsAgencesPourLibelles = $parAgence->pluck('agence_id')
+            ->merge($usersById->pluck('agence_id'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $agencesById = Agence::query()
+            ->whereIn('id', $idsAgencesPourLibelles)
+            ->get()
+            ->keyBy('id');
+
+        $parTypeCarte = (clone $baseVente)
+            ->selectRaw('type_carte_id, COUNT(*) as total')
+            ->groupBy('type_carte_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $typesById = TypeCarte::query()
+            ->whereIn('id', $parTypeCarte->pluck('type_carte_id')->filter())
+            ->get()
+            ->keyBy('id');
+
+        $parSemaine = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVente, 'semaine');
+        $parMois = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVente, 'mois');
+
+        $dateDebutGraph = $campagnes->min(fn (Campagne $c) => $c->date_debut)->copy()->startOfDay();
+        $dateFinGraph = $campagnes->max(fn (Campagne $c) => $c->date_fin)->copy()->endOfDay();
+
+        $synthesePourGraphiques = $this->buildCumulSyntheseArray(
+            $totalVentes,
+            $parCommercial,
+            $parAgence,
+            $parTypeCarte,
+            $usersById,
+            $agencesById,
+            $typesById
+        );
+
+        $section = strtolower((string) $request->query('section', 'ventes'));
+        $format = strtolower((string) $request->query('format', 'xlsx'));
+
+        $titreExport = 'Cumul : '.$campagnes->pluck('nom')->join(' + ');
+        $fileBase = 'cumul_campagnes_'.implode('-', $campagneIds).'_'.now()->format('Y-m-d_His');
+
+        if ($section === 'graphiques-excel') {
+            return $this->graphiquesDashboardExportService->downloadSyntheseCampagneExcel(
+                $titreExport,
+                $dateDebutGraph,
+                $dateFinGraph,
+                $synthesePourGraphiques,
+                $fileBase
+            );
+        }
+
+        if ($section === 'graphiques-word') {
+            return $this->graphiquesDashboardExportService->downloadSyntheseCampagneWord(
+                $titreExport,
+                $dateDebutGraph,
+                $dateFinGraph,
+                $synthesePourGraphiques,
+                $fileBase
+            );
+        }
+
+        if ($section === 'all' && $format === 'xlsx') {
+            return $this->exportCumulWorkbookXlsx(
+                $titreExport,
+                $dateDebutGraph,
+                $dateFinGraph,
+                $baseVente,
+                $synthesePourGraphiques,
+                $parSemaine,
+                $parMois,
+                $campagneIds
+            );
+        }
+
+        $ventesListe = (clone $baseVente)
+            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+            ->orderBy('created_at')
+            ->get();
+
+        $clientIds = (clone $baseVente)->distinct()->pluck('client_id')->filter()->values();
+        $countsByClientId = (clone $baseVente)
+            ->selectRaw('client_id, COUNT(*) as cnt')
+            ->groupBy('client_id')
+            ->get()
+            ->pluck('cnt', 'client_id');
+
+        $clientsExport = Client::query()
+            ->with(['user.agence', 'typeCarte'])
+            ->whereIn('id', $clientIds)
+            ->orderBy('nom')
+            ->orderBy('prenom')
+            ->get();
+
+        if ($section === 'ventes' && $format === 'xlsx') {
+            $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'];
+            $rows = $ventesListe->map(fn ($v) => [
+                $v->created_at->format('d/m/Y H:i'),
+                $v->campagne?->nom ?? '-',
+                $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
+                $v->client->telephone ?? '',
+                $v->typeCarte?->code ?? '-',
+                $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
+                $v->agence->nom ?? '',
+                $v->statut_activation ?? '',
+            ])->all();
+
+            return $this->spreadsheetSingleSheet('Ventes cumul', $headers, $rows, $fileBase.'_ventes');
+        }
+
+        if ($section === 'commerciaux' && $format === 'xlsx') {
+            $headers = ['Rang', 'Commercial', 'Agence', 'Ventes'];
+            $rows = [];
+            $sorted = $parCommercial->sortByDesc('total')->values();
+            foreach ($sorted as $idx => $row) {
+                $u = $usersById->get($row->user_id);
+                $rows[] = [
+                    $idx + 1,
+                    $u ? ($u->prenom ? trim($u->prenom.' '.$u->name) : $u->name) : '—',
+                    $u && $u->agence_id ? ($agencesById->get($u->agence_id)?->nom ?? '') : '',
+                    (int) $row->total,
+                ];
+            }
+
+            return $this->spreadsheetSingleSheet('Commerciaux cumul', $headers, $rows, $fileBase.'_commerciaux');
+        }
+
+        if ($section === 'agences' && $format === 'xlsx') {
+            $headers = ['Agence', 'Ventes', 'Part % volume'];
+            $rows = $parAgence->map(fn ($row) => [
+                $row->agence_id ? ($agencesById->get($row->agence_id)?->nom ?? '?') : '— Sans agence',
+                (int) $row->total,
+                $totalVentes > 0 ? round(100 * (int) $row->total / $totalVentes, 2) : 0,
+            ])->all();
+
+            return $this->spreadsheetSingleSheet('Agences cumul', $headers, $rows, $fileBase.'_agences');
+        }
+
+        if ($section === 'types' && $format === 'xlsx') {
+            $headers = ['Type carte', 'Ventes', 'Part % volume'];
+            $rows = $parTypeCarte->map(fn ($row) => [
+                $row->type_carte_id ? ($typesById->get($row->type_carte_id)?->code ?? '?') : '—',
+                (int) $row->total,
+                $totalVentes > 0 ? round(100 * (int) $row->total / $totalVentes, 2) : 0,
+            ])->all();
+
+            return $this->spreadsheetSingleSheet('Types cumul', $headers, $rows, $fileBase.'_types');
+        }
+
+        if ($section === 'clients' && $format === 'xlsx') {
+            $headers = ['Client', 'Téléphone', 'Ville', 'Nb ventes (cumul)', 'Type carte'];
+            $rows = $clientsExport->map(fn ($c) => [
+                trim($c->prenom.' '.$c->nom),
+                $c->telephone ?? '',
+                $c->ville ?? '',
+                (int) ($countsByClientId[$c->id] ?? 0),
+                $c->typeCarte?->code ?? '',
+            ])->all();
+
+            return $this->spreadsheetSingleSheet('Clients cumul', $headers, $rows, $fileBase.'_clients');
+        }
+
+        if ($section === 'semaines' && $format === 'xlsx') {
+            $headers = ['Période', 'Ventes'];
+            $rows = $parSemaine->map(fn ($l) => [$l['libelle'], $l['total_ventes']])->all();
+
+            return $this->spreadsheetSingleSheet('Par semaine cumul', $headers, $rows, $fileBase.'_semaines');
+        }
+
+        if ($section === 'mois' && $format === 'xlsx') {
+            $headers = ['Mois', 'Ventes'];
+            $rows = $parMois->map(fn ($l) => [$l['libelle'], $l['total_ventes']])->all();
+
+            return $this->spreadsheetSingleSheet('Par mois cumul', $headers, $rows, $fileBase.'_mois');
+        }
+
+        abort(404);
+    }
+
+    /**
+     * @param  Collection<int, object>  $parCommercial
+     * @param  Collection<int, object>  $parAgence
+     * @param  Collection<int, object>  $parTypeCarte
+     * @return array<string, mixed>
+     */
+    private function buildCumulSyntheseArray(
+        int $totalVentes,
+        $parCommercial,
+        $parAgence,
+        $parTypeCarte,
+        Collection $usersById,
+        Collection $agencesById,
+        Collection $typesById
+    ): array {
+        $commerciaux = [];
+        $sorted = $parCommercial->sortByDesc('total')->values();
+        foreach ($sorted as $idx => $row) {
+            $u = $usersById->get($row->user_id);
+            $commerciaux[] = [
+                'user_id' => (int) $row->user_id,
+                'user_name' => $u ? ($u->prenom ? trim($u->prenom.' '.$u->name) : $u->name) : '—',
+                'agence_nom' => $u && $u->agence_id ? ($agencesById->get($u->agence_id)?->nom ?? '') : null,
+                'total_ventes' => (int) $row->total,
+                'rang' => $idx + 1,
+            ];
+        }
+
+        $agences = [];
+        foreach ($parAgence as $row) {
+            $nom = $row->agence_id ? ($agencesById->get($row->agence_id)?->nom ?? '?') : '— Sans agence';
+            $agences[] = [
+                'agence_id' => $row->agence_id,
+                'agence_nom' => $nom,
+                'total_ventes' => (int) $row->total,
+                'pct_volume' => $totalVentes > 0 ? round(100 * (int) $row->total / $totalVentes, 2) : 0,
+                'nb_commerciaux' => 0,
+            ];
+        }
+
+        $parType = [];
+        foreach ($parTypeCarte as $row) {
+            $code = $row->type_carte_id ? ($typesById->get($row->type_carte_id)?->code ?? '?') : '—';
+            $parType[] = [
+                'code' => $code,
+                'type_carte_id' => $row->type_carte_id,
+                'total_ventes' => (int) $row->total,
+                'pct_volume' => $totalVentes > 0 ? round(100 * (int) $row->total / $totalVentes, 2) : 0,
+            ];
+        }
+
+        return [
+            'resume' => [
+                'total_ventes' => $totalVentes,
+                'nb_commerciaux_perimetre' => count($commerciaux),
+                'nb_avec_ventes' => count(array_filter($commerciaux, fn ($c) => $c['total_ventes'] > 0)),
+                'nb_zero_vente' => 0,
+                'nb_agences_avec_ventes' => count(array_filter($agences, fn ($a) => $a['total_ventes'] > 0)),
+            ],
+            'commerciaux' => collect($commerciaux),
+            'agences' => collect($agences),
+            'par_type_carte' => collect($parType),
+            'par_semaine' => collect(),
+            'par_mois' => collect(),
+        ];
+    }
+
+    /**
+     * @return array<int, int>|RedirectResponse
+     */
+    private function validatedCumulIds(Request $request): array|RedirectResponse
+    {
+        $raw = $request->input('campagne_ids', []);
+        if (! is_array($raw)) {
+            $raw = $raw !== null && $raw !== '' ? [(int) $raw] : [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $raw), fn (int $i) => $i > 0)));
+
+        if ($ids === []) {
+            return redirect()->route('rapports.index')
+                ->with('warning', 'Sélectionnez au moins une campagne pour l’export cumul.');
+        }
+
+        $validator = Validator::make(
+            ['campagne_ids' => $ids],
+            ['campagne_ids' => 'required|array|min:1', 'campagne_ids.*' => 'exists:campagnes,id']
+        );
+        if ($validator->fails()) {
+            return redirect()->route('rapports.index')
+                ->with('warning', 'Sélection de campagnes invalide pour l’export.');
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  Builder<Vente>  $baseVente
+     * @param  array<string, mixed>  $synthesePourGraphiques
+     * @param  Collection<int, array<string, mixed>>  $parSemaine
+     * @param  Collection<int, array<string, mixed>>  $parMois
+     * @param  array<int, int>  $campagneIds
+     */
+    private function exportCumulWorkbookXlsx(
+        string $titreExport,
+        Carbon $dateDebutGraph,
+        Carbon $dateFinGraph,
+        Builder $baseVente,
+        array $synthesePourGraphiques,
+        Collection $parSemaine,
+        Collection $parMois,
+        array $campagneIds
+    ): StreamedResponse {
+        $ventes = (clone $baseVente)
+            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+            ->orderBy('created_at')
+            ->get();
+
+        $clientsParVente = $ventes
+            ->filter(fn ($v) => $v->client !== null)
+            ->groupBy('client_id')
+            ->map(fn ($group) => [
+                'client' => $group->first()->client,
+                'nb_ventes' => $group->count(),
+            ])
+            ->sortBy(fn (array $x) => Str::lower($x['client']->nom.' '.$x['client']->prenom))
+            ->values();
+
+        $metaExport = [
+            $titreExport,
+            'Période couverte (bornes campagnes) : '.$dateDebutGraph->format('d/m/Y').' → '.$dateFinGraph->format('d/m/Y'),
+            'Campagnes (id) : '.implode(', ', $campagneIds),
+            'Généré le '.now()->locale('fr')->translatedFormat('d F Y').' à '.now()->format('H:i'),
+        ];
+
+        $synthese = $synthesePourGraphiques;
+
+        $definitions = [
+            [
+                'title' => 'Ventes détaillées',
+                'document_title' => 'Cumul — Ventes détaillées',
+                'meta_lines' => $metaExport,
+                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'],
+                'rows' => $ventes->map(fn ($v) => [
+                    $v->created_at->format('d/m/Y H:i'),
+                    $v->campagne?->nom ?? '-',
+                    $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
+                    $v->client->telephone ?? '',
+                    $v->typeCarte?->code ?? '-',
+                    $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
+                    $v->agence->nom ?? '',
+                    $v->statut_activation ?? '',
+                ])->all(),
+                'totals_row' => [
+                    'TOTAUX ('.$ventes->count().' ligne(s))', '', '', '', '', '', '', '',
+                ],
+            ],
+            [
+                'title' => 'Clients',
+                'document_title' => 'Cumul — Clients',
+                'meta_lines' => $metaExport,
+                'headers' => ['Client', 'Téléphone', 'Ville', 'Quartier', 'Nb ventes'],
+                'rows' => $clientsParVente->map(fn (array $x) => [
+                    trim($x['client']->prenom.' '.$x['client']->nom),
+                    $x['client']->telephone ?? '',
+                    $x['client']->ville ?? '',
+                    $x['client']->quartier ?? '',
+                    $x['nb_ventes'],
+                ])->all(),
+                'totals_row' => [
+                    'TOTAUX ('.$clientsParVente->count().' client(s))', '', '', '', $ventes->count(),
+                ],
+            ],
+            [
+                'title' => 'Commerciaux',
+                'document_title' => 'Cumul — Commerciaux',
+                'meta_lines' => $metaExport,
+                'headers' => ['Rang', 'Commercial', 'Agence', 'Ventes'],
+                'rows' => $synthese['commerciaux']->map(fn ($l) => [
+                    $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'],
+                ])->all(),
+                'totals_row' => ['', '', 'TOTAUX', $synthese['commerciaux']->sum(fn ($l) => $l['total_ventes'])],
+            ],
+            [
+                'title' => 'Agences',
+                'document_title' => 'Cumul — Agences',
+                'meta_lines' => $metaExport,
+                'headers' => ['Agence', 'Ventes', 'Part % volume', 'Nb commerciaux'],
+                'rows' => $synthese['agences']->map(fn ($l) => [
+                    $l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux'],
+                ])->all(),
+                'totals_row' => ['TOTAUX', $synthese['agences']->sum(fn ($l) => $l['total_ventes']), '', ''],
+            ],
+            [
+                'title' => 'Types de carte',
+                'document_title' => 'Cumul — Types de carte',
+                'meta_lines' => $metaExport,
+                'headers' => ['Type carte', 'Ventes', 'Part % volume'],
+                'rows' => $synthese['par_type_carte']->map(fn ($l) => [
+                    $l['code'], $l['total_ventes'], $l['pct_volume'],
+                ])->all(),
+                'totals_row' => ['TOTAUX', $synthese['par_type_carte']->sum(fn ($l) => $l['total_ventes']), ''],
+            ],
+            [
+                'title' => 'Par semaine',
+                'document_title' => 'Cumul — Par semaine',
+                'meta_lines' => $metaExport,
+                'headers' => ['Période', 'Ventes'],
+                'rows' => $parSemaine->map(fn ($l) => [
+                    $l['libelle'], $l['total_ventes'],
+                ])->all(),
+                'totals_row' => ['TOTAUX', $parSemaine->sum('total_ventes')],
+            ],
+            [
+                'title' => 'Par mois',
+                'document_title' => 'Cumul — Par mois',
+                'meta_lines' => $metaExport,
+                'headers' => ['Mois', 'Ventes'],
+                'rows' => $parMois->map(fn ($l) => [
+                    $l['libelle'], $l['total_ventes'],
+                ])->all(),
+                'totals_row' => ['TOTAUX', $parMois->sum('total_ventes')],
+            ],
+        ];
+
+        $spreadsheet = $this->spreadsheetExportService->createMultiSheetSpreadsheet($definitions);
+        $fn = 'cumul_campagnes_'.implode('-', $campagneIds).'_complet_'.$dateDebutGraph->format('Y-m-d').'.xlsx';
+
+        return $this->spreadsheetExportService->download($spreadsheet, $fn);
     }
 
     public function campagneVentes(Request $request, Campagne $campagne): View
@@ -140,6 +735,42 @@ class RapportController extends Controller
             'commerciauxChoix',
             'agencesChoix'
         ));
+    }
+
+    public function exportSyntheseGraphiquesExcel(Request $request, Campagne $campagne): StreamedResponse
+    {
+        $this->assertUserCanAccessCampagne($request->user(), $campagne);
+        Campagne::syncStatuts();
+
+        [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
+        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $fileBase = 'synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d');
+
+        return $this->graphiquesDashboardExportService->downloadSyntheseCampagneExcel(
+            $campagne->nom,
+            $dateDebut,
+            $dateFin,
+            $synthese,
+            $fileBase
+        );
+    }
+
+    public function exportSyntheseGraphiquesWord(Request $request, Campagne $campagne): StreamedResponse
+    {
+        $this->assertUserCanAccessCampagne($request->user(), $campagne);
+        Campagne::syncStatuts();
+
+        [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
+        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $fileBase = 'synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d');
+
+        return $this->graphiquesDashboardExportService->downloadSyntheseCampagneWord(
+            $campagne->nom,
+            $dateDebut,
+            $dateFin,
+            $synthese,
+            $fileBase
+        );
     }
 
     /**

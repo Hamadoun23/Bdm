@@ -46,7 +46,6 @@
                                         <li><a class="dropdown-item" href="{{ route('admin.campagnes.index') }}">Campagnes</a></li>
                                         <li><a class="dropdown-item" href="{{ route('admin.types-cartes.index') }}">Types de cartes</a></li>
                                         <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item" href="{{ route('admin.stocks.index') }}">Stocks</a></li>
                                         <li><a class="dropdown-item" href="{{ route('rapports.index') }}">Rapports</a></li>
                                         <li><a class="dropdown-item" href="{{ route('clients.index') }}">Clients</a></li>
                                         <li><hr class="dropdown-divider"></li>
@@ -90,6 +89,11 @@
         @endif
         @if(session('error'))
             <div class="alert alert-danger alert-dismissible fade show">{{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+            </div>
+        @endif
+        @if(session('warning'))
+            <div class="alert alert-warning alert-dismissible fade show">{{ session('warning') }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
             </div>
         @endif

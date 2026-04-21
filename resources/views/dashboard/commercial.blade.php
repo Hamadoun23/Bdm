@@ -27,7 +27,7 @@
 @endif
 
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card bg-primary text-white">
             <div class="card-body">
                 <h6>Mes ventes @if($campagneActive)<span class="small opacity-75">(@if(($campagnesOuvertes ?? collect())->count() > 1)campagnes ouvertes @else campagne en cours @endif)</span>@else<span class="small opacity-75">(mois en cours)</span>@endif</h6>
@@ -35,7 +35,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card">
             <div class="card-body">
                 <h6>Mon classement</h6>
@@ -46,21 +46,6 @@
                         -
                     @endif
                 </h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h6>Stocks disponibles</h6>
-                <ul class="mb-0 small">
-                    @foreach($stocks as $s)
-                    <li>{{ $s->typeCarte?->code ?? '?' }} : {{ $s->quantite }}</li>
-                    @endforeach
-                    @if($stocks->isEmpty())
-                    <li>-</li>
-                    @endif
-                </ul>
             </div>
         </div>
     </div>

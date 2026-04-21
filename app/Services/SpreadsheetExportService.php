@@ -244,6 +244,7 @@ class SpreadsheetExportService
 
         return new StreamedResponse(function () use ($spreadsheet): void {
             $writer = new Xlsx($spreadsheet);
+            $writer->setIncludeCharts(true);
             $writer->save('php://output');
         }, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -38,16 +38,6 @@ class Agence extends Model
         return $this->hasMany(User::class, 'agence_id');
     }
 
-    public function stocks(): HasMany
-    {
-        return $this->hasMany(Stock::class);
-    }
-
-    public function mouvementsStock(): HasMany
-    {
-        return $this->hasMany(MouvementStock::class);
-    }
-
     public function ventes(): HasMany
     {
         return $this->hasMany(Vente::class);

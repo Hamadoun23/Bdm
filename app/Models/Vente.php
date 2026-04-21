@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 class Vente extends Model
@@ -40,11 +39,6 @@ class Vente extends Model
     public function typeCarte(): BelongsTo
     {
         return $this->belongsTo(TypeCarte::class);
-    }
-
-    public function mouvementStock(): HasOne
-    {
-        return $this->hasOne(MouvementStock::class);
     }
 
     public function peutEtreSupprimeeParCommercial(): bool

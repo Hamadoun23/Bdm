@@ -72,15 +72,6 @@
     <a class="btn btn-sm btn-outline-success" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'semaines'], $qXlsx)) }}">Semaines</a>
     <a class="btn btn-sm btn-outline-success" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'mois'], $qXlsx)) }}">Mois</a>
 </div>
-<div class="mb-4 d-flex flex-wrap gap-2 align-items-center">
-    <span class="small text-muted me-2">Exports CSV :</span>
-    <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'ventes'], $qExp)) }}">Ventes détaillées</a>
-    <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'commerciaux'], $qExp)) }}">Synthèse commerciaux</a>
-    <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'agences'], $qExp)) }}">Synthèse agences</a>
-    <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'types'], $qExp)) }}">Par type de carte</a>
-    <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'semaines'], $qExp)) }}">Par semaine</a>
-    <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('rapports.campagnes.export', array_merge(['campagne' => $campagne->id, 'section' => 'mois'], $qExp)) }}">Par mois</a>
-</div>
 
 <div class="row g-3 mb-4">
     @php $r = $synthese['resume']; @endphp
@@ -162,20 +153,11 @@
             'total_ventes' => (int) $tailAg->sum('total_ventes'),
         ]);
     }
-    $totalVentesCommGraph = (int) $chartCommerciauxRows->sum('total_ventes');
     $totalVentesAgGraph = (int) $chartAgencesRows->sum('total_ventes');
-    $syntheseExportConfig = [
-        'fileBase' => 'graphiques-synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d'),
-        'docTitle' => 'Synthèse — '.$campagne->nom.' ('.$dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y').')',
-        'items' => [
-            ['id' => 'chartSyntheseTypes', 'title' => 'Mix des ventes par type de carte'],
-            ['id' => 'chartSyntheseCommerciaux', 'title' => 'Top vendeurs — part du total'],
-            ['id' => 'chartSyntheseAgences', 'title' => 'Part des agences (plus de ventes)'],
-        ],
-    ];
 @endphp
-<div class="d-flex justify-content-end mb-2 flex-wrap gap-2" data-gda-export='@json($syntheseExportConfig)'>
-    <button type="button" class="btn btn-sm btn-outline-primary gda-export-word">Exporter les graphiques (Word)</button>
+<div class="d-flex justify-content-end mb-2 flex-wrap gap-2">
+    <a href="{{ route('rapports.campagnes.synthese.export-graphiques-excel', array_merge(['campagne' => $campagne->id], $qExp)) }}" class="btn btn-sm btn-success" target="_blank" title="Classeur .xlsx : graphiques modifiables dans Excel (données sur feuilles séparées)">Export graphiques (Excel)</a>
+    <a href="{{ route('rapports.campagnes.synthese.export-graphiques-word', array_merge(['campagne' => $campagne->id], $qExp)) }}" class="btn btn-sm btn-outline-primary" target="_blank" title="Document Word : graphiques natifs modifiables (sans tableau de données)">Export graphiques (Word)</a>
 </div>
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
@@ -246,7 +228,7 @@
     <div class="tab-pane fade show active" id="tab-commerciaux">
         <div class="table-responsive card shadow-sm">
             <table class="table table-hover table-sm mb-0">
-                <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th>Agence</th><th class="text-end">Ventes</th></tr></thead>
+                <thead class="table-light"><tr><th>Rang</th><th>Commercial</th><th>Agence</th><th class="text-end">Ventes</th><th class="text-end text-nowrap">Détail</th></tr></thead>
                 <tbody>
                     @foreach($synthese['commerciaux'] as $l)
                     <tr @class(['table-warning' => $l['total_ventes'] === 0])>
@@ -254,6 +236,9 @@
                         <td>{{ $l['user_name'] }}</td>
                         <td>{{ $l['agence_nom'] ?? '—' }}</td>
                         <td class="text-end">{{ number_format($l['total_ventes']) }}</td>
+                        <td class="text-end">
+                            <a href="{{ route('rapports.campagnes.ventes', array_merge(['campagne' => $campagne->id], array_merge($qExp, ['user_id' => $l['user_id']]))) }}" class="btn btn-sm btn-outline-primary" title="Liste des ventes pour ce commercial (même période et filtres du formulaire)">Détail</a>
+                        </td>
                     </tr>
                     @endforeach
                 </tbody>
@@ -263,7 +248,7 @@
     <div class="tab-pane fade" id="tab-agences">
         <div class="table-responsive card shadow-sm">
             <table class="table table-hover table-sm mb-0">
-                <thead class="table-light"><tr><th>Agence</th><th class="text-end">Ventes</th><th class="text-end">Part %</th><th class="text-end">Nb commerciaux</th></tr></thead>
+                <thead class="table-light"><tr><th>Agence</th><th class="text-end">Ventes</th><th class="text-end">Part %</th><th class="text-end">Nb commerciaux</th><th class="text-end text-nowrap">Détail</th></tr></thead>
                 <tbody>
                     @forelse($synthese['agences'] as $l)
                     <tr>
@@ -271,9 +256,12 @@
                         <td class="text-end">{{ number_format($l['total_ventes']) }}</td>
                         <td class="text-end">{{ number_format($l['pct_volume'], 2, ',', ' ') }} %</td>
                         <td class="text-end">{{ $l['nb_commerciaux'] }}</td>
+                        <td class="text-end">
+                            <a href="{{ route('rapports.campagnes.ventes', array_merge(['campagne' => $campagne->id], array_merge($qExp, ['agence_id' => $l['agence_id']]))) }}" class="btn btn-sm btn-outline-primary" title="Liste des ventes pour cette agence (même période et filtres du formulaire)">Détail</a>
+                        </td>
                     </tr>
                     @empty
-                    <tr><td colspan="4" class="text-center text-muted py-4">Aucune vente sur cette période.</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted py-4">Aucune vente sur cette période.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -282,16 +270,23 @@
     <div class="tab-pane fade" id="tab-types">
         <div class="table-responsive card shadow-sm">
             <table class="table table-hover table-sm mb-0">
-                <thead class="table-light"><tr><th>Type</th><th class="text-end">Ventes</th><th class="text-end">Part %</th></tr></thead>
+                <thead class="table-light"><tr><th>Type</th><th class="text-end">Ventes</th><th class="text-end">Part %</th><th class="text-end text-nowrap">Détail</th></tr></thead>
                 <tbody>
                     @forelse($synthese['par_type_carte'] as $l)
                     <tr>
                         <td><span class="badge bg-secondary">{{ $l['code'] }}</span></td>
                         <td class="text-end">{{ number_format($l['total_ventes']) }}</td>
                         <td class="text-end">{{ number_format($l['pct_volume'], 2, ',', ' ') }} %</td>
+                        <td class="text-end">
+                            @if($l['type_carte_id'] !== null)
+                                <a href="{{ route('rapports.campagnes.ventes', array_merge(['campagne' => $campagne->id], array_merge($qExp, ['type_carte_id' => $l['type_carte_id']]))) }}" class="btn btn-sm btn-outline-primary" title="Liste des ventes pour ce type de carte (même période et filtres du formulaire)">Détail</a>
+                            @else
+                                <span class="text-muted small">—</span>
+                            @endif
+                        </td>
                     </tr>
                     @empty
-                    <tr><td colspan="3" class="text-center text-muted py-4">Aucune vente.</td></tr>
+                    <tr><td colspan="4" class="text-center text-muted py-4">Aucune vente.</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -329,7 +324,6 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="{{ asset('js/gda-chart-export.js') }}"></script>
 <script>
 (function () {
     var nf = new Intl.NumberFormat('fr-FR');
@@ -441,9 +435,6 @@
                 },
             }
         });
-    }
-    if (typeof gdaInitChartExports === 'function') {
-        gdaInitChartExports();
     }
 })();
 </script>

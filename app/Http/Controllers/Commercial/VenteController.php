@@ -5,8 +5,6 @@ namespace App\Http\Controllers\Commercial;
 use App\Http\Controllers\Controller;
 use App\Models\Campagne;
 use App\Models\Client;
-use App\Models\MouvementStock;
-use App\Models\Stock;
 use App\Models\TypeCarte;
 use App\Models\Vente;
 use App\Services\SpreadsheetExportService;
@@ -114,18 +112,6 @@ class VenteController extends Controller
         }
 
         DB::transaction(function () use ($vente) {
-            $mouvement = MouvementStock::query()->where('vente_id', $vente->id)->first();
-            if ($mouvement) {
-                $stock = Stock::query()
-                    ->where('agence_id', $mouvement->agence_id)
-                    ->where('type_carte_id', $mouvement->type_carte_id)
-                    ->first();
-                if ($stock) {
-                    $stock->increment('quantite', abs((int) $mouvement->quantite));
-                }
-                $mouvement->delete();
-            }
-
             $client = Client::query()->find($vente->client_id);
             $vente->delete();
 

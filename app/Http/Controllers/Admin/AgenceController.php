@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Agence;
-use App\Models\Stock;
-use App\Models\TypeCarte;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -33,20 +31,12 @@ class AgenceController extends Controller
             'nom' => 'required|string|max:255',
         ]);
 
-        $agence = Agence::create([
+        Agence::create([
             'ordre' => (int) $request->input('ordre'),
             'nom' => $request->input('nom'),
             'adresse' => null,
             'chef_id' => null,
         ]);
-
-        foreach (TypeCarte::orderBy('code')->get() as $tc) {
-            Stock::create([
-                'type_carte_id' => $tc->id,
-                'quantite' => 0,
-                'agence_id' => $agence->id,
-            ]);
-        }
 
         return redirect()->route('admin.agences.index')->with('success', 'Agence créée.');
     }

@@ -3,17 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Campagne;
-use App\Models\Stock;
 use App\Models\Vente;
 use App\Services\PrimeService;
-use App\Services\StockAlertService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     public function __construct(
-        private StockAlertService $stockAlertService,
         private PrimeService $primeService
     ) {}
 
@@ -44,8 +41,6 @@ class DashboardController extends Controller
     {
         $ventesTotal = Vente::count();
         $ventesMois = Vente::whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->count();
-        $stocks = Stock::with('agence')->get();
-        $alertes = $this->stockAlertService->getAlertes();
         $classement = $this->primeService->getClassement(now()->format('Y-m'));
 
         Campagne::syncStatuts();
@@ -59,7 +54,7 @@ class DashboardController extends Controller
 
         return view('dashboard.admin', compact(
             'user',
-            'ventesTotal', 'ventesMois', 'stocks', 'alertes',
+            'ventesTotal', 'ventesMois',
             'classement', 'campagnesTotal', 'campagneActive', 'campagnesActivesListe', 'campagnesEnCours', 'campagnesProgrammees',
             'readOnly'
         ));
@@ -85,9 +80,6 @@ class DashboardController extends Controller
         $campagneActive = $campagnesOuvertes->first();
         $peutVendre = $agenceId && $campagnesOuvertes->isNotEmpty();
 
-        $stocks = $user->agence_id ? Stock::with('typeCarte')->where('agence_id', $user->agence_id)->get() : collect();
-
-        // Ventes : toutes les campagnes ouvertes pour l’agence ; classement sur la campagne principale (plus récente).
         if ($campagnesOuvertes->isNotEmpty()) {
             $idsCampagnes = $campagnesOuvertes->pluck('id')->all();
             $mesVentes = Vente::query()
@@ -111,19 +103,7 @@ class DashboardController extends Controller
         $monRang = $rangIdx !== false ? (int) $classement->values()[$rangIdx]['rang'] : null;
 
         return view('dashboard.commercial', compact(
-            'user', 'mesVentes', 'stocks', 'classement', 'monRang', 'campagneActive', 'campagnesOuvertes', 'peutVendre'
+            'user', 'mesVentes', 'classement', 'monRang', 'campagneActive', 'campagnesOuvertes', 'peutVendre'
         ));
-    }
-
-    public function alertesStockFaible(): View
-    {
-        $alertes = $this->stockAlertService->getAlertes()->sortBy(function (Stock $s) {
-            $agence = $s->agence?->nom ?? '';
-            $code = $s->typeCarte?->code ?? '';
-
-            return $agence.' '.$code;
-        })->values();
-
-        return view('dashboard.alertes-stock-faible', compact('alertes'));
     }
 }

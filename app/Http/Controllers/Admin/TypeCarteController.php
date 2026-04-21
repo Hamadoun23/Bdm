@@ -3,11 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Stock;
 use App\Models\TypeCarte;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -16,6 +14,7 @@ class TypeCarteController extends Controller
     public function index(): View
     {
         $types = TypeCarte::orderBy('code')->get();
+
         return view('admin.types_cartes.index', compact('types'));
     }
 
@@ -67,15 +66,12 @@ class TypeCarteController extends Controller
 
     public function destroy(TypeCarte $types_carte): RedirectResponse
     {
-        if (!$types_carte->peutEtreSupprime()) {
+        if (! $types_carte->peutEtreSupprime()) {
             return redirect()->route('admin.types-cartes.index')
-                ->with('error', 'Impossible de supprimer : des ventes ou mouvements utilisent encore ce type.');
+                ->with('error', 'Impossible de supprimer : des ventes ou clients utilisent encore ce type.');
         }
 
-        DB::transaction(function () use ($types_carte) {
-            Stock::where('type_carte_id', $types_carte->id)->delete();
-            $types_carte->delete();
-        });
+        $types_carte->delete();
 
         return redirect()->route('admin.types-cartes.index')->with('success', 'Type de carte supprimé.');
     }

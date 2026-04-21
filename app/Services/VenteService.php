@@ -4,9 +4,8 @@ namespace App\Services;
 
 use App\Models\Campagne;
 use App\Models\Client;
-use App\Models\MouvementStock;
-use App\Models\Stock;
 use App\Models\TypeCarte;
+use App\Models\User;
 use App\Models\Vente;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -15,19 +14,19 @@ class VenteService
 {
     public function enregistrerVente(array $data, int $userId): Vente
     {
-        $user = \App\Models\User::findOrFail($userId);
+        $user = User::findOrFail($userId);
 
-        if ($user->role !== 'commercial' || !$user->agence_id) {
+        if ($user->role !== 'commercial' || ! $user->agence_id) {
             throw new InvalidArgumentException('Seul un commercial avec une agence peut enregistrer une vente.');
         }
 
-        if (!$user->actif) {
+        if (! $user->actif) {
             throw new InvalidArgumentException('Compte commercial désactivé. Vous ne pouvez pas enregistrer de vente.');
         }
 
         $typeCarteId = (int) ($data['type_carte_id'] ?? 0);
         $typeCarte = TypeCarte::where('id', $typeCarteId)->where('actif', true)->first();
-        if (!$typeCarte) {
+        if (! $typeCarte) {
             throw new InvalidArgumentException('Type de carte invalide ou inactif.');
         }
 
@@ -66,11 +65,7 @@ class VenteService
             );
         }
 
-        $stock = Stock::where('agence_id', $agenceId)
-            ->where('type_carte_id', $typeCarteId)
-            ->first();
-
-        return DB::transaction(function () use ($data, $user, $agenceId, $typeCarteId, $stock, $campagne) {
+        return DB::transaction(function () use ($data, $user, $agenceId, $typeCarteId, $campagne) {
             $client = Client::create([
                 'prenom' => $data['prenom'],
                 'nom' => $data['nom'],
@@ -91,17 +86,6 @@ class VenteService
                 'type_carte_id' => $typeCarteId,
                 'statut_activation' => 'vendue',
             ]);
-
-            if ($stock && $stock->quantite >= 1) {
-                $stock->decrement('quantite');
-                MouvementStock::create([
-                    'agence_id' => $agenceId,
-                    'type_carte_id' => $typeCarteId,
-                    'quantite' => -1,
-                    'type_mouvement' => 'vente',
-                    'vente_id' => $vente->id,
-                ]);
-            }
 
             return $vente->load(['client', 'agence', 'typeCarte', 'campagne']);
         });
