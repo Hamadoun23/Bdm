@@ -246,7 +246,7 @@
             </thead>
             <tbody>
                 @php
-                    $campagnePrime = $campagneRef ?? \App\Models\Campagne::getActiveForAgence($agenceId);
+                    $campagnePrime = $campagneRef ?? \App\Models\Campagne::getCampagnePourPerformances($agenceId);
                     $totalVentesPerfClassement = !$vueCommerciale
                         ? (int) ($stats['total_pourcent_volume'] ?? $stats['total_ventes'] ?? 0)
                         : 0;

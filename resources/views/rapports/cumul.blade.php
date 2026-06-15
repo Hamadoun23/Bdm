@@ -151,6 +151,24 @@
     @endforelse
 </div>
 
+<div class="card shadow-sm border-primary mb-3">
+    <div class="card-body py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <strong class="d-block">Exporter ces graphiques</strong>
+            <span class="small text-muted">Données et graphiques natifs modifiables (mix par type, top vendeurs, part par agence).</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="small text-muted d-none d-sm-inline">Télécharger :</span>
+            <a class="btn btn-success" target="_blank" href="{{ route('rapports.cumul.export', array_merge($qExport, ['section' => 'graphiques-excel'])) }}" title="Classeur .xlsx avec graphiques modifiables dans Excel">
+                Excel
+            </a>
+            <a class="btn btn-outline-primary" target="_blank" href="{{ route('rapports.cumul.export', array_merge($qExport, ['section' => 'graphiques-word'])) }}" title="Document Word avec graphiques natifs">
+                Word
+            </a>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3 mb-4">
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">

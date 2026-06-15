@@ -126,6 +126,64 @@ class PrimeService
         return $lignes;
     }
 
+    /**
+     * Classement agrégé sur plusieurs campagnes (stats campagnes en cours ou dernière campagne).
+     *
+     * @param  list<int>  $campagneIds
+     */
+    public function getClassementPourCampagnesIds(
+        array $campagneIds,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        bool $seulementSignatairesActifs = false,
+        ?int $ventesAgenceId = null
+    ): Collection {
+        if ($campagneIds === []) {
+            return collect();
+        }
+
+        $campagnes = Campagne::query()->whereIn('id', $campagneIds)->with('agences')->get();
+        $toutesAgences = $campagnes->contains(fn (Campagne $c) => $c->toutes_agences);
+        $agenceIds = $campagnes->flatMap(fn (Campagne $c) => $c->agences->pluck('id'))->unique()->values();
+
+        $query = User::query()
+            ->whereIn('users.role', ['commercial', 'commercial_telephonique'])
+            ->when($seulementSignatairesActifs, fn ($q) => $q->where('users.actif', true))
+            ->when(! $toutesAgences && $agenceIds->isEmpty(), fn ($q) => $q->whereRaw('0 = 1'))
+            ->when(! $toutesAgences && $agenceIds->isNotEmpty(), fn ($q) => $q->whereIn('users.agence_id', $agenceIds->all()))
+            ->leftJoin('ventes', function ($join) use ($campagneIds, $dateDebut, $dateFin, $ventesAgenceId) {
+                $join->on('users.id', '=', 'ventes.user_id')
+                    ->whereIn('ventes.campagne_id', $campagneIds)
+                    ->whereBetween('ventes.created_at', [$dateDebut, $dateFin]);
+                if ($ventesAgenceId !== null) {
+                    $join->where('ventes.agence_id', '=', $ventesAgenceId);
+                }
+            })
+            ->selectRaw('users.id as user_id, users.name, users.prenom, COALESCE(COUNT(ventes.id), 0) as total')
+            ->groupBy('users.id', 'users.name', 'users.prenom')
+            ->orderByDesc('total')
+            ->orderBy('users.id');
+
+        $rows = $query->get()->values();
+        $lignes = collect();
+        $rangCompetition = 1;
+
+        foreach ($rows as $index => $row) {
+            if ($index > 0 && (int) $row->total < (int) $rows[$index - 1]->total) {
+                $rangCompetition = $index + 1;
+            }
+            $displayName = $row->prenom ? trim($row->prenom.' '.$row->name) : $row->name;
+            $lignes->push([
+                'rang' => $rangCompetition,
+                'user_id' => (int) $row->user_id,
+                'user_name' => $displayName,
+                'total_ventes' => (int) $row->total,
+            ]);
+        }
+
+        return $lignes;
+    }
+
     public function calculerPrimes(string $periode, ?int $agenceId = null): array
     {
         $classement = $this->getClassement($periode, $agenceId, true);

@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\TypeCarte;
 use App\Models\User;
 use App\Models\Vente;
+use App\Services\CampagneStatsScope;
 use App\Services\CampagneRapportService;
 use App\Services\GraphiquesDashboardExportService;
 use App\Services\PrimeService;
@@ -45,11 +46,15 @@ class PerformanceController extends Controller
             : null;
 
         $campagneRef = $ctx['campagneRef'];
-        $classementComplet = $campagneRef !== null
-            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
-            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
+        $campagneIdsFilter = $ctx['campagneIdsFilter'];
+        $classementComplet = $this->classementPerformance(
+            $campagneIdsFilter,
+            $ctx['dateDebut'],
+            $ctx['dateFin'],
+            $filtreVentesAgencePourClassement
+        );
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
+        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
         $stats = $this->aggregatePerformanceStats($baseVentes);
 
         $parSemaine = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVentes, 'semaine');
@@ -72,7 +77,7 @@ class PerformanceController extends Controller
         $compareDelta = null;
         if ($compareEnabled) {
             [$prevDebut, $prevFin, $nbJoursCalendaires] = $this->previousPeriodWindow($ctx['dateDebut'], $ctx['dateFin']);
-            $basePrev = $this->ventesQueryPerformance($prevDebut, $prevFin, $ctx['agenceId'], $campagneRef);
+            $basePrev = $this->ventesQueryPerformance($prevDebut, $prevFin, $ctx['agenceId'], $campagneIdsFilter);
             $statsPrev = $this->aggregatePerformanceStats($basePrev);
             $compareDelta = [
                 'ventes_pct' => $this->pctVariation($stats['total_ventes'], $statsPrev['total_ventes']),
@@ -95,8 +100,7 @@ class PerformanceController extends Controller
             $mesVentesPeriode = (int) Vente::query()
                 ->where('user_id', $user->id)
                 ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
-                ->when($campagneRef !== null, fn ($q) => $q->where('campagne_id', $campagneRef->id))
-                ->when($campagneRef === null && $ctx['agenceId'] !== null, fn ($q) => $q->where('agence_id', $ctx['agenceId']))
+                ->when($campagneIdsFilter !== [], fn ($q) => $q->whereIn('campagne_id', $campagneIdsFilter), fn ($q) => $q->whereRaw('0 = 1'))
                 ->count();
 
             $sync = $this->leaderEtMaLigneCommercialPerformances($classementComplet, $user, $mesVentesPeriode);
@@ -157,11 +161,12 @@ class PerformanceController extends Controller
         $user->load('agence');
 
         $campagneRef = $ctx['campagneRef'];
+        $campagneIdsFilter = $ctx['campagneIdsFilter'];
 
         $ventesBase = Vente::query()
             ->where('user_id', $user->id)
             ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
-            ->when($campagneRef !== null, fn ($q) => $q->where('campagne_id', $campagneRef->id));
+            ->when($campagneIdsFilter !== [], fn ($q) => $q->whereIn('campagne_id', $campagneIdsFilter), fn ($q) => $q->whereRaw('0 = 1'));
 
         $ventes = (clone $ventesBase)
             ->with(['client', 'typeCarte', 'agence'])
@@ -216,16 +221,20 @@ class PerformanceController extends Controller
         Campagne::syncStatuts();
         $ctx = $this->performanceContext($request);
         $campagneRef = $ctx['campagneRef'];
+        $campagneIdsFilter = $ctx['campagneIdsFilter'];
 
         $viewer = $request->user();
         $filtreVentesAgencePourClassement = ($viewer?->isAdmin() || $viewer?->isDirection())
             ? $ctx['agenceId']
             : null;
-        $classement = $campagneRef !== null
-            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
-            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
+        $classement = $this->classementPerformance(
+            $campagneIdsFilter,
+            $ctx['dateDebut'],
+            $ctx['dateFin'],
+            $filtreVentesAgencePourClassement
+        );
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
+        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
         $stats = $this->aggregatePerformanceStats($baseVentes);
         $parSemaine = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVentes, 'semaine');
 
@@ -233,7 +242,7 @@ class PerformanceController extends Controller
             ['Période affichée', $ctx['libellePeriode']],
             ['Date début (filtre)', $ctx['dateDebut']->format('d/m/Y')],
             ['Date fin (filtre)', $ctx['dateFin']->format('d/m/Y')],
-            ['Campagne (filtre ventes)', $campagneRef?->nom ?? '—'],
+            ['Campagne (filtre ventes)', CampagneStatsScope::libelle($ctx['agenceId'])],
             ['Total ventes', $stats['total_ventes']],
         ];
 
@@ -321,15 +330,18 @@ class PerformanceController extends Controller
         }
 
         $ctx = $this->performanceContext($request);
-        $campagneRef = $ctx['campagneRef'];
+        $campagneIdsFilter = $ctx['campagneIdsFilter'];
         $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
             ? $ctx['agenceId']
             : null;
-        $classementComplet = $campagneRef !== null
-            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
-            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
+        $classementComplet = $this->classementPerformance(
+            $campagneIdsFilter,
+            $ctx['dateDebut'],
+            $ctx['dateFin'],
+            $filtreVentesAgencePourClassement
+        );
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
+        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
         $stats = $this->aggregatePerformanceStats($baseVentes);
 
         $topCommerciauxChart = $classementComplet
@@ -366,15 +378,18 @@ class PerformanceController extends Controller
         }
 
         $ctx = $this->performanceContext($request);
-        $campagneRef = $ctx['campagneRef'];
+        $campagneIdsFilter = $ctx['campagneIdsFilter'];
         $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
             ? $ctx['agenceId']
             : null;
-        $classementComplet = $campagneRef !== null
-            ? $this->primeService->getClassementPourCampagne($campagneRef, $ctx['dateDebut'], $ctx['dateFin'], false, $filtreVentesAgencePourClassement)
-            : $this->primeService->getClassementBetween($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], false, $filtreVentesAgencePourClassement);
+        $classementComplet = $this->classementPerformance(
+            $campagneIdsFilter,
+            $ctx['dateDebut'],
+            $ctx['dateFin'],
+            $filtreVentesAgencePourClassement
+        );
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneRef);
+        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
         $stats = $this->aggregatePerformanceStats($baseVentes);
 
         $topCommerciauxChart = $classementComplet
@@ -420,12 +435,12 @@ class PerformanceController extends Controller
         }
 
         $user->load('agence');
-        $campagneRef = $ctx['campagneRef'];
+        $campagneIdsFilter = $ctx['campagneIdsFilter'];
 
         $ventes = Vente::query()
             ->where('user_id', $user->id)
             ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
-            ->when($campagneRef !== null, fn ($q) => $q->where('campagne_id', $campagneRef->id))
+            ->when($campagneIdsFilter !== [], fn ($q) => $q->whereIn('campagne_id', $campagneIdsFilter), fn ($q) => $q->whereRaw('0 = 1'))
             ->with(['client', 'typeCarte', 'agence', 'campagne'])
             ->orderByDesc('created_at')
             ->get();
@@ -490,12 +505,39 @@ class PerformanceController extends Controller
             ->count();
     }
 
-    private function ventesQueryPerformance(Carbon $dateDebut, Carbon $dateFin, ?int $agenceId, ?Campagne $campagneRef): Builder
+    private function ventesQueryPerformance(Carbon $dateDebut, Carbon $dateFin, ?int $agenceId, array $campagneIds): Builder
     {
-        return Vente::query()
-            ->whereBetween('created_at', [$dateDebut, $dateFin])
-            ->when($campagneRef !== null, fn ($q) => $q->where('campagne_id', $campagneRef->id))
+        $query = Vente::query()->whereBetween('created_at', [$dateDebut, $dateFin]);
+
+        if ($campagneIds === []) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        return $query
+            ->whereIn('campagne_id', $campagneIds)
             ->when($agenceId !== null, fn ($q) => $q->where('agence_id', $agenceId));
+    }
+
+    /**
+     * @param  list<int>  $campagneIds
+     */
+    private function classementPerformance(
+        array $campagneIds,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        ?int $filtreVentesAgencePourClassement
+    ): Collection {
+        if ($campagneIds === []) {
+            return collect();
+        }
+
+        return $this->primeService->getClassementPourCampagnesIds(
+            $campagneIds,
+            $dateDebut,
+            $dateFin,
+            false,
+            $filtreVentesAgencePourClassement
+        );
     }
 
     /**
@@ -796,7 +838,11 @@ class PerformanceController extends Controller
 
         $campagnePerformances = Campagne::getCampagnePourPerformances($agenceId);
         $campagneFiltre = $this->resolveCampagneFiltre($request, $agenceId, $user);
+        $campagneIdsFilter = $campagneFiltre !== null
+            ? [(int) $campagneFiltre->id]
+            : Campagne::idsCampagnesPourStats($agenceId);
         $campagneRef = $campagneFiltre ?? $campagnePerformances;
+        $fenetreStats = Campagne::fenetreDatesPourStats($agenceId);
 
         $campagneIdSelected = $campagneFiltre?->id;
         $compareEnabled = $request->boolean('compare');
@@ -810,20 +856,25 @@ class PerformanceController extends Controller
             $libellePeriode = 'Du '.$dateDebut->format('d/m/Y').' au '.$dateFin->format('d/m/Y');
             if ($campagneFiltre) {
                 $libellePeriode .= ' — campagne « '.$campagneFiltre->nom.' »';
+            } elseif ($campagneIdsFilter !== []) {
+                $libellePeriode .= ' — '.Campagne::libelleCampagnesPourStats($agenceId);
             }
         } elseif ($request->filled('periode')) {
             $periodeMois = $request->query('periode');
             $dateDebut = Carbon::parse($periodeMois.'-01')->startOfMonth();
             $dateFin = $dateDebut->copy()->endOfMonth();
             $libellePeriode = $dateDebut->locale('fr')->translatedFormat('F Y');
+            if ($campagneIdsFilter !== []) {
+                $libellePeriode .= ' — '.Campagne::libelleCampagnesPourStats($agenceId);
+            }
         } elseif ($campagneFiltre) {
             $dateDebut = $campagneFiltre->date_debut->copy()->startOfDay();
             $dateFin = $campagneFiltre->date_fin->copy()->endOfDay();
             $libellePeriode = 'Campagne « '.$campagneFiltre->nom.' » ('.$dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y').')';
-        } elseif ($campagnePerformances) {
-            $dateDebut = $campagnePerformances->date_debut->copy()->startOfDay();
-            $dateFin = $campagnePerformances->date_fin->copy()->endOfDay();
-            $libellePeriode = 'Campagne « '.$campagnePerformances->nom.' » ('.$dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y').')';
+        } elseif ($fenetreStats && $campagneIdsFilter !== []) {
+            $dateDebut = $fenetreStats['debut'];
+            $dateFin = $fenetreStats['fin'];
+            $libellePeriode = 'Campagne(s) '.Campagne::libelleCampagnesPourStats($agenceId).' ('.$dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y').')';
         } else {
             $dateDebut = Carbon::now()->startOfDay();
             $dateFin = Carbon::now()->endOfDay();
@@ -840,6 +891,7 @@ class PerformanceController extends Controller
             'au' => $filtreIntervalle ? (string) $au : null,
             'campagnePerformances' => $campagnePerformances,
             'campagneRef' => $campagneRef,
+            'campagneIdsFilter' => $campagneIdsFilter,
             'campagneIdSelected' => $campagneIdSelected,
             'compareEnabled' => $compareEnabled,
         ];

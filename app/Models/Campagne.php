@@ -360,25 +360,83 @@ class Campagne extends Model
     }
 
     /**
+     * Campagnes dont les statistiques doivent être affichées :
+     * campagnes en cours du périmètre, sinon la dernière campagne non annulée.
+     *
+     * @return \Illuminate\Support\Collection<int, self>
+     */
+    public static function getCampagnesPourStats(?int $agenceId = null): Collection
+    {
+        self::syncStatuts();
+        $actives = self::getActivesPourAgence($agenceId);
+        if ($actives->isNotEmpty()) {
+            return $actives;
+        }
+
+        $derniere = self::query()
+            ->whereNotIn('statut', [self::STATUT_ANNULEE])
+            ->when($agenceId !== null, function ($q) use ($agenceId) {
+                $q->where(function ($w) use ($agenceId) {
+                    $w->where('toutes_agences', true)
+                        ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $agenceId));
+                });
+            })
+            ->orderByDesc('date_debut')
+            ->orderByDesc('id')
+            ->first();
+
+        return $derniere ? collect([$derniere]) : collect();
+    }
+
+    /** @return list<int> */
+    public static function idsCampagnesPourStats(?int $agenceId = null): array
+    {
+        return self::getCampagnesPourStats($agenceId)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Fenêtre calendaire couvrant les campagnes de référence stats.
+     *
+     * @return array{debut: Carbon, fin: Carbon}|null
+     */
+    public static function fenetreDatesPourStats(?int $agenceId = null): ?array
+    {
+        $campagnes = self::getCampagnesPourStats($agenceId);
+        if ($campagnes->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'debut' => $campagnes->min(fn (self $c) => $c->date_debut)->copy()->startOfDay(),
+            'fin' => $campagnes->max(fn (self $c) => $c->date_fin)->copy()->endOfDay(),
+        ];
+    }
+
+    public static function libelleCampagnesPourStats(?int $agenceId = null): string
+    {
+        $campagnes = self::getCampagnesPourStats($agenceId);
+        if ($campagnes->isEmpty()) {
+            return 'Aucune campagne';
+        }
+
+        $noms = $campagnes->map(fn (self $c) => '« '.$c->nom.' »')->all();
+        if (count($noms) === 1) {
+            return $noms[0];
+        }
+
+        return implode(', ', array_slice($noms, 0, -1)).' et '.end($noms);
+    }
+
+    /**
      * Campagne de référence pour l’écran Performances (par défaut : active sinon la plus récente concernant l’agence).
      * Sans agence (admin « toutes ») : active d’abord, sinon dernière campagne globale.
      */
     public static function getCampagnePourPerformances(?int $agenceId = null): ?Campagne
     {
-        self::syncStatuts();
-        $active = self::getActiveForAgence($agenceId);
-        if ($active) {
-            return $active;
-        }
-
-        $q = self::query()->whereNotIn('statut', [self::STATUT_ANNULEE]);
-        if ($agenceId !== null) {
-            $q->where(function ($w) use ($agenceId) {
-                $w->where('toutes_agences', true)
-                    ->orWhereHas('agences', fn ($a) => $a->where('agences.id', $agenceId));
-            });
-        }
-
-        return $q->orderByDesc('date_debut')->first();
+        return self::getCampagnesPourStats($agenceId)->first();
     }
 }

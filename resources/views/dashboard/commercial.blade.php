@@ -26,11 +26,20 @@
 </div>
 @endif
 
+@if(!empty($libelleStatsCampagne))
+<div class="alert alert-info py-2 mb-3 small">
+    Statistiques affichées pour : <strong>{{ $libelleStatsCampagne }}</strong>
+    @if(!$peutVendre)
+        <span class="text-muted">(aucune campagne en cours — dernière campagne de référence)</span>
+    @endif
+</div>
+@endif
+
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card bg-primary text-white">
             <div class="card-body">
-                <h6>Mes ventes @if($campagneActive)<span class="small opacity-75">(@if(($campagnesOuvertes ?? collect())->count() > 1)campagnes ouvertes @else campagne en cours @endif)</span>@else<span class="small opacity-75">(mois en cours)</span>@endif</h6>
+                <h6>Mes ventes @if(!empty($libelleStatsCampagne))<span class="small opacity-75">({{ $libelleStatsCampagne }})</span>@endif</h6>
                 <h3>{{ $mesVentes }}</h3>
             </div>
         </div>

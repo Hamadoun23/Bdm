@@ -12,6 +12,9 @@
     <p class="mb-2"><strong>Cumul multi-campagnes :</strong> cochez une ou plusieurs lignes dans le tableau ci-dessous, puis <span class="badge bg-dark">Voir le cumul</span> pour une vue agrégée (ventes, commerciaux, agences, types de carte, clients). Même accès depuis <a href="{{ route('performances.index') }}">Performances</a> (lien « Cumul »).</p>
     <p class="mb-2"><strong>Usage direction / pilotage :</strong> le bouton <span class="badge bg-success">Export complet</span> sur chaque campagne génère un classeur Excel (ventes, clients, commerciaux, agences, types de carte, semaines, mois, fiches téléphonique + synthèse appels). Utilisez <span class="badge bg-success">Synthèse</span> pour les graphiques et des exports filtrés, et <span class="badge bg-primary">Liste ventes</span> pour le détail des ventes avec filtres.</p>
     <p class="mb-2 text-muted">Les ventes sont enregistrées avec le <code>campagne_id</code> de la campagne active au moment de la saisie.</p>
+    @if(!empty($libelleStatsCampagne))
+    <p class="mb-2"><strong>Périmètre stats par défaut :</strong> {{ $libelleStatsCampagne }} (campagnes en cours, sinon dernière campagne).</p>
+    @endif
     @if($user->isAdmin())
     <p class="mb-0"><a href="{{ route('admin.telephonique-rapports.index') }}" class="alert-link">Reporting téléphonique (toutes campagnes)</a> — vue globale. Depuis chaque campagne : bouton <strong>Reporting téléphonique</strong> ou entrée <strong>Synthèse</strong> pour le périmètre campagne.</p>
     @endif

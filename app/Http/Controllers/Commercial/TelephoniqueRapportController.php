@@ -7,6 +7,7 @@ use App\Models\Campagne;
 use App\Models\TelephoniqueRapport;
 use App\Models\TypeCarte;
 use App\Services\CampagneRapportService;
+use App\Services\CampagneStatsScope;
 use App\Services\SpreadsheetExportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,14 +27,19 @@ class TelephoniqueRapportController extends Controller
 
     public function index(Request $request): View
     {
-        $base = TelephoniqueRapport::query()->where('user_id', $request->user()->id);
+        $user = $request->user();
+        $agenceId = $user->agence_id ? (int) $user->agence_id : null;
+        $base = TelephoniqueRapport::query()->where('user_id', $user->id);
+        CampagneStatsScope::appliquerSurTelephonique($base, $agenceId);
         $totauxListe = $this->campagneRapportService->totauxTelephoniqueListe($base);
 
         $rapports = $base->clone()
             ->orderByDesc('date_rapport')
             ->paginate(20);
 
-        return view('commercial.telephonique.index', compact('rapports', 'totauxListe'));
+        $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId);
+
+        return view('commercial.telephonique.index', compact('rapports', 'totauxListe', 'libelleStatsCampagne'));
     }
 
     public function create(Request $request): View
@@ -203,12 +209,13 @@ class TelephoniqueRapportController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        $request->user()->loadMissing('agence');
+        $user = $request->user();
+        $agenceId = $user->agence_id ? (int) $user->agence_id : null;
         $rapports = TelephoniqueRapport::query()
             ->with(['user.agence', 'campagne'])
-            ->where('user_id', $request->user()->id)
-            ->orderByDesc('date_rapport')
-            ->get();
+            ->where('user_id', $user->id);
+        CampagneStatsScope::appliquerSurTelephonique($rapports, $agenceId);
+        $rapports = $rapports->orderByDesc('date_rapport')->get();
 
         $hdr = [
             'Date', 'Campagne', 'Collaborateur', 'Agence', 'Appels émis', 'Joignables', 'Non joignables',

@@ -4,7 +4,12 @@
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-    <h4 class="mb-0">Mes fiches de reporting</h4>
+    <div>
+        <h4 class="mb-1">Mes fiches de reporting</h4>
+        @if(!empty($libelleStatsCampagne))
+        <p class="text-muted small mb-0">Périmètre : {{ $libelleStatsCampagne }}</p>
+        @endif
+    </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="{{ route('commercial.telephonique.export-excel') }}" class="btn btn-success" target="_blank">Exporter Excel (.xlsx)</a>
         <a href="{{ route('commercial.telephonique.create') }}" class="btn btn-primary">Nouvelle saisie / jour</a>

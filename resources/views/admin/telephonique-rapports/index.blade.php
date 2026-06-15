@@ -5,6 +5,13 @@
 @section('content')
 <h4 class="mb-3">Reporting téléphonique — vue direction</h4>
 
+@if(!empty($libelleStatsCampagne) && !request()->filled('campagne_id'))
+<div class="alert alert-info py-2 mb-3 small">
+    Périmètre par défaut : <strong>{{ $libelleStatsCampagne }}</strong>
+    <span class="text-muted">(campagnes en cours, sinon dernière campagne)</span>
+</div>
+@endif
+
 <form method="GET" class="row g-2 align-items-end mb-3">
     <div class="col-md-3">
         <label class="form-label small mb-0">Téléopératrice</label>

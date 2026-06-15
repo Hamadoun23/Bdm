@@ -8,6 +8,7 @@ use App\Models\TelephoniqueRapport;
 use App\Models\TypeCarte;
 use App\Models\User;
 use App\Services\CampagneRapportService;
+use App\Services\CampagneStatsScope;
 use App\Services\SpreadsheetExportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -39,8 +40,11 @@ class TelephoniqueRapportController extends Controller
             ->orderBy('name')
             ->get();
         $campagnes = Campagne::query()->orderByDesc('date_debut')->get(['id', 'nom', 'date_debut', 'date_fin']);
+        $libelleStatsCampagne = $request->filled('campagne_id')
+            ? null
+            : CampagneStatsScope::libelle(null);
 
-        return view('admin.telephonique-rapports.index', compact('rapports', 'telephoniques', 'campagnes', 'totauxListe'));
+        return view('admin.telephonique-rapports.index', compact('rapports', 'telephoniques', 'campagnes', 'totauxListe', 'libelleStatsCampagne'));
     }
 
     public function show(TelephoniqueRapport $telephoniqueRapport): View
@@ -230,6 +234,8 @@ class TelephoniqueRapportController extends Controller
         if ($request->filled('date_fin')) {
             $query->whereDate('date_rapport', '<=', $request->date('date_fin'));
         }
+
+        CampagneStatsScope::appliquerSurTelephonique($query, null);
 
         return $query;
     }

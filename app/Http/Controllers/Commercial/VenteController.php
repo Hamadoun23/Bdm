@@ -7,6 +7,7 @@ use App\Models\Campagne;
 use App\Models\Client;
 use App\Models\TypeCarte;
 use App\Models\Vente;
+use App\Services\CampagneStatsScope;
 use App\Services\SpreadsheetExportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,20 +25,27 @@ class VenteController extends Controller
 
     public function index(Request $request): View
     {
-        $query = Vente::with(['client', 'agence', 'user', 'typeCarte']);
+        $query = Vente::with(['client', 'agence', 'user', 'typeCarte', 'campagne']);
 
         $user = $request->user();
+        $agenceId = null;
         if ($user) {
             if ($user->isCommercial()) {
                 $query->where('user_id', $user->id);
+                $agenceId = $user->agence_id ? (int) $user->agence_id : null;
             } elseif ($user->isDirection()) {
-                // toutes les ventes (lecture)
+                // toutes les ventes (lecture), filtrées par campagne de référence
+            } elseif ($user->isAdmin()) {
+                // idem direction
             }
         }
 
-        $ventes = $query->with('typeCarte')->latest()->paginate(15);
+        CampagneStatsScope::appliquerSurVentes($query, $agenceId);
 
-        return view('commercial.ventes.index', compact('ventes'));
+        $ventes = $query->with('typeCarte')->latest()->paginate(15);
+        $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId);
+
+        return view('commercial.ventes.index', compact('ventes', 'libelleStatsCampagne'));
     }
 
     public function exportExcel(Request $request): StreamedResponse
@@ -45,9 +53,13 @@ class VenteController extends Controller
         $query = Vente::with(['client', 'agence', 'user', 'typeCarte', 'campagne'])->latest();
 
         $user = $request->user();
+        $agenceId = null;
         if ($user?->isCommercial()) {
             $query->where('user_id', $user->id);
+            $agenceId = $user->agence_id ? (int) $user->agence_id : null;
         }
+
+        CampagneStatsScope::appliquerSurVentes($query, $agenceId);
 
         $ventes = $query->get();
 

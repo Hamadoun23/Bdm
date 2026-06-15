@@ -6,16 +6,25 @@
 <h4 class="mb-4">{{ ($readOnly ?? false) ? 'Dashboard Direction' : 'Dashboard Admin' }}</h4>
 @include('dashboard._user_context', ['user' => $user])
 
+@if(!empty($libelleStatsCampagne))
+<div class="alert alert-info py-2 mb-3 small">
+    Statistiques affichées pour la campagne : <strong>{{ $libelleStatsCampagne }}</strong>
+    @if($campagnesActivesListe->isEmpty())
+        <span class="text-muted">(aucune campagne en cours — dernière campagne de référence)</span>
+    @endif
+</div>
+@endif
+
 <div class="row g-3">
     <div class="col-md-6">
         <div class="card bg-primary text-white mb-2">
             <div class="card-body">
-                <h6>Ventes totales</h6>
+                <h6>Ventes (campagne)</h6>
                 <h3>{{ $ventesTotal }}</h3>
             </div>
         </div>
         <div class="card shadow-sm">
-            <div class="card-header"><strong>Top performances du mois</strong></div>
+            <div class="card-header"><strong>Top performances (campagne)</strong></div>
             <ul class="list-group list-group-flush">
                 @foreach($classement->take(5) as $c)
                 <li class="list-group-item d-flex justify-content-between">
@@ -24,7 +33,7 @@
                 </li>
                 @endforeach
                 @if($classement->isEmpty())
-                <li class="list-group-item">Aucune vente ce mois.</li>
+                <li class="list-group-item">Aucune vente sur la campagne de référence.</li>
                 @endif
             </ul>
         </div>
@@ -32,7 +41,7 @@
     <div class="col-md-6">
         <div class="card bg-success text-white mb-3">
             <div class="card-body">
-                <h6>Ventes ce mois</h6>
+                <h6>Ventes sur la période</h6>
                 <h3>{{ $ventesMois }}</h3>
             </div>
         </div>

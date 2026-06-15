@@ -11,6 +11,7 @@ use App\Models\TypeCarte;
 use App\Models\User;
 use App\Models\Vente;
 use App\Services\CampagneRapportService;
+use App\Services\CampagneStatsScope;
 use App\Services\GraphiquesDashboardExportService;
 use App\Services\SpreadsheetExportService;
 use Carbon\Carbon;
@@ -39,13 +40,17 @@ class RapportController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        $campagneIdsStats = CampagneStatsScope::idsPour(null);
+        $libelleStatsCampagne = CampagneStatsScope::libelle(null);
+
         $campagnes = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id')->get();
 
         foreach ($campagnes as $campagne) {
             $campagne->setAttribute('nb_ventes_rapport', $campagne->ventes()->count());
+            $campagne->setAttribute('dans_perimetre_stats', in_array((int) $campagne->id, $campagneIdsStats, true));
         }
 
-        return view('rapports.index', compact('campagnes', 'user'));
+        return view('rapports.index', compact('campagnes', 'user', 'libelleStatsCampagne', 'campagneIdsStats'));
     }
 
     /**
@@ -1315,6 +1320,8 @@ class RapportController extends Controller
 
         $ventesQuery = Vente::with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
             ->whereBetween('created_at', [$dateDebut, $dateFin]);
+
+        CampagneStatsScope::appliquerSurVentes($ventesQuery, $agenceId !== null && $agenceId !== '' ? (int) $agenceId : null);
 
         if ($agenceId !== null && $agenceId !== '') {
             $ventesQuery->where('agence_id', $agenceId);
