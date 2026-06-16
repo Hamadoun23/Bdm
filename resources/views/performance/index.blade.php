@@ -81,7 +81,7 @@
             <label class="form-label small mb-0">Agence</label>
             <select name="agence" class="form-select form-select-sm">
                 <option value="">Toutes</option>
-                @foreach(\App\Models\Agence::orderBy('nom')->get() as $a)
+                @foreach($agencesSelect ?? \App\Models\Agence::orderBy('nom')->get() as $a)
                 <option value="{{ $a->id }}" @selected((string) $agenceId === (string) $a->id)>{{ $a->nom }}</option>
                 @endforeach
             </select>

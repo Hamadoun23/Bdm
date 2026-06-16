@@ -133,6 +133,92 @@ class Campagne extends Model
         return $this->signatairesContrat()->where('users.id', $user->id)->exists();
     }
 
+    /**
+     * Agences rattachées à la campagne (pivot), ou toutes si « toutes agences ».
+     *
+     * @return Collection<int, Agence>
+     */
+    public function agencesPerimetre(): Collection
+    {
+        $this->loadMissing('agences');
+        if ($this->toutes_agences) {
+            return Agence::query()->orderBy('nom')->get();
+        }
+
+        return $this->agences->sortBy('nom')->values();
+    }
+
+    /** @return list<int> */
+    public function idsAgencesPerimetre(): array
+    {
+        return $this->agencesPerimetre()->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * Commerciaux engagés : signataires du contrat, sauf si « tous les commerciaux » des agences concernées.
+     */
+    public function queryCommerciauxPerimetre(): \Illuminate\Database\Eloquent\Builder
+    {
+        $this->loadMissing(['agences', 'signatairesContrat']);
+
+        if (! $this->contrat_tous_commerciaux) {
+            $ids = $this->signatairesContrat->pluck('id')->map(fn ($id) => (int) $id)->all();
+            if ($ids === []) {
+                return User::query()->whereRaw('0 = 1');
+            }
+
+            return User::query()
+                ->whereIn('users.id', $ids)
+                ->whereIn('users.role', ['commercial', 'commercial_telephonique']);
+        }
+
+        return User::query()
+            ->whereIn('users.role', ['commercial', 'commercial_telephonique'])
+            ->when(! $this->toutes_agences, function ($q) {
+                $ids = $this->agences->pluck('id');
+                if ($ids->isEmpty()) {
+                    $q->whereRaw('0 = 1');
+                } else {
+                    $q->whereIn('users.agence_id', $ids->all());
+                }
+            });
+    }
+
+    /** @return list<int> */
+    public static function idsCommerciauxPerimetrePourCampagnes(array $campagneIds): array
+    {
+        if ($campagneIds === []) {
+            return [];
+        }
+
+        $ids = collect();
+        foreach (self::query()->whereIn('id', $campagneIds)->get() as $campagne) {
+            $ids = $ids->merge(
+                $campagne->queryCommerciauxPerimetre()->pluck('users.id')->map(fn ($id) => (int) $id)
+            );
+        }
+
+        return $ids->unique()->values()->all();
+    }
+
+    /**
+     * @param  list<int>  $campagneIds
+     * @return Collection<int, Agence>
+     */
+    public static function agencesPerimetrePourCampagnes(array $campagneIds): Collection
+    {
+        if ($campagneIds === []) {
+            return collect();
+        }
+
+        $agences = collect();
+        foreach (self::query()->whereIn('id', $campagneIds)->get() as $campagne) {
+            $agences = $agences->merge($campagne->agencesPerimetre());
+        }
+
+        return $agences->unique('id')->sortBy('nom')->values();
+    }
+
     /** Début de la fenêtre de 5 jours pour répondre au contrat. */
     public function contratDelaiExpire(): bool
     {

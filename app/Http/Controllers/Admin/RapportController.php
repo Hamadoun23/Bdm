@@ -670,9 +670,7 @@ class RapportController extends Controller
         $commerciauxChoix = $this->campagneRapportService->usersPerimetreQuery($campagne)
             ->orderBy('name')
             ->get();
-        $agencesChoix = $campagne->toutes_agences
-            ? Agence::query()->orderBy('nom')->get()
-            : $campagne->agences()->orderBy('nom')->get();
+        $agencesChoix = $campagne->agencesPerimetre();
         $typesChoix = TypeCarte::query()->orderBy('code')->get();
 
         return view('rapports.campagne-ventes', compact(
@@ -725,9 +723,7 @@ class RapportController extends Controller
             ->orderBy('name')
             ->get();
 
-        $agencesChoix = $campagne->toutes_agences
-            ? Agence::query()->orderBy('nom')->get()
-            : $campagne->agences()->orderBy('nom')->get();
+        $agencesChoix = $campagne->agencesPerimetre();
 
         return view('rapports.campagne-synthese', compact(
             'campagne',
@@ -805,9 +801,7 @@ class RapportController extends Controller
             ->paginate(30)
             ->withQueryString();
 
-        $agencesChoix = $campagne->toutes_agences
-            ? Agence::query()->orderBy('nom')->get()
-            : $campagne->agences()->orderBy('nom')->get();
+        $agencesChoix = $campagne->agencesPerimetre();
 
         $campagne->loadMissing('agences');
         $telephoniques = User::query()

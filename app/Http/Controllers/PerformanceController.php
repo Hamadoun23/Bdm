@@ -69,7 +69,10 @@ class PerformanceController extends Controller
             ->values();
 
         $ventesParAgenceChart = $this->ventesParAgencePourChart($baseVentes);
-        $classementAgences = $this->classementAgencesPourPerformances($baseVentes);
+        $classementAgences = $this->classementAgencesPourPerformances(
+            $baseVentes,
+            Campagne::agencesPerimetrePourCampagnes($campagneIdsFilter)->pluck('id')->map(fn ($id) => (int) $id)->all()
+        );
         $classementTypesCartes = $this->classementTypesCartesPourPerformances($baseVentes);
 
         $compareEnabled = $ctx['compareEnabled'];
@@ -90,6 +93,7 @@ class PerformanceController extends Controller
         $vueChef = false;
 
         $campagnesSelect = $this->campagnesPourPerformancesSelect($ctx['agenceId'], $user);
+        $agencesSelect = Campagne::agencesPerimetrePourCampagnes($campagneIdsFilter);
 
         $classement = $classementComplet;
         $classementLigneTop1 = null;
@@ -133,6 +137,7 @@ class PerformanceController extends Controller
             'campagneRef' => $campagneRef,
             'campagneIdSelected' => $ctx['campagneIdSelected'],
             'campagnesSelect' => $campagnesSelect,
+            'agencesSelect' => $agencesSelect,
             'dateDebut' => $ctx['dateDebut'],
             'dateFin' => $ctx['dateFin'],
             'filtreIntervalle' => $ctx['filtreIntervalle'],
@@ -255,7 +260,10 @@ class PerformanceController extends Controller
 
         $semRows = $parSemaine->map(fn ($l) => [$l['libelle'], $l['total_ventes']])->all();
 
-        $classementAgences = $this->classementAgencesPourPerformances($baseVentes);
+        $classementAgences = $this->classementAgencesPourPerformances(
+            $baseVentes,
+            Campagne::agencesPerimetrePourCampagnes($campagneIdsFilter)->pluck('id')->map(fn ($id) => (int) $id)->all()
+        );
         $classementTypesCartes = $this->classementTypesCartesPourPerformances($baseVentes);
 
         $agencesRows = $classementAgences->map(fn (array $r) => [
@@ -678,37 +686,45 @@ class PerformanceController extends Controller
     }
 
     /**
+     * @param  list<int>  $agenceIdsPerimetre  Agences engagées sur la campagne (affiche aussi celles à 0 vente).
      * @return Collection<int, array{rang: int, agence_nom: string, total_ventes: int, pct_volume: float}>
      */
-    private function classementAgencesPourPerformances(Builder $baseVentes): Collection
+    private function classementAgencesPourPerformances(Builder $baseVentes, array $agenceIdsPerimetre = []): Collection
     {
         $rows = (clone $baseVentes)
             ->selectRaw('agence_id, COUNT(*) as total_ventes')
             ->groupBy('agence_id')
-            ->orderByDesc('total_ventes')
-            ->orderBy('agence_id')
             ->get();
 
-        if ($rows->isEmpty()) {
-            return collect();
+        $ventesByAgence = $rows->pluck('total_ventes', 'agence_id')->map(fn ($v) => (int) $v);
+
+        if ($agenceIdsPerimetre !== []) {
+            $agences = Agence::query()->whereIn('id', $agenceIdsPerimetre)->orderBy('nom')->get();
+            $ordered = $agences->map(function (Agence $a) use ($ventesByAgence) {
+                return [
+                    'agence_nom' => $a->nom,
+                    'total_ventes' => (int) ($ventesByAgence[$a->id] ?? 0),
+                ];
+            })->sortByDesc('total_ventes')->values();
+        } else {
+            if ($rows->isEmpty()) {
+                return collect();
+            }
+            $ids = $rows->pluck('agence_id')->filter(static fn ($id) => $id !== null && $id !== '')->map(static fn ($id) => (int) $id)->unique()->values();
+            $noms = $ids->isNotEmpty()
+                ? Agence::query()->whereIn('id', $ids)->pluck('nom', 'id')
+                : collect();
+            $ordered = $rows->sortByDesc('total_ventes')->values()->map(function ($r) use ($noms) {
+                $id = $r->agence_id;
+                $nom = ($id === null || $id === '')
+                    ? 'Sans agence'
+                    : (string) ($noms[(int) $id] ?? ('Agence #'.$id));
+
+                return ['agence_nom' => $nom, 'total_ventes' => (int) $r->total_ventes];
+            });
         }
 
-        $totalVentes = (int) $rows->sum('total_ventes');
-        $ids = $rows->pluck('agence_id')->filter(static fn ($id) => $id !== null && $id !== '')->map(static fn ($id) => (int) $id)->unique()->values();
-        $noms = $ids->isNotEmpty()
-            ? Agence::query()->whereIn('id', $ids)->pluck('nom', 'id')
-            : collect();
-
-        $ordered = $rows->map(function ($r) use ($noms, $totalVentes) {
-            $id = $r->agence_id;
-            $nom = ($id === null || $id === '')
-                ? 'Sans agence'
-                : (string) ($noms[(int) $id] ?? ('Agence #'.$id));
-            $tv = (int) $r->total_ventes;
-            $pct = $totalVentes > 0 ? round($tv / $totalVentes * 100, 1) : 0.0;
-
-            return ['agence_nom' => $nom, 'total_ventes' => $tv, 'pct_volume' => $pct];
-        })->values();
+        $totalVentes = (int) $ordered->sum('total_ventes');
 
         $lignes = collect();
         $rangCompetition = 1;
@@ -716,7 +732,9 @@ class PerformanceController extends Controller
             if ($index > 0 && $item['total_ventes'] < $ordered[$index - 1]['total_ventes']) {
                 $rangCompetition = $index + 1;
             }
-            $lignes->push(array_merge(['rang' => $rangCompetition], $item));
+            $tv = (int) $item['total_ventes'];
+            $pct = $totalVentes > 0 ? round($tv / $totalVentes * 100, 1) : 0.0;
+            $lignes->push(array_merge(['rang' => $rangCompetition], $item, ['pct_volume' => $pct]));
         }
 
         return $lignes;

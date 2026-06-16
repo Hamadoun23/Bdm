@@ -99,30 +99,33 @@ class CampagneRapportService
         $nbAvecVentes = $commerciaux->where('total_ventes', '>', 0)->count();
         $nbZeroVente = $commerciaux->where('total_ventes', 0)->count();
 
-        $agencesData = (clone $ventesBase)
+        $ventesParAgence = (clone $ventesBase)
             ->selectRaw('ventes.agence_id, COUNT(ventes.id) as cnt')
             ->groupBy('ventes.agence_id')
-            ->get();
+            ->pluck('cnt', 'agence_id');
 
-        $nbAgencesAvecVentes = $agencesData->filter(fn ($r) => $r->agence_id !== null)->count();
+        $commerciauxParAgence = (clone $usersQuery)
+            ->selectRaw('users.agence_id, COUNT(users.id) as cnt')
+            ->groupBy('users.agence_id')
+            ->pluck('cnt', 'agence_id');
+
+        $agencesPerimetre = $campagne->agencesPerimetre();
+        if ($filtreAgenceId !== null) {
+            $agencesPerimetre = $agencesPerimetre->where('id', $filtreAgenceId)->values();
+        }
+
+        $nbAgencesAvecVentes = $agencesPerimetre->filter(fn (Agence $a) => (int) ($ventesParAgence[$a->id] ?? 0) > 0)->count();
 
         $agences = collect();
-        foreach ($agencesData as $row) {
-            if ($row->agence_id === null) {
-                continue;
-            }
-            $nom = Agence::query()->find($row->agence_id)?->nom ?? 'Agence #'.$row->agence_id;
-            $nbCommerciauxAgence = User::query()
-                ->whereIn('role', ['commercial', 'commercial_telephonique'])
-                ->where('agence_id', $row->agence_id)
-                ->count();
-            $pct = $totalVentes > 0 ? round((int) $row->cnt / $totalVentes * 100, 2) : 0.0;
+        foreach ($agencesPerimetre as $agence) {
+            $cnt = (int) ($ventesParAgence[$agence->id] ?? 0);
+            $pct = $totalVentes > 0 ? round($cnt / $totalVentes * 100, 2) : 0.0;
             $agences->push([
-                'agence_id' => (int) $row->agence_id,
-                'agence_nom' => $nom,
-                'total_ventes' => (int) $row->cnt,
+                'agence_id' => (int) $agence->id,
+                'agence_nom' => $agence->nom,
+                'total_ventes' => $cnt,
                 'pct_volume' => $pct,
-                'nb_commerciaux' => $nbCommerciauxAgence,
+                'nb_commerciaux' => (int) ($commerciauxParAgence[$agence->id] ?? 0),
             ]);
         }
         $agences = $agences->sortByDesc('total_ventes')->values();
@@ -195,21 +198,10 @@ class CampagneRapportService
         return $this->agregerParPeriode($ventesBase, $mode);
     }
 
-    /** Requête utilisateurs du même périmètre que {@see PrimeService::getClassementPourCampagne}. */
-    public function usersPerimetreQuery(Campagne $campagne): Builder
+    /** Requête commerciaux engagés sur la campagne (signataires ou tous selon configuration). */
+    public function usersPerimetreQuery(Campagne $campagne): \Illuminate\Database\Eloquent\Builder
     {
-        $campagne->loadMissing('agences');
-
-        return User::query()
-            ->whereIn('users.role', ['commercial', 'commercial_telephonique'])
-            ->when(! $campagne->toutes_agences, function ($q) use ($campagne) {
-                $ids = $campagne->agences->pluck('id');
-                if ($ids->isEmpty()) {
-                    $q->whereRaw('0 = 1');
-                } else {
-                    $q->whereIn('users.agence_id', $ids->all());
-                }
-            });
+        return $campagne->queryCommerciauxPerimetre();
     }
 
     /**

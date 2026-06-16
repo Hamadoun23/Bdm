@@ -35,51 +35,13 @@ class PrimeService
         bool $seulementSignatairesActifs = false,
         ?int $ventesAgenceId = null
     ): Collection {
-        $campagne->loadMissing('agences');
-        $campagneId = (int) $campagne->id;
-
-        $query = User::query()
-            ->whereIn('users.role', ['commercial', 'commercial_telephonique'])
-            ->when($seulementSignatairesActifs, fn ($q) => $q->where('users.actif', true))
-            ->when(! $campagne->toutes_agences, function ($q) use ($campagne) {
-                $ids = $campagne->agences->pluck('id');
-                if ($ids->isEmpty()) {
-                    $q->whereRaw('0 = 1');
-                } else {
-                    $q->whereIn('users.agence_id', $ids->all());
-                }
-            })
-            ->leftJoin('ventes', function ($join) use ($campagneId, $dateDebut, $dateFin, $ventesAgenceId) {
-                $join->on('users.id', '=', 'ventes.user_id')
-                    ->where('ventes.campagne_id', '=', $campagneId)
-                    ->whereBetween('ventes.created_at', [$dateDebut, $dateFin]);
-                if ($ventesAgenceId !== null) {
-                    $join->where('ventes.agence_id', '=', $ventesAgenceId);
-                }
-            })
-            ->selectRaw('users.id as user_id, users.name, users.prenom, COALESCE(COUNT(ventes.id), 0) as total')
-            ->groupBy('users.id', 'users.name', 'users.prenom')
-            ->orderByDesc('total')
-            ->orderBy('users.id');
-
-        $rows = $query->get()->values();
-        $lignes = collect();
-        $rangCompetition = 1;
-
-        foreach ($rows as $index => $row) {
-            if ($index > 0 && (int) $row->total < (int) $rows[$index - 1]->total) {
-                $rangCompetition = $index + 1;
-            }
-            $displayName = $row->prenom ? trim($row->prenom.' '.$row->name) : $row->name;
-            $lignes->push([
-                'rang' => $rangCompetition,
-                'user_id' => (int) $row->user_id,
-                'user_name' => $displayName,
-                'total_ventes' => (int) $row->total,
-            ]);
-        }
-
-        return $lignes;
+        return $this->getClassementPourCampagnesIds(
+            [(int) $campagne->id],
+            $dateDebut,
+            $dateFin,
+            $seulementSignatairesActifs,
+            $ventesAgenceId
+        );
     }
 
     /**
@@ -142,15 +104,14 @@ class PrimeService
             return collect();
         }
 
-        $campagnes = Campagne::query()->whereIn('id', $campagneIds)->with('agences')->get();
-        $toutesAgences = $campagnes->contains(fn (Campagne $c) => $c->toutes_agences);
-        $agenceIds = $campagnes->flatMap(fn (Campagne $c) => $c->agences->pluck('id'))->unique()->values();
+        $userIds = Campagne::idsCommerciauxPerimetrePourCampagnes($campagneIds);
+        if ($userIds === []) {
+            return collect();
+        }
 
         $query = User::query()
-            ->whereIn('users.role', ['commercial', 'commercial_telephonique'])
+            ->whereIn('users.id', $userIds)
             ->when($seulementSignatairesActifs, fn ($q) => $q->where('users.actif', true))
-            ->when(! $toutesAgences && $agenceIds->isEmpty(), fn ($q) => $q->whereRaw('0 = 1'))
-            ->when(! $toutesAgences && $agenceIds->isNotEmpty(), fn ($q) => $q->whereIn('users.agence_id', $agenceIds->all()))
             ->leftJoin('ventes', function ($join) use ($campagneIds, $dateDebut, $dateFin, $ventesAgenceId) {
                 $join->on('users.id', '=', 'ventes.user_id')
                     ->whereIn('ventes.campagne_id', $campagneIds)
