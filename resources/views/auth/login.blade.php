@@ -122,7 +122,7 @@
                     @csrf
                     <div class="mb-3">
                         <label for="email" class="form-label fw-semibold">Identifiant</label>
-                        <input id="email" type="text" name="email" class="form-control" value="{{ old('email') }}" required autofocus autocomplete="username" placeholder="Admin : nom (ex. Sylla) · Commercial / chef : n° téléphone">
+                        <input id="email" type="text" name="email" class="form-control" value="{{ old('email') }}" required autofocus autocomplete="username">
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label fw-semibold">Mot de passe</label>
