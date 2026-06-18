@@ -24,7 +24,8 @@ class CampagneContratArticleController extends Controller
             'contenu' => $validated['contenu'],
         ]);
 
-        return back()->with('success_article', 'Article ajouté.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'contrat'])
+            ->with('success_article', 'Article ajouté.');
     }
 
     public function update(Request $request, Campagne $campagne, CampagneContratArticle $article): RedirectResponse
@@ -36,7 +37,8 @@ class CampagneContratArticleController extends Controller
         ]);
         $article->update($validated);
 
-        return back()->with('success_article', 'Article enregistré.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'contrat'])
+            ->with('success_article', 'Article enregistré.');
     }
 
     public function destroy(Campagne $campagne, CampagneContratArticle $article): RedirectResponse
@@ -44,7 +46,8 @@ class CampagneContratArticleController extends Controller
         $this->assertArticleCampagne($campagne, $article);
         $article->delete();
 
-        return back()->with('success_article', 'Article supprimé.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'contrat'])
+            ->with('success_article', 'Article supprimé.');
     }
 
     private function assertArticleCampagne(Campagne $campagne, CampagneContratArticle $article): void

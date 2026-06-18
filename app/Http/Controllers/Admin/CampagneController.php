@@ -182,9 +182,10 @@ class CampagneController extends Controller
         $this->syncContratReponses($campagne, $request, false);
         CampagneContratArticle::seedDefaultsIfEmpty($campagne->id);
 
-        Campagne::syncStatuts();
+        Campagne::apresModificationDatesOuPerimetre($campagne);
 
-        return redirect()->route('admin.campagnes.index')->with('success', 'Campagne mise à jour.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'pilotage'])
+            ->with('success', 'Campagne mise à jour.');
     }
 
     public function arreter(Request $request, Campagne $campagne): RedirectResponse
@@ -206,7 +207,8 @@ class CampagneController extends Controller
         $campagne->update(['statut' => Campagne::STATUT_ARRETEE, 'actif' => false]);
         Campagne::resynchroniserActifsCommerciauxSelonCampagnesVivantes();
 
-        return redirect()->route('admin.campagnes.index')->with('success', 'Campagne arrêtée.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'pilotage'])
+            ->with('success', 'Campagne arrêtée.');
     }
 
     public function annuler(Request $request, Campagne $campagne): RedirectResponse
@@ -228,7 +230,8 @@ class CampagneController extends Controller
         $campagne->update(['statut' => Campagne::STATUT_ANNULEE, 'actif' => false]);
         Campagne::resynchroniserActifsCommerciauxSelonCampagnesVivantes();
 
-        return redirect()->route('admin.campagnes.index')->with('success', 'Campagne annulée.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'pilotage'])
+            ->with('success', 'Campagne annulée.');
     }
 
     public function reprogrammer(Request $request, Campagne $campagne): RedirectResponse
@@ -259,9 +262,97 @@ class CampagneController extends Controller
         ]);
 
         $campagne->update($apres);
-        Campagne::syncStatuts();
+        Campagne::apresModificationDatesOuPerimetre($campagne);
 
-        return redirect()->route('admin.campagnes.index')->with('success', 'Campagne reprogrammée.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'pilotage'])
+            ->with('success', 'Campagne reprogrammée.');
+    }
+
+    public function updateDates(Request $request, Campagne $campagne): RedirectResponse
+    {
+        $request->validate([
+            'date_debut' => 'required|date',
+            'date_fin' => 'required|date|after_or_equal:date_debut',
+        ]);
+
+        $toutesAgences = $campagne->toutes_agences;
+        $agenceIds = $campagne->agences()->pluck('agences.id')->all();
+
+        $errChevauchement = $this->validerPerimetreAgencesSansChevauchement($campagne, $request, $toutesAgences, $agenceIds);
+        if ($errChevauchement) {
+            return back()->withErrors($errChevauchement)->withInput();
+        }
+
+        $campagne->update([
+            'date_debut' => $request->date_debut,
+            'date_fin' => $request->date_fin,
+        ]);
+        Campagne::apresModificationDatesOuPerimetre($campagne);
+
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'pilotage'])
+            ->with('success', 'Dates mises à jour — statuts et comptes commerciaux resynchronisés.');
+    }
+
+    public function syncCommerciaux(Campagne $campagne): RedirectResponse
+    {
+        Campagne::apresModificationDatesOuPerimetre($campagne);
+
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'commerciaux'])
+            ->with('success', 'Comptes commerciaux resynchronisés selon les campagnes en cours.');
+    }
+
+    public function updateSignataires(Request $request, Campagne $campagne): RedirectResponse
+    {
+        $request->validate([
+            'aide_hebdo_tous_commerciaux' => 'boolean',
+            'aide_beneficiaires' => 'array',
+            'aide_beneficiaires.*' => 'exists:users,id',
+        ]);
+
+        $err = $this->validerEngagementCommerciaux($request);
+        if ($err) {
+            return back()->withErrors($err)->withInput();
+        }
+
+        $tous = $request->boolean('aide_hebdo_tous_commerciaux');
+        $campagne->update([
+            'aide_hebdo_tous_commerciaux' => $tous,
+            'contrat_tous_commerciaux' => $tous,
+        ]);
+
+        $this->syncSignatairesContrat($campagne, $request);
+        $this->syncContratReponses($campagne, $request, false);
+        Campagne::apresModificationDatesOuPerimetre($campagne);
+
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'commerciaux'])
+            ->with('success', 'Commerciaux engagés mis à jour.');
+    }
+
+    public function republierContrat(Campagne $campagne): RedirectResponse
+    {
+        $campagne->update(['contrat_publie_at' => now()]);
+        ContratPrestationReponse::where('campagne_id', $campagne->id)->update([
+            'statut' => ContratPrestationReponse::STATUT_EN_ATTENTE,
+            'repondu_at' => null,
+        ]);
+
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'contrat'])
+            ->with('success', 'Contrat republié — nouveau délai de 5 jours pour accepter ou refuser.');
+    }
+
+    public function resetContratReponse(Campagne $campagne, ContratPrestationReponse $reponse): RedirectResponse
+    {
+        if ($reponse->campagne_id !== $campagne->id) {
+            abort(404);
+        }
+
+        $reponse->update([
+            'statut' => ContratPrestationReponse::STATUT_EN_ATTENTE,
+            'repondu_at' => null,
+        ]);
+
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'contrat'])
+            ->with('success', 'Réponse du commercial réinitialisée.');
     }
 
     public function destroy(Campagne $campagne): RedirectResponse

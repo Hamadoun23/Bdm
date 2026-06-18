@@ -143,7 +143,8 @@
             </div>
 
             <button type="submit" class="btn btn-primary">Enregistrer la campagne</button>
-            <a href="{{ route('admin.campagnes.index') }}" class="btn btn-secondary">Annuler</a>
+            <a href="{{ route('admin.campagnes.show', $campagne) }}" class="btn btn-secondary">Retour au détail</a>
+            <a href="{{ route('admin.campagnes.index') }}" class="btn btn-outline-secondary">Liste</a>
         </form>
 
         <hr class="my-4">

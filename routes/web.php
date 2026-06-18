@@ -131,6 +131,11 @@ Route::middleware('auth')->group(function () {
         Route::post('campagnes/{campagne}/arreter', [CampagneController::class, 'arreter'])->name('campagnes.arreter');
         Route::post('campagnes/{campagne}/annuler', [CampagneController::class, 'annuler'])->name('campagnes.annuler');
         Route::post('campagnes/{campagne}/reprogrammer', [CampagneController::class, 'reprogrammer'])->name('campagnes.reprogrammer');
+        Route::post('campagnes/{campagne}/dates', [CampagneController::class, 'updateDates'])->name('campagnes.dates.update');
+        Route::post('campagnes/{campagne}/sync-commerciaux', [CampagneController::class, 'syncCommerciaux'])->name('campagnes.sync-commerciaux');
+        Route::post('campagnes/{campagne}/signataires', [CampagneController::class, 'updateSignataires'])->name('campagnes.signataires.update');
+        Route::post('campagnes/{campagne}/republier-contrat', [CampagneController::class, 'republierContrat'])->name('campagnes.republier-contrat');
+        Route::post('campagnes/{campagne}/contrat-reponses/{reponse}/reset', [CampagneController::class, 'resetContratReponse'])->name('campagnes.contrat-reponses.reset');
         Route::post('campagnes/{campagne}/versements', [CampagneAideVersementController::class, 'store'])->name('campagnes.versements.store');
         Route::delete('campagnes/{campagne}/versements/{versement}', [CampagneAideVersementController::class, 'destroy'])->name('campagnes.versements.destroy');
         Route::post('campagnes/{campagne}/contrat-articles', [CampagneContratArticleController::class, 'store'])->name('campagnes.contrat-articles.store');

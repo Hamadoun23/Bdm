@@ -23,6 +23,9 @@ class CampagneDetailService
      */
     public function buildShowData(Campagne $campagne, ?Request $request = null): array
     {
+        Campagne::syncStatuts();
+        $campagne->refresh();
+
         [$preset, $dateDebut, $dateFin] = self::resolvePeriodeFromRequest($request, $campagne);
 
         $campagne->load([
@@ -30,6 +33,28 @@ class CampagneDetailService
             'signatairesContrat.agence', 'contratReponses.user', 'aideVersements.user',
             'contratArticles',
         ]);
+
+        $commerciauxPerimetre = $campagne->queryCommerciauxPerimetre()
+            ->with('agence')
+            ->orderBy('name')
+            ->get();
+
+        $agenceIds = $campagne->idsAgencesPerimetre();
+        $commerciauxCandidats = User::with('agence')
+            ->whereIn('role', ['commercial', 'commercial_telephonique'])
+            ->whereNotNull('agence_id')
+            ->when(! $campagne->toutes_agences, fn ($q) => $q->whereIn('agence_id', $agenceIds))
+            ->orderBy('name')
+            ->get();
+
+        $reponsesParUser = $campagne->contratReponses->keyBy('user_id');
+
+        $nbCommerciauxActifs = $commerciauxPerimetre->where('actif', true)->count();
+        $nbCommerciauxInactifs = $commerciauxPerimetre->where('actif', false)->count();
+
+        $activeTab = in_array($request?->get('tab'), ['pilotage', 'commerciaux', 'contrat', 'aide', 'performances', 'historique'], true)
+            ? $request->get('tab')
+            : 'pilotage';
 
         $campDebut = $campagne->date_debut->copy()->startOfDay();
         $campFin = $campagne->date_fin->copy()->endOfDay();
@@ -117,7 +142,9 @@ class CampagneDetailService
 
         return compact(
             'campagne', 'stats', 'classement', 'primes', 'typesCartes',
-            'preset', 'periode_debut', 'periode_fin', 'telephoniqueCampagne'
+            'preset', 'periode_debut', 'periode_fin', 'telephoniqueCampagne',
+            'commerciauxPerimetre', 'commerciauxCandidats', 'reponsesParUser',
+            'nbCommerciauxActifs', 'nbCommerciauxInactifs', 'activeTab'
         );
     }
 

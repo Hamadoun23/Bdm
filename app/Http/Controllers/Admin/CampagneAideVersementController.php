@@ -34,7 +34,8 @@ class CampagneAideVersementController extends Controller
             'enregistre_par' => auth()->id(),
         ]);
 
-        return back()->with('success', 'Versement enregistré. Le commercial doit confirmer la réception.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'aide'])
+            ->with('success', 'Versement enregistré. Le commercial doit confirmer la réception.');
     }
 
     public function destroy(Campagne $campagne, CampagneAideVersement $versement): RedirectResponse
@@ -47,6 +48,7 @@ class CampagneAideVersementController extends Controller
         }
         $versement->delete();
 
-        return back()->with('success', 'Versement supprimé.');
+        return redirect()->route('admin.campagnes.show', ['campagne' => $campagne, 'tab' => 'aide'])
+            ->with('success', 'Versement supprimé.');
     }
 }

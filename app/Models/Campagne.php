@@ -362,18 +362,19 @@ class Campagne extends Model
     /**
      * Synchronise les statuts et le drapeau {@see $actif} : plusieurs campagnes peuvent être actives en même temps
      * si leurs périodes chevauchent aujourd’hui (sauf arrêt / annulation / fin de période).
+     * Recalcule aussi les statuts après modification manuelle des dates (réouvre une campagne « terminée » repoussée).
      */
     public static function syncStatuts(): void
     {
         $now = Carbon::now()->startOfDay();
 
-        Campagne::whereIn('statut', [self::STATUT_PROGRAMMEE, self::STATUT_EN_COURS])
+        Campagne::whereNotIn('statut', [self::STATUT_ARRETEE, self::STATUT_ANNULEE])
             ->where('date_fin', '<', $now)
             ->update(['statut' => self::STATUT_TERMINEE, 'actif' => false]);
 
         Campagne::query()->update(['actif' => false]);
 
-        Campagne::whereNotIn('statut', [self::STATUT_ARRETEE, self::STATUT_ANNULEE, self::STATUT_TERMINEE])
+        Campagne::whereNotIn('statut', [self::STATUT_ARRETEE, self::STATUT_ANNULEE])
             ->where('date_debut', '<=', $now)
             ->where('date_fin', '>=', $now)
             ->update([
@@ -381,26 +382,38 @@ class Campagne extends Model
                 'actif' => true,
             ]);
 
-        Campagne::where('statut', self::STATUT_PROGRAMMEE)
+        Campagne::whereNotIn('statut', [self::STATUT_ARRETEE, self::STATUT_ANNULEE])
             ->where('date_debut', '>', $now)
-            ->update(['actif' => false]);
+            ->update([
+                'statut' => self::STATUT_PROGRAMMEE,
+                'actif' => false,
+            ]);
 
         self::resynchroniserActifsCommerciauxSelonCampagnesVivantes();
     }
 
-    /** Commerciaux actifs = signataires d’au moins une campagne non terminée / arrêtée (hors fenêtre date_fin). */
+    /**
+     * À appeler après modification des dates ou du périmètre commercial d’une campagne.
+     */
+    public static function apresModificationDatesOuPerimetre(?self $campagne = null): void
+    {
+        self::syncStatuts();
+    }
+
+    /** Commerciaux actifs = engagés sur au moins une campagne non terminée / arrêtée (date_fin ≥ aujourd’hui). */
     public static function resynchroniserActifsCommerciauxSelonCampagnesVivantes(): void
     {
         $now = Carbon::now()->startOfDay();
         $vivantes = self::query()
             ->where('date_fin', '>=', $now)
             ->whereNotIn('statut', [self::STATUT_ARRETEE, self::STATUT_ANNULEE, self::STATUT_TERMINEE])
-            ->with('signatairesContrat')
             ->get();
 
         $actifsIds = collect();
         foreach ($vivantes as $c) {
-            $actifsIds = $actifsIds->merge($c->signatairesContrat->pluck('id'));
+            $actifsIds = $actifsIds->merge(
+                $c->queryCommerciauxPerimetre()->pluck('users.id')
+            );
         }
         $actifsIds = $actifsIds->unique()->filter()->values()->all();
 
@@ -415,6 +428,15 @@ class Campagne extends Model
         if ($aDesactiver !== []) {
             User::whereIn('role', ['commercial', 'commercial_telephonique'])->whereIn('id', $aDesactiver)->update(['actif' => false]);
         }
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (self $campagne) {
+            if ($campagne->wasChanged(['date_debut', 'date_fin'])) {
+                self::syncStatuts();
+            }
+        });
     }
 
     /**
