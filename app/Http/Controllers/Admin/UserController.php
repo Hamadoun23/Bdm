@@ -233,7 +233,16 @@ class UserController extends Controller
         $campagnes = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id')->get();
         $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
 
-        return view('admin.users.transfert-agence', compact('user', 'ventes', 'campagnes', 'agences'));
+        $returnCampagne = null;
+        if ($request->filled('return_campagne')) {
+            $returnCampagne = Campagne::query()->find((int) $request->return_campagne);
+        }
+
+        $modeProfil = $request->query('mode') === 'profil';
+
+        return view('admin.users.transfert-agence', compact(
+            'user', 'ventes', 'campagnes', 'agences', 'returnCampagne', 'modeProfil'
+        ));
     }
 
     public function transfertAgenceApply(Request $request, User $user): RedirectResponse
@@ -283,6 +292,7 @@ class UserController extends Controller
 
             if ($majProfil) {
                 $user->update(['agence_id' => $agenceCibleId]);
+                $this->syncAgencesCampagnesSignataire($user);
             }
 
             if ($snapshotsResult['count'] > 0 || $majProfil) {
@@ -305,7 +315,18 @@ class UserController extends Controller
             $msg[] = $snapshotsResult['count'].' vente(s) réattribuée(s).';
         }
         if ($majProfil) {
-            $msg[] = 'Agence du profil mise à jour.';
+            $msg[] = 'Agence du profil mise à jour — les ventes déjà enregistrées conservent leur agence d’origine.';
+        }
+
+        $success = implode(' ', $msg);
+
+        if ($request->filled('return_campagne')) {
+            return redirect()
+                ->route('admin.campagnes.show', [
+                    'campagne' => (int) $request->return_campagne,
+                    'tab' => 'commerciaux',
+                ])
+                ->with('success', $success);
         }
 
         return redirect()
@@ -315,7 +336,35 @@ class UserController extends Controller
                 'au' => $request->au,
                 'campagne_id' => $request->campagne_id,
                 'agence_id' => $request->agence_id,
+                'return_campagne' => $request->return_campagne,
+                'mode' => $request->mode,
             ], fn ($v) => $v !== null && $v !== ''))
-            ->with('success', implode(' ', $msg));
+            ->with('success', $success);
+    }
+
+    /** Ajoute la nouvelle agence du profil aux campagnes où le commercial est signataire (sans retirer les anciennes). */
+    private function syncAgencesCampagnesSignataire(User $user): void
+    {
+        if (! $user->agence_id) {
+            return;
+        }
+
+        $campagnes = Campagne::query()
+            ->whereHas('signatairesContrat', fn ($q) => $q->where('users.id', $user->id))
+            ->get();
+
+        foreach ($campagnes as $campagne) {
+            $ids = $campagne->agences()->pluck('agences.id')->map(fn ($id) => (int) $id)->all();
+            $idsVentes = Vente::query()
+                ->where('user_id', $user->id)
+                ->where('campagne_id', $campagne->id)
+                ->distinct()
+                ->pluck('agence_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $merged = array_values(array_unique(array_merge($ids, $idsVentes, [(int) $user->agence_id])));
+            $campagne->agences()->sync($merged);
+        }
     }
 }

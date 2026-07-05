@@ -10,24 +10,48 @@
         'au' => request('au'),
         'campagne_id' => request('campagne_id'),
         'agence_id' => request('agence_id'),
+        'return_campagne' => request('return_campagne'),
+        'mode' => request('mode'),
     ], fn ($v) => $v !== null && $v !== '');
+    $majProfilDefault = ($modeProfil ?? false) || old('maj_profil') || old('maj_profil') === '1';
 @endphp
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div>
         <h4 class="mb-0">Transfert d’agence — {{ $displayName }}</h4>
-        <p class="small text-muted mb-0">Réattribuer des ventes vers une autre agence et/ou mettre à jour l’agence du profil pour les prochaines ventes.</p>
+        <p class="small text-muted mb-0">
+            Agence actuelle du profil : <strong>{{ $user->agence->nom ?? '—' }}</strong>
+        </p>
     </div>
-    <a href="{{ route('admin.users.edit', $user) }}" class="btn btn-outline-secondary btn-sm">← Modifier le profil</a>
+    <div class="d-flex flex-wrap gap-2">
+        @if($returnCampagne ?? null)
+            <a href="{{ route('admin.campagnes.show', ['campagne' => $returnCampagne, 'tab' => 'commerciaux']) }}" class="btn btn-outline-secondary btn-sm">← Retour campagne</a>
+        @endif
+        <a href="{{ route('admin.users.edit', $user) }}" class="btn btn-outline-secondary btn-sm">Fiche utilisateur</a>
+    </div>
 </div>
 
 @if(session('success'))
 <div class="alert alert-success">{{ session('success') }}</div>
 @endif
 
+@if($returnCampagne ?? null)
+<div class="alert alert-info py-2 small mb-3">
+    <strong>Changement d’agence (cas le plus fréquent)</strong> — cochez uniquement
+    « Mettre à jour l’agence du profil », choisissez la nouvelle agence, <em>sans</em> cocher de ventes.
+    Les ventes déjà enregistrées restent rattachées à leur agence d’origine ; seules les <strong>prochaines ventes</strong> utiliseront la nouvelle agence.
+</div>
+@endif
+
 <div class="card shadow-sm mb-3">
     <div class="card-header"><strong>Filtres (liste des ventes)</strong></div>
     <div class="card-body">
         <form method="GET" class="row g-2 align-items-end">
+            @if(request('return_campagne'))
+                <input type="hidden" name="return_campagne" value="{{ request('return_campagne') }}">
+            @endif
+            @if(request('mode'))
+                <input type="hidden" name="mode" value="{{ request('mode') }}">
+            @endif
             <div class="col-md-2">
                 <label class="form-label small mb-0">Du</label>
                 <input type="date" name="du" class="form-control form-control-sm" value="{{ request('du') }}">
@@ -66,7 +90,7 @@
     @foreach($qFilters as $k => $v)
         <input type="hidden" name="{{ $k }}" value="{{ $v }}">
     @endforeach
-    <div class="card-header"><strong>Ventes</strong> <span class="text-muted small">({{ $ventes->total() }} au total sur les filtres)</span></div>
+    <div class="card-header"><strong>Ventes existantes</strong> <span class="text-muted small">({{ $ventes->total() }} au total sur les filtres) — cochez seulement si vous voulez aussi déplacer l’historique</span></div>
     <div class="card-body p-0">
         @error('transfert')<div class="alert alert-danger m-3 mb-0">{{ $message }}</div>@enderror
         @error('vente_ids')<div class="alert alert-danger m-3 mb-0">{{ $message }}</div>@enderror
@@ -80,7 +104,7 @@
                         <th>Date</th>
                         <th>Campagne</th>
                         <th>Type</th>
-                        <th>Agence (vente)</th>
+                        <th>Agence (vente — figée)</th>
                         <th class="text-end">#</th>
                     </tr>
                 </thead>
@@ -108,10 +132,10 @@
         </div>
         @endif
     </div>
-    <div class="card-body border-top">
+    <div class="card-body border-top bg-light">
         <div class="row g-3">
             <div class="col-md-6">
-                <label class="form-label">Agence cible *</label>
+                <label class="form-label">Nouvelle agence *</label>
                 <select name="agence_cible_id" class="form-select @error('agence_cible_id') is-invalid @enderror" required>
                     <option value="">— Choisir —</option>
                     @foreach($agences as $a)
@@ -119,22 +143,27 @@
                     @endforeach
                 </select>
                 @error('agence_cible_id')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                <small class="text-muted">Les ventes cochées seront rattachées à cette agence (champ agence sur chaque vente).</small>
             </div>
             <div class="col-md-6">
                 <label class="form-label">Note (journal interne)</label>
                 <textarea name="note" class="form-control" rows="2" maxlength="2000" placeholder="Optionnel">{{ old('note') }}</textarea>
             </div>
             <div class="col-12">
-                <div class="form-check">
+                <div class="form-check mb-2">
                     <input type="hidden" name="maj_profil" value="0">
-                    <input type="checkbox" name="maj_profil" value="1" class="form-check-input" id="maj_profil" @checked(old('maj_profil'))>
-                    <label class="form-check-label" for="maj_profil">Mettre à jour l’agence du profil (prochaines ventes saisies par ce commercial)</label>
+                    <input type="checkbox" name="maj_profil" value="1" class="form-check-input" id="maj_profil" @checked($majProfilDefault)>
+                    <label class="form-check-label" for="maj_profil">
+                        <strong>Mettre à jour l’agence du profil</strong> (prochaines ventes)
+                    </label>
                 </div>
+                <p class="small text-muted mb-0">
+                    Laissez les ventes <em>non cochées</em> pour conserver l’historique sur l’ancienne agence.
+                    Cochez des ventes uniquement si vous souhaitez aussi corriger rétroactivement leur agence.
+                </p>
             </div>
         </div>
         <div class="mt-3">
-            <button type="submit" class="btn btn-primary">Appliquer</button>
+            <button type="submit" class="btn btn-primary">Appliquer le transfert</button>
         </div>
     </div>
 </form>
@@ -156,13 +185,14 @@
             var majProfil = maj && maj.checked;
             if (!anyCb && !majProfil) {
                 e.preventDefault();
-                alert('Cochez au moins une vente et/ou « Mettre à jour l’agence du profil ».');
+                alert('Cochez « Mettre à jour l’agence du profil » et/ou sélectionnez des ventes à réattribuer.');
                 return;
             }
-            if (anyCb || majProfil) {
-                if (!confirm('Confirmer le transfert (réattribution des ventes cochées et/ou mise à jour du profil) ?')) {
-                    e.preventDefault();
-                }
+            var msg = majProfil && !anyCb
+                ? 'Confirmer le changement d’agence du profil ? Les ventes existantes ne seront pas modifiées.'
+                : 'Confirmer le transfert (profil et/ou ventes cochées) ?';
+            if (!confirm(msg)) {
+                e.preventDefault();
             }
         });
     }

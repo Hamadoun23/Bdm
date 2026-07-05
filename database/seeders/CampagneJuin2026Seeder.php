@@ -24,39 +24,68 @@ class CampagneJuin2026Seeder extends Seeder
     private const NOM_CAMPAGNE = 'Juin 2026';
 
     /**
-     * @var list<array{noms: string, prenom: string, agence: string, tel: string}>
+     * Liste campagne Juin 2026 — agences mises à jour (juillet 2026).
+     *
+     * @var list<array{noms: string, prenom: string, agence: string, tel: string, tel_ancien?: string}>
      */
     private const COMMERCIAUX = [
-        ['noms' => 'THERA', 'prenom' => 'Mariam', 'agence' => 'YIRIMADIO', 'tel' => '74082712'],
-        ['noms' => 'NIAMBLE', 'prenom' => 'Aissata N', 'agence' => 'HAMDALLAYE', 'tel' => '66904040'],
-        ['noms' => 'KANSAYE', 'prenom' => 'Diahara', 'agence' => 'KOROFINA', 'tel' => '78522819'],
-        ['noms' => 'DIAKITE', 'prenom' => 'Nagnouma TOURE', 'agence' => 'BOULKASSOUMBOUGOU', 'tel' => '79053641'],
-        ['noms' => 'MAIGA', 'prenom' => 'Adiaratou A', 'agence' => 'AZAR CENTER', 'tel' => '90889198'],
-        ['noms' => 'TANGARA', 'prenom' => 'AMINATA', 'agence' => 'DIBIDA', 'tel' => '71700505'],
-        ['noms' => 'MAIGA', 'prenom' => 'Fatoumata', 'agence' => 'SEMA GESCO', 'tel' => '76636578'],
-        ['noms' => 'SANGARE', 'prenom' => 'Fatimata', 'agence' => 'MISSIRA', 'tel' => '78754962'],
-        ['noms' => 'CAMARA', 'prenom' => 'Ali Badara', 'agence' => 'AP2', 'tel' => '73907530'],
-        ['noms' => 'TOURE', 'prenom' => 'Mary N', 'agence' => 'SEBENIKORO', 'tel' => '69098738'],
-        ['noms' => 'KONATE', 'prenom' => 'Maimouna', 'agence' => 'DJICORONI-PARA', 'tel' => '70179839'],
-        ['noms' => 'FOFANA', 'prenom' => 'Kadiatou', 'agence' => 'FUTURA', 'tel' => '76612042'],
-        ['noms' => 'SAGONO', 'prenom' => 'FATOUMATA', 'agence' => 'DD', 'tel' => '71010050'],
-        ['noms' => 'COULIBALY', 'prenom' => 'Aminata', 'agence' => 'NIAMANA', 'tel' => '71766277'],
-        ['noms' => 'COULIBALY', 'prenom' => 'Awa', 'agence' => 'PME/ PMI', 'tel' => '79790604'],
-        ['noms' => 'TOGOLA', 'prenom' => 'Lassina', 'agence' => 'QUINZAMBOUGOU', 'tel' => '83140127'],
-        ['noms' => 'KANOUTE', 'prenom' => 'Nènè', 'agence' => 'AP 1', 'tel' => '74353690'],
-        ['noms' => 'TRAORE', 'prenom' => 'Adama', 'agence' => 'TOROKORO', 'tel' => '70277320'],
         ['noms' => 'SIDIBE', 'prenom' => 'Djelika KEITA', 'agence' => 'LAFIABOUGOU', 'tel' => '72715555'],
-        ['noms' => 'DIARRE', 'prenom' => 'Assetou Yalcoye', 'agence' => 'SOTUBA', 'tel' => '66986621'],
-        ['noms' => 'DEMBELE', 'prenom' => 'Salimata', 'agence' => 'MORIBABOUGOU', 'tel' => '72789105'],
-        ['noms' => 'THIAM', 'prenom' => 'Fatoumata', 'agence' => 'BACO DJICORONI', 'tel' => '92274352'],
-        ['noms' => 'COULIBALY', 'prenom' => 'Mamadou', 'agence' => 'SOGONIKO', 'tel' => '76411856'],
-        ['noms' => 'GAKOU', 'prenom' => 'Oumar', 'agence' => 'BANCONI RAZEL', 'tel' => '79787541'],
-        ['noms' => 'THIAM', 'prenom' => 'Mohamed Aly', 'agence' => 'SEGOU 2', 'tel' => '70442854'],
-        ['noms' => 'SISSOKO', 'prenom' => 'Djeneba', 'agence' => 'KAYES 1', 'tel' => '69418521'],
-        ['noms' => 'DEMBELE', 'prenom' => 'Karidiata', 'agence' => 'SIKASSO 1', 'tel' => '60625221'],
-        ['noms' => 'SANOGO', 'prenom' => 'Fatoumata', 'agence' => 'KOULIKORO', 'tel' => '92330460'],
-        ['noms' => 'BATHILY', 'prenom' => 'Maimounata', 'agence' => 'KATI', 'tel' => '65893863'],
+        ['noms' => 'DIARRE', 'prenom' => 'Assetou Yalcoye', 'agence' => 'BS', 'tel' => '66986621'],
+        ['noms' => 'KANOUTE', 'prenom' => 'Nènè', 'agence' => 'API', 'tel' => '74353690'],
+        ['noms' => 'COULIBALY', 'prenom' => 'Awa', 'agence' => 'PME / PMI', 'tel' => '79790604'],
         ['noms' => 'KAMATE', 'prenom' => 'Sitan', 'agence' => 'SAN', 'tel' => '90464123'],
+        ['noms' => 'COULIBALY', 'prenom' => 'Aminata', 'agence' => 'NIAMANA', 'tel' => '71766277'],
+        ['noms' => 'SISSOKO', 'prenom' => 'Djeneba', 'agence' => 'KAYES 1', 'tel' => '69418521'],
+        ['noms' => 'CAMARA', 'prenom' => 'Ali Badara', 'agence' => 'AP2', 'tel' => '73907530'],
+        ['noms' => 'KONATE', 'prenom' => 'Maimouna', 'agence' => 'SEBENIKORO', 'tel' => '70179839'],
+        ['noms' => 'FOFANA', 'prenom' => 'Kadiatou', 'agence' => 'HAMDALLAYE', 'tel' => '76612042'],
+        ['noms' => 'TOGORA', 'prenom' => 'Lassina', 'agence' => 'BAGADADJI', 'tel' => '83140127'],
+        ['noms' => 'COULIBALY', 'prenom' => 'Mamadou', 'agence' => 'MAGNAMBOUGOU', 'tel' => '76411856'],
+        ['noms' => 'KANSAYE', 'prenom' => 'Diahara', 'agence' => 'MISSIRA', 'tel' => '78522819'],
+        ['noms' => 'TANGARA', 'prenom' => 'AMINATA', 'agence' => 'DJICORONI-PARA', 'tel' => '71700505'],
+        ['noms' => 'THIAM', 'prenom' => 'Fatoumata', 'agence' => 'BACO DJICORONI', 'tel' => '92274352'],
+        ['noms' => 'TOURE', 'prenom' => 'Mary N', 'agence' => 'DIBIDANI', 'tel' => '69098738'],
+        ['noms' => 'THIAM', 'prenom' => 'Mohamed Aly', 'agence' => 'SEGOU 2', 'tel' => '70442854'],
+        ['noms' => 'NIAMBLE', 'prenom' => 'Aissata N', 'agence' => 'FUTURA', 'tel' => '66904040'],
+        ['noms' => 'GAKOU', 'prenom' => 'Oumar', 'agence' => 'BOULKASSOUMBOUGOU', 'tel' => '79787541'],
+        ['noms' => 'BATHILY', 'prenom' => 'Maimounata', 'agence' => 'KATI', 'tel' => '65893863'],
+        ['noms' => 'DEMBELE', 'prenom' => 'Salimata', 'agence' => 'MORIBABOUGOU', 'tel' => '72189105', 'tel_ancien' => '72789105'],
+        ['noms' => 'THERA', 'prenom' => 'Mariam', 'agence' => 'SOGONIKO', 'tel' => '74082712'],
+        ['noms' => 'SANOGO', 'prenom' => 'FATOUMATA', 'agence' => "N'GOLONINA", 'tel' => '71010050'],
+        ['noms' => 'DEMBELE', 'prenom' => 'Karidiata', 'agence' => 'SIKASSO 1', 'tel' => '60625221'],
+        ['noms' => 'SANGARE', 'prenom' => 'Fatimata', 'agence' => 'SEMA GESCO', 'tel' => '78754962'],
+        ['noms' => 'MAIGA', 'prenom' => 'Adiaratou A', 'agence' => 'YIRIMADIO', 'tel' => '90889198'],
+        ['noms' => 'TRAORE', 'prenom' => 'Adama', 'agence' => 'KALABAN-COURA', 'tel' => '70277320'],
+        ['noms' => 'MAIGA', 'prenom' => 'Fatoumata', 'agence' => 'AZAR CENTER', 'tel' => '76636578'],
+        ['noms' => 'DIAKITE', 'prenom' => 'Nagnouma TOURE', 'agence' => 'KOROFINA', 'tel' => '79053641'],
+        ['noms' => 'SANOGO', 'prenom' => 'Fatoumata', 'agence' => 'KOULIKORO', 'tel' => '92330460'],
+    ];
+
+    /** Synonymes agence → nom canonique déjà en base. */
+    private const AGENCE_ALIASES = [
+        'api' => 'AP 1',
+        'ap 1' => 'AP 1',
+        'ap1' => 'AP 1',
+        'pme / pmi' => 'PME/ PMI',
+        'pme/pmi' => 'PME/ PMI',
+        'pme pmi' => 'PME/ PMI',
+        'niamana' => 'Niamana',
+        'kayes 1' => 'Kayes 1',
+        'sebenikoro' => 'SEBENIKORO',
+        'sogoniko' => 'Sogoniko',
+        'n golonina' => "N'Golonina",
+        'ngolonina' => "N'Golonina",
+        'kalaban coura' => 'Kalaban coura',
+        'kalaban-coura' => 'Kalaban coura',
+        'yirimadio' => 'Yirimadio',
+        'futura' => 'Futura',
+        'hamdallaye' => 'HAMDALLAYE',
+        'san' => 'San',
+        'segou 2' => 'Ségou 2',
+        'koulikoro' => 'Koulikoro',
+        'korofina' => 'Korofina',
+        'baco djicoroni' => 'Baco Djicoroni',
+        'bs' => 'BS',
     ];
 
     public function run(): void
@@ -139,9 +168,16 @@ class CampagneJuin2026Seeder extends Seeder
     private function findOrCreateAgence(string $nom): Agence
     {
         $n = trim($nom);
+        $key = $this->normalizeAgenceKey($n);
+        $canonique = self::AGENCE_ALIASES[$key] ?? $n;
+
         $existing = Agence::query()
-            ->whereRaw('LOWER(TRIM(nom)) = ?', [mb_strtolower($n)])
+            ->whereRaw('LOWER(TRIM(REPLACE(REPLACE(nom, "-", " "), "/", " "))) = ?', [
+                $this->normalizeAgenceKey($canonique),
+            ])
+            ->orWhereRaw('LOWER(TRIM(nom)) = ?', [mb_strtolower($canonique)])
             ->first();
+
         if ($existing) {
             return $existing;
         }
@@ -149,6 +185,14 @@ class CampagneJuin2026Seeder extends Seeder
         $ordre = (int) (Agence::query()->max('ordre') ?? 0) + 1;
 
         return Agence::create(['nom' => $n, 'ordre' => $ordre]);
+    }
+
+    private function normalizeAgenceKey(string $nom): string
+    {
+        $s = mb_strtolower(trim(str_replace(['-', '/'], ' ', $nom)));
+        $s = preg_replace('/\s+/', ' ', $s) ?? $s;
+
+        return str_replace("'", '', $s);
     }
 
     private function normalizePhone(string $raw): string
@@ -181,9 +225,14 @@ class CampagneJuin2026Seeder extends Seeder
         $hash = Hash::make($this->motDePassePourTelephone($telephone));
 
         $user = User::query()
-            ->where(function ($q) use ($telephone, $email) {
+            ->where(function ($q) use ($telephone, $email, $row) {
                 $q->where('telephone', $telephone)
                     ->orWhere('email', $email);
+                if (! empty($row['tel_ancien'])) {
+                    $ancien = $this->normalizePhone($row['tel_ancien']);
+                    $q->orWhere('telephone', $ancien)
+                        ->orWhere('email', $this->emailTechniquePourTelephone($ancien));
+                }
             })
             ->first();
 

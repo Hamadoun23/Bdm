@@ -108,8 +108,9 @@
                             @endif
                         </td>
                         @unless($isDirectionDetail ?? false)
-                        <td>
+                        <td class="text-nowrap">
                             <a href="{{ route('admin.users.edit', $u) }}" class="btn btn-sm btn-outline-secondary">Fiche</a>
+                            <a href="{{ route('admin.users.transfert-agence', ['user' => $u, 'campagne_id' => $campagne->id, 'return_campagne' => $campagne->id, 'mode' => 'profil']) }}" class="btn btn-sm btn-outline-primary" title="Changer l’agence du profil — les ventes passées restent sur l’agence d’origine">Transfert agence</a>
                         </td>
                         @endunless
                     </tr>
