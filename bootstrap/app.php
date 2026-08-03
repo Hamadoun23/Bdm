@@ -20,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Fait confiance au proxy nginx (hôte ou conteneur) en amont pour X-Forwarded-Proto/Host/etc. —
+        // sans ça, derrière un reverse-proxy HTTPS, Laravel génère des URLs d'assets en http:// (contenu
+        // mixte bloqué par le navigateur). L'app n'est jamais exposée directement, seul le proxy y accède.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => CheckRole::class,
         ]);
