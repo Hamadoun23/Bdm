@@ -1,6 +1,9 @@
 export default function AuthCard({ title, subtitle, children }) {
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-12">
+        <div
+            className="flex min-h-screen items-center justify-center bg-gray-50 px-6 py-12"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 3rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 3rem)' }}
+        >
             <div className="w-full max-w-sm">
                 <div className="mb-8 text-center">
                     <img src="/logo/gdamoney.png" alt="Gda Money" className="mx-auto mb-3 h-14 w-14 rounded-xl" />

@@ -47,7 +47,10 @@ export default function Login({ status }) {
             </div>
 
             {/* Formulaire */}
-            <div className="flex w-full flex-col items-center justify-center bg-gray-50 px-6 py-12 lg:w-1/2">
+            <div
+                className="flex w-full flex-col items-center justify-center bg-gray-50 px-6 py-12 lg:w-1/2"
+                style={{ paddingTop: 'calc(env(safe-area-inset-top) + 3rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 3rem)' }}
+            >
                 <div className="w-full max-w-sm">
                     <div className="mb-8 text-center lg:hidden">
                         <img src="/logo/gdamoney.png" alt="Gda Money" className="mx-auto mb-3 h-14 w-14 rounded-xl" />

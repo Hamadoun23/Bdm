@@ -145,7 +145,10 @@ export default function Sidebar({ open, onClose }) {
                     open ? 'translate-x-0' : '-translate-x-full',
                 )}
             >
-                <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-100 px-4">
+                <div
+                    className="flex h-14 shrink-0 items-center justify-between border-b border-gray-100 px-4"
+                    style={{ paddingTop: 'env(safe-area-inset-top)', height: 'calc(3.5rem + env(safe-area-inset-top))' }}
+                >
                     <Brand />
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                         <X size={18} />
@@ -156,7 +159,7 @@ export default function Sidebar({ open, onClose }) {
                         <DrawerItem key={item.label + item.href} item={item} onClick={onClose} />
                     ))}
                 </nav>
-                <div className="border-t border-gray-100 p-3">
+                <div className="border-t border-gray-100 p-3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
                     <div className="flex items-center gap-3 rounded-lg px-2 py-2">
                         <UserAvatar user={user} />
                         <div className="min-w-0 flex-1">

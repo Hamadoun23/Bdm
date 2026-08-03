@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
-import { Menu, Search, Bell, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { ArrowLeft, Menu, Search, Bell, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import Sidebar from '@/Components/Sidebar';
 import { cn } from '@/lib/cn';
 
@@ -25,19 +25,33 @@ export default function AppLayout({ title, subtitle, actions, children }) {
     const { flash, auth } = usePage().props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const firstName = auth.user?.prenom || auth.user?.name;
+    const isDashboard = typeof route === 'function' && route().current('dashboard');
 
     return (
         <div className="min-h-screen bg-[#F6F5F2]">
             <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             <div className="lg:pl-[76px]">
-                <header className="flex items-center gap-4 px-4 py-5 lg:px-8">
+                <header
+                    className="flex items-center gap-3 px-4 py-5 lg:px-8"
+                    style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.25rem)' }}
+                >
                     <button
                         onClick={() => setSidebarOpen(true)}
-                        className="text-gray-500 hover:text-gray-700 lg:hidden"
+                        className="shrink-0 text-gray-500 hover:text-gray-700 lg:hidden"
                     >
                         <Menu size={22} />
                     </button>
+
+                    {!isDashboard && (
+                        <button
+                            onClick={() => window.history.back()}
+                            title="Retour"
+                            className="shrink-0 text-gray-500 hover:text-gray-700"
+                        >
+                            <ArrowLeft size={20} />
+                        </button>
+                    )}
 
                     <div className="min-w-0 flex-1">
                         <h1 className="truncate text-lg font-semibold text-gray-900">
