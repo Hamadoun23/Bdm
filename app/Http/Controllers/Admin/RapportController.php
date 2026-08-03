@@ -34,7 +34,7 @@ class RapportController extends Controller
         private GraphiquesDashboardExportService $graphiquesDashboardExportService
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): \Inertia\Response
     {
         Campagne::syncStatuts();
         /** @var User $user */
@@ -45,18 +45,24 @@ class RapportController extends Controller
 
         $campagnes = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id')->get();
 
-        foreach ($campagnes as $campagne) {
-            $campagne->setAttribute('nb_ventes_rapport', $campagne->ventes()->count());
-            $campagne->setAttribute('dans_perimetre_stats', in_array((int) $campagne->id, $campagneIdsStats, true));
-        }
-
-        return view('rapports.index', compact('campagnes', 'user', 'libelleStatsCampagne', 'campagneIdsStats'));
+        return \Inertia\Inertia::render('Rapports/Index', [
+            'libelleStatsCampagne' => $libelleStatsCampagne,
+            'isAdmin' => $user->isAdmin(),
+            'campagnes' => $campagnes->map(fn (Campagne $c) => [
+                'id' => $c->id,
+                'nom' => $c->nom,
+                'date_debut' => $c->date_debut->format('d/m/Y'),
+                'date_fin' => $c->date_fin->format('d/m/Y'),
+                'statut' => $c->statut_effectif,
+                'nb_ventes' => $c->ventes()->count(),
+            ])->values(),
+        ]);
     }
 
     /**
      * Vue cumulée : ventes, commerciaux, agences, types de carte et clients sur plusieurs campagnes sélectionnées.
      */
-    public function cumul(Request $request): View|RedirectResponse
+    public function cumul(Request $request): \Inertia\Response|RedirectResponse
     {
         $raw = $request->input('campagne_ids', []);
         if (! is_array($raw)) {
@@ -172,27 +178,102 @@ class RapportController extends Controller
         $dateDebutGraph = $campagnes->min(fn (Campagne $c) => $c->date_debut)->copy()->startOfDay();
         $dateFinGraph = $campagnes->max(fn (Campagne $c) => $c->date_fin)->copy()->endOfDay();
 
-        return view('rapports.cumul', compact(
-            'campagnes',
-            'campagneIds',
-            'totalVentes',
-            'nbClientsDistincts',
-            'nbCommerciauxAvecVentes',
-            'nbAgencesAvecVentes',
-            'ventes',
-            'parCommercial',
-            'usersById',
-            'parAgence',
-            'agencesById',
-            'parTypeCarte',
-            'typesById',
-            'clients',
-            'typesCarteKpi',
-            'parSemaine',
-            'parMois',
-            'dateDebutGraph',
-            'dateFinGraph'
-        ));
+        $libelleUser = static function (?User $u): string {
+            if (! $u) {
+                return '—';
+            }
+
+            return $u->prenom ? trim($u->prenom.' '.$u->name) : $u->name;
+        };
+
+        $denomPart = $totalVentes > 0 ? $totalVentes : 1;
+        $commAvecVentes = $parCommercial->filter(fn ($r) => (int) $r->total > 0)->sortByDesc('total')->values();
+        $chartCommerciauxRows = collect();
+        foreach ($commAvecVentes->take(5) as $row) {
+            $u = $usersById->get($row->user_id);
+            $chartCommerciauxRows->push([
+                'label' => $libelleUser($u),
+                'total_ventes' => (int) $row->total,
+                'pct_part' => round(100 * (int) $row->total / $denomPart, 2),
+            ]);
+        }
+        $tailComm = $commAvecVentes->slice(5);
+        if ($tailComm->isNotEmpty()) {
+            $vAutres = (int) $tailComm->sum(fn ($r) => (int) $r->total);
+            $chartCommerciauxRows->push([
+                'label' => 'Autres commerciaux ('.$tailComm->count().')',
+                'total_ventes' => $vAutres,
+                'pct_part' => round(100 * $vAutres / $denomPart, 2),
+            ]);
+        }
+
+        $agAvecVentes = $parAgence->filter(fn ($r) => (int) $r->total > 0)->sortByDesc('total')->values();
+        $chartAgencesRows = collect();
+        foreach ($agAvecVentes->take(10) as $row) {
+            $label = $row->agence_id ? ($agencesById->get($row->agence_id)?->nom ?? '?') : '— Sans agence';
+            $chartAgencesRows->push(['label' => $label, 'total_ventes' => (int) $row->total]);
+        }
+        $tailAg = $agAvecVentes->slice(10);
+        if ($tailAg->isNotEmpty()) {
+            $chartAgencesRows->push([
+                'label' => 'Autres agences ('.$tailAg->count().')',
+                'total_ventes' => (int) $tailAg->sum(fn ($r) => (int) $r->total),
+            ]);
+        }
+
+        $qExport = ['campagne_ids' => $campagneIds];
+
+        return \Inertia\Inertia::render('Rapports/Cumul', [
+            'campagnes' => $campagnes->map(fn (Campagne $c) => [
+                'nom' => $c->nom,
+                'date_debut' => $c->date_debut->format('d/m/Y'),
+                'date_fin' => $c->date_fin->format('d/m/Y'),
+                'statut' => $c->statut_effectif,
+            ])->values(),
+            'periode' => ['debut' => $dateDebutGraph->format('d/m/Y'), 'fin' => $dateFinGraph->format('d/m/Y')],
+            'totalVentes' => $totalVentes,
+            'nbClientsDistincts' => $nbClientsDistincts,
+            'nbCommerciauxAvecVentes' => $nbCommerciauxAvecVentes,
+            'nbAgencesAvecVentes' => $nbAgencesAvecVentes,
+            'typesCarteKpi' => $typesCarteKpi->values(),
+            'chartTypes' => $typesCarteKpi->map(fn ($t) => ['code' => $t['code'], 'total_ventes' => $t['total']])->values(),
+            'chartCommerciaux' => $chartCommerciauxRows->values(),
+            'chartAgences' => $chartAgencesRows->values(),
+            'parCommercial' => $parCommercial->map(fn ($row) => [
+                'nom' => $libelleUser($usersById->get($row->user_id)),
+                'agence_nom' => optional($usersById->get($row->user_id))->agence_id ? ($agencesById->get($usersById->get($row->user_id)->agence_id)?->nom ?? '—') : '—',
+                'total' => (int) $row->total,
+            ])->values(),
+            'parAgence' => $parAgence->map(fn ($row) => [
+                'nom' => $row->agence_id ? ($agencesById->get($row->agence_id)?->nom ?? '?') : '— Sans agence',
+                'total' => (int) $row->total,
+            ])->values(),
+            'clients' => $clients->map(fn (Client $c) => [
+                'id' => $c->id,
+                'nom_complet' => trim($c->prenom.' '.$c->nom),
+                'telephone' => $c->telephone,
+                'ville' => $c->ville,
+                'type_carte' => $c->typeCarte?->code ?? '?',
+                'commercial' => $c->user ? $libelleUser($c->user) : '—',
+                'nb_ventes' => $c->nb_ventes_cumul,
+            ])->values(),
+            'ventes' => [
+                'data' => $ventes->getCollection()->map(fn (Vente $v) => [
+                    'date' => $v->created_at->format('d/m/Y H:i'),
+                    'campagne_nom' => $v->campagne?->nom,
+                    'client_nom' => trim($v->client->prenom.' '.$v->client->nom),
+                    'type_carte' => $v->typeCarte?->code ?? '?',
+                    'commercial' => $libelleUser($v->user),
+                    'agence_nom' => $v->agence->nom ?? '—',
+                    'statut_activation' => $v->statut_activation,
+                ])->values(),
+                'links' => $ventes->linkCollection(),
+                'from' => $ventes->firstItem(),
+                'to' => $ventes->lastItem(),
+                'total' => $ventes->total(),
+            ],
+            'exportQuery' => $qExport,
+        ]);
     }
 
     /**
@@ -642,7 +723,7 @@ class RapportController extends Controller
         return $this->spreadsheetExportService->download($spreadsheet, $fn);
     }
 
-    public function campagneVentes(Request $request, Campagne $campagne): View
+    public function campagneVentes(Request $request, Campagne $campagne): \Inertia\Response
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
 
@@ -673,22 +754,54 @@ class RapportController extends Controller
         $agencesChoix = $campagne->agencesPerimetre();
         $typesChoix = TypeCarte::query()->orderBy('code')->get();
 
-        return view('rapports.campagne-ventes', compact(
-            'campagne',
-            'ventes',
-            'dateDebut',
-            'dateFin',
-            'filtreAgenceId',
-            'filtreUserId',
-            'filtreTypeCarteId',
-            'resumeListe',
-            'commerciauxChoix',
-            'agencesChoix',
-            'typesChoix'
-        ));
+        $qListe = array_filter([
+            'du' => $request->query('du'),
+            'au' => $request->query('au'),
+            'agence_id' => $request->query('agence_id'),
+            'user_id' => $request->query('user_id'),
+            'type_carte_id' => $request->query('type_carte_id'),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return \Inertia\Inertia::render('Rapports/CampagneVentes', [
+            'campagne' => [
+                'id' => $campagne->id,
+                'nom' => $campagne->nom,
+                'date_debut' => $campagne->date_debut->format('d/m/Y'),
+                'date_fin' => $campagne->date_fin->format('d/m/Y'),
+                'date_debut_iso' => $campagne->date_debut->format('Y-m-d'),
+                'date_fin_iso' => $campagne->date_fin->format('Y-m-d'),
+            ],
+            'periode' => ['debut' => $dateDebut->format('d/m/Y'), 'fin' => $dateFin->format('d/m/Y')],
+            'filtres' => [
+                'du' => $request->query('du', $dateDebut->format('Y-m-d')),
+                'au' => $request->query('au', $dateFin->format('Y-m-d')),
+                'agence_id' => $filtreAgenceId,
+                'user_id' => $filtreUserId,
+                'type_carte_id' => $filtreTypeCarteId,
+            ],
+            'agencesChoix' => $agencesChoix->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+            'commerciauxChoix' => $commerciauxChoix->map(fn (User $u) => ['id' => $u->id, 'nom' => $u->prenom ? trim($u->prenom.' '.$u->name) : $u->name])->values(),
+            'typesChoix' => $typesChoix->map(fn (TypeCarte $t) => ['id' => $t->id, 'code' => $t->code])->values(),
+            'resumeListe' => $resumeListe,
+            'qListe' => $qListe,
+            'ventes' => [
+                'data' => $ventes->getCollection()->map(fn (Vente $v) => [
+                    'date' => $v->created_at->format('d/m/Y H:i'),
+                    'client_nom' => trim($v->client->prenom.' '.$v->client->nom),
+                    'type_carte' => $v->typeCarte?->code ?? '?',
+                    'commercial' => $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '—',
+                    'agence_nom' => $v->agence->nom ?? '—',
+                    'statut_activation' => $v->statut_activation,
+                ])->values(),
+                'links' => $ventes->linkCollection(),
+                'from' => $ventes->firstItem(),
+                'to' => $ventes->lastItem(),
+                'total' => $ventes->total(),
+            ],
+        ]);
     }
 
-    public function campagneClients(Request $request, Campagne $campagne): View
+    public function campagneClients(Request $request, Campagne $campagne): \Inertia\Response
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
 
@@ -706,10 +819,20 @@ class RapportController extends Controller
             ->orderBy('prenom')
             ->get();
 
-        return view('rapports.campagne-clients', compact('campagne', 'clients'));
+        return \Inertia\Inertia::render('Rapports/CampagneClients', [
+            'campagne' => ['id' => $campagne->id, 'nom' => $campagne->nom],
+            'clients' => $clients->map(fn (Client $c) => [
+                'id' => $c->id,
+                'nom_complet' => trim($c->prenom.' '.$c->nom),
+                'telephone' => $c->telephone,
+                'ville' => $c->ville,
+                'type_carte' => $c->typeCarte?->code ?? '?',
+                'commercial' => $c->user->name ?? '—',
+            ])->values(),
+        ]);
     }
 
-    public function campagneSynthese(Request $request, Campagne $campagne): View
+    public function campagneSynthese(Request $request, Campagne $campagne): \Inertia\Response
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
         Campagne::syncStatuts();
@@ -725,17 +848,75 @@ class RapportController extends Controller
 
         $agencesChoix = $campagne->agencesPerimetre();
 
-        return view('rapports.campagne-synthese', compact(
-            'campagne',
-            'synthese',
-            'telephonique',
-            'dateDebut',
-            'dateFin',
-            'filtreAgenceId',
-            'filtreUserId',
-            'commerciauxChoix',
-            'agencesChoix'
-        ));
+        $totalVentesCampagne = (int) ($synthese['resume']['total_ventes'] ?? 0);
+        $denomPart = $totalVentesCampagne > 0 ? $totalVentesCampagne : 1;
+
+        $commAvecVentes = $synthese['commerciaux']->filter(fn ($l) => $l['total_ventes'] > 0)->sortByDesc('total_ventes')->values();
+        $chartCommerciauxRows = collect();
+        foreach ($commAvecVentes->take(5) as $l) {
+            $chartCommerciauxRows->push([
+                'label' => $l['user_name'],
+                'total_ventes' => $l['total_ventes'],
+                'pct_part' => round(100 * $l['total_ventes'] / $denomPart, 2),
+            ]);
+        }
+        $tailComm = $commAvecVentes->slice(5);
+        if ($tailComm->isNotEmpty()) {
+            $vAutres = (int) $tailComm->sum('total_ventes');
+            $chartCommerciauxRows->push([
+                'label' => 'Autres commerciaux ('.$tailComm->count().')',
+                'total_ventes' => $vAutres,
+                'pct_part' => round(100 * $vAutres / $denomPart, 2),
+            ]);
+        }
+
+        $agAvecVentes = $synthese['agences']->filter(fn ($l) => $l['total_ventes'] > 0)->sortByDesc('total_ventes')->values();
+        $chartAgencesRows = collect();
+        foreach ($agAvecVentes->take(10) as $l) {
+            $chartAgencesRows->push(['label' => $l['agence_nom'], 'total_ventes' => $l['total_ventes']]);
+        }
+        $tailAg = $agAvecVentes->slice(10);
+        if ($tailAg->isNotEmpty()) {
+            $chartAgencesRows->push([
+                'label' => 'Autres agences ('.$tailAg->count().')',
+                'total_ventes' => (int) $tailAg->sum('total_ventes'),
+            ]);
+        }
+
+        $qExp = array_filter([
+            'du' => $request->query('du'),
+            'au' => $request->query('au'),
+            'agence_id' => $request->query('agence_id'),
+            'user_id' => $request->query('user_id'),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return \Inertia\Inertia::render('Rapports/CampagneSynthese', [
+            'campagne' => [
+                'id' => $campagne->id,
+                'nom' => $campagne->nom,
+                'date_debut_iso' => $campagne->date_debut->format('Y-m-d'),
+                'date_fin_iso' => $campagne->date_fin->format('Y-m-d'),
+            ],
+            'periode' => ['debut' => $dateDebut->format('d/m/Y'), 'fin' => $dateFin->format('d/m/Y')],
+            'filtres' => [
+                'du' => $request->query('du', $dateDebut->format('Y-m-d')),
+                'au' => $request->query('au', $dateFin->format('Y-m-d')),
+                'agence_id' => $filtreAgenceId,
+                'user_id' => $filtreUserId,
+            ],
+            'agencesChoix' => $agencesChoix->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+            'commerciauxChoix' => $commerciauxChoix->map(fn (User $u) => ['id' => $u->id, 'nom' => $u->prenom ? trim($u->prenom.' '.$u->name) : $u->name])->values(),
+            'resume' => $synthese['resume'],
+            'commerciaux' => $synthese['commerciaux']->values(),
+            'agences' => $synthese['agences']->values(),
+            'parTypeCarte' => $synthese['par_type_carte']->values(),
+            'parSemaine' => $synthese['par_semaine']->values(),
+            'parMois' => $synthese['par_mois']->values(),
+            'telephonique' => $telephonique,
+            'chartCommerciaux' => $chartCommerciauxRows->values(),
+            'chartAgences' => $chartAgencesRows->values(),
+            'qExp' => $qExp,
+        ]);
     }
 
     public function exportSyntheseGraphiquesExcel(Request $request, Campagne $campagne): StreamedResponse
@@ -777,7 +958,7 @@ class RapportController extends Controller
     /**
      * Liste paginée des fiches téléphonique rattachées à la campagne (admin & direction).
      */
-    public function campagneReportingTelephonique(Request $request, Campagne $campagne): View
+    public function campagneReportingTelephonique(Request $request, Campagne $campagne): \Inertia\Response
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
         Campagne::syncStatuts();
@@ -818,20 +999,58 @@ class RapportController extends Controller
             $filtreUserId
         );
 
-        return view('rapports.campagne-reporting-telephonique', compact(
-            'campagne',
-            'rapports',
-            'dateDebut',
-            'dateFin',
-            'agencesChoix',
-            'telephoniques',
-            'agregats',
-            'filtreAgenceId',
-            'filtreUserId'
-        ));
+        $qAdminExport = array_filter([
+            'campagne_id' => $campagne->id,
+            'user_id' => $request->query('user_id'),
+            'date_debut' => $request->query('date_debut', $dateDebut->format('Y-m-d')),
+            'date_fin' => $request->query('date_fin', $dateFin->format('Y-m-d')),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return \Inertia\Inertia::render('Rapports/CampagneReportingTelephonique', [
+            'campagne' => [
+                'id' => $campagne->id,
+                'nom' => $campagne->nom,
+                'date_debut_iso' => $campagne->date_debut->format('Y-m-d'),
+                'date_fin_iso' => $campagne->date_fin->format('Y-m-d'),
+            ],
+            'periode' => ['debut' => $dateDebut->format('d/m/Y'), 'fin' => $dateFin->format('d/m/Y')],
+            'filtres' => [
+                'date_debut' => $request->query('date_debut', $dateDebut->format('Y-m-d')),
+                'date_fin' => $request->query('date_fin', $dateFin->format('Y-m-d')),
+                'user_id' => $filtreUserId,
+                'agence_id' => $filtreAgenceId,
+            ],
+            'telephoniques' => $telephoniques->map(fn (User $t) => [
+                'id' => $t->id,
+                'label' => ($t->prenom ? trim($t->prenom.' '.$t->name) : $t->name).' — '.($t->agence?->nom ?? ''),
+            ])->values(),
+            'agencesChoix' => $agencesChoix->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+            'agregats' => $agregats,
+            'isAdmin' => (bool) $request->user()?->isAdmin(),
+            'exportQuery' => $qAdminExport,
+            'rapports' => [
+                'data' => $rapports->getCollection()->map(fn (TelephoniqueRapport $r) => [
+                    'id' => $r->id,
+                    'date' => $r->date_rapport->format('d/m/Y'),
+                    'campagne_nom' => $r->campagne?->nom,
+                    'user_nom' => $r->user?->prenom ? trim($r->user->prenom.' '.$r->user->name) : $r->user?->name,
+                    'agence_nom' => $r->user?->agence?->nom,
+                    'appels_emis' => $r->appels_emis,
+                    'appels_joignables' => $r->appels_joignables,
+                    'appels_non_joignables' => $r->appels_non_joignables,
+                    'clients_interesses_nombre' => $r->clients_interesses_nombre,
+                    'clients_deja_servis_nombre' => $r->clients_deja_servis_nombre,
+                    'cartes_resume' => $r->resumeCartesProposees(),
+                ])->values(),
+                'links' => $rapports->linkCollection(),
+                'from' => $rapports->firstItem(),
+                'to' => $rapports->lastItem(),
+                'total' => $rapports->total(),
+            ],
+        ]);
     }
 
-    public function campagneReportingTelephoniqueShow(Request $request, Campagne $campagne, TelephoniqueRapport $telephoniqueRapport): View
+    public function campagneReportingTelephoniqueShow(Request $request, Campagne $campagne, TelephoniqueRapport $telephoniqueRapport): \Inertia\Response
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
         $this->assertTelephoniqueRapportDansPerimetreCampagne($campagne, $telephoniqueRapport);
@@ -847,7 +1066,50 @@ class RapportController extends Controller
             'agence_id' => $request->get('agence_id'),
         ], fn ($v) => $v !== null && $v !== ''));
 
-        return view('admin.telephonique-rapports.show', compact('telephoniqueRapport', 'typesCartes', 'retourListeCampagne'));
+        $r = $telephoniqueRapport;
+        $cartes = [];
+        if (is_array($r->cartes_proposees)) {
+            foreach ($r->cartes_proposees as $id => $n) {
+                if ((int) $n > 0) {
+                    $cartes[] = ['code' => $typesCartes->get((int) $id)?->code ?? '#'.$id, 'quantite' => (int) $n];
+                }
+            }
+        }
+
+        return \Inertia\Inertia::render('Admin/TelephoniqueRapports/Show', [
+            'backUrl' => $retourListeCampagne,
+            'rapport' => [
+                'user_nom' => $r->user?->prenom ? trim($r->user->prenom.' '.$r->user->name) : $r->user?->name,
+                'date_rapport' => $r->date_rapport->format('d/m/Y'),
+                'campagne_nom' => $r->campagne?->nom,
+                'agence_nom' => $r->user?->agence?->nom,
+                'created_at' => $r->created_at?->format('d/m/Y H:i'),
+                'coherent' => $r->njAnalyseCoherente(),
+                'somme_nj_motifs' => $r->sommeNjMotifs(),
+                'appels_emis' => $r->appels_emis,
+                'appels_joignables' => $r->appels_joignables,
+                'appels_non_joignables' => $r->appels_non_joignables,
+                'appels_non_joignables_calcule' => max(0, $r->appels_emis - $r->appels_joignables),
+                'taux_joignabilite' => $r->taux_joignabilite !== null
+                    ? number_format((float) $r->taux_joignabilite, 2, ',', ' ').' %'
+                    : ($r->appels_emis > 0 ? number_format($r->appels_joignables / $r->appels_emis * 100, 2, ',', ' ').' % (recalculé)' : null),
+                'clients_interesses_nombre' => $r->clients_interesses_nombre,
+                'clients_interesses_pct' => $r->clients_interesses_pct !== null
+                    ? number_format((float) $r->clients_interesses_pct, 2, ',', ' ').' % (base)'
+                    : ($r->pctInteressesCalcule() !== null ? number_format($r->pctInteressesCalcule(), 2, ',', ' ').' % (sur appels émis)' : null),
+                'clients_deja_servis_nombre' => $r->clients_deja_servis_nombre,
+                'clients_deja_servis_pct' => $r->clients_deja_servis_pct !== null
+                    ? number_format((float) $r->clients_deja_servis_pct, 2, ',', ' ').' % (base)'
+                    : ($r->pctDejaServisCalcule() !== null ? number_format($r->pctDejaServisCalcule(), 2, ',', ' ').' % (sur appels émis)' : null),
+                'cartes' => $cartes,
+                'cartes_resume' => $r->resumeCartesProposees(),
+                'nj_repondeur' => $r->nj_repondeur,
+                'nj_numero_errone' => $r->nj_numero_errone,
+                'nj_hors_reseau' => $r->nj_hors_reseau,
+                'nj_autres_nombre' => $r->nj_autres_nombre,
+                'nj_autres_precision' => $r->nj_autres_precision,
+            ],
+        ]);
     }
 
     public function exportCampagne(Request $request, Campagne $campagne): StreamedResponse

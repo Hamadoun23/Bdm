@@ -22,7 +22,7 @@ class ResetBusinessDataSeeder extends Seeder
     {
         $this->command->info('Réinitialisation des données métier (utilisateurs et agences conservés)...');
 
-        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        Schema::disableForeignKeyConstraints();
 
         if (Schema::hasTable('reclamations')) {
             DB::table('reclamations')->truncate();
@@ -35,7 +35,7 @@ class ResetBusinessDataSeeder extends Seeder
         Campagne::query()->delete();
         TypeCarte::query()->delete();
 
-        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        Schema::enableForeignKeyConstraints();
 
         foreach ([
             ['code' => 'ADAN', 'actif' => true],

@@ -33,7 +33,10 @@ class VenteController extends Controller
         }
 
         Campagne::syncStatuts();
-        $idsCampagnesOuvertes = Campagne::getActivesPourAgence((int) $user->agence_id)->pluck('id')->all();
+        $idsCampagnesOuvertes = Campagne::getActivesPourAgence((int) $user->agence_id)
+            ->where('type', Campagne::TYPE_VENTE_CARTE)
+            ->filter(fn (Campagne $c) => $c->estEngageCommercial($user->id))
+            ->pluck('id')->all();
         if ($idsCampagnesOuvertes === []) {
             return response()->json([
                 'success' => false,

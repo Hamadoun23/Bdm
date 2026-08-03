@@ -7,20 +7,27 @@ use App\Models\TypeCarte;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class TypeCarteController extends Controller
 {
-    public function index(): View
+    public function index(): Response
     {
         $types = TypeCarte::orderBy('code')->get();
 
-        return view('admin.types_cartes.index', compact('types'));
+        return Inertia::render('Admin/TypesCartes/Index', [
+            'types' => $types->map(fn (TypeCarte $t) => [
+                'id' => $t->id,
+                'code' => $t->code,
+                'actif' => (bool) $t->actif,
+            ])->values(),
+        ]);
     }
 
-    public function create(): View
+    public function create(): Response
     {
-        return view('admin.types_cartes.create');
+        return Inertia::render('Admin/TypesCartes/Create');
     }
 
     public function store(Request $request): RedirectResponse
@@ -46,9 +53,15 @@ class TypeCarteController extends Controller
         return redirect()->route('admin.types-cartes.index')->with('success', 'Type de carte créé.');
     }
 
-    public function edit(TypeCarte $types_carte): View
+    public function edit(TypeCarte $types_carte): Response
     {
-        return view('admin.types_cartes.edit', ['typeCarte' => $types_carte]);
+        return Inertia::render('Admin/TypesCartes/Edit', [
+            'typeCarte' => [
+                'id' => $types_carte->id,
+                'code' => $types_carte->code,
+                'actif' => (bool) $types_carte->actif,
+            ],
+        ]);
     }
 
     public function update(Request $request, TypeCarte $types_carte): RedirectResponse

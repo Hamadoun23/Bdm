@@ -16,7 +16,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 use InvalidArgumentException;
 
 class UserController extends Controller
@@ -25,7 +26,7 @@ class UserController extends Controller
         private TransfertVentesAgenceService $transfertVentesAgenceService
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): Response
     {
         $query = User::with('agence')->whereIn('role', ['commercial', 'commercial_telephonique', 'direction']);
 
@@ -55,7 +56,26 @@ class UserController extends Controller
             $contratParUser[$u->id] = $this->contratStatutPourCampagneActive($u);
         }
 
-        return view('admin.users.index', compact('users', 'contratParUser'));
+        return Inertia::render('Admin/Users/Index', [
+            'filters' => $request->only(['q', 'role', 'contrat']),
+            'users' => [
+                'data' => $users->getCollection()->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'nom_complet' => $u->prenom ? trim($u->prenom.' '.$u->name) : $u->name,
+                    'telephone' => $u->telephone,
+                    'email' => $u->email,
+                    'role' => $u->role,
+                    'contrat_statut' => $contratParUser[$u->id] ?? null,
+                    'actif' => (bool) $u->actif,
+                    'agence_nom' => $u->agence?->nom,
+                    'is_self' => $u->id === $request->user()?->id,
+                ])->values(),
+                'links' => $users->linkCollection(),
+                'from' => $users->firstItem(),
+                'to' => $users->lastItem(),
+                'total' => $users->total(),
+            ],
+        ]);
     }
 
     /**
@@ -106,11 +126,13 @@ class UserController extends Controller
         return $r?->statut ?? 'en_attente';
     }
 
-    public function create(): View
+    public function create(): Response
     {
         $agences = Agence::orderBy('nom')->get();
 
-        return view('admin.users.create', compact('agences'));
+        return Inertia::render('Admin/Users/Create', [
+            'agences' => $agences->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -150,11 +172,26 @@ class UserController extends Controller
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé.');
     }
 
-    public function edit(User $user): View
+    public function edit(User $user): Response
     {
         $agences = Agence::orderBy('nom')->get();
 
-        return view('admin.users.edit', compact('user', 'agences'));
+        return Inertia::render('Admin/Users/Edit', [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'prenom' => $user->prenom,
+                'telephone' => $user->telephone,
+                'email' => $user->email,
+                'role' => $user->role,
+                'agence_id' => $user->agence_id,
+                'actif' => (bool) $user->actif,
+                'adresse_contrat' => $user->adresse_contrat,
+                'piece_identite_ref' => $user->piece_identite_ref,
+                'is_commercial_ou_telephonique' => $user->isCommercial() || $user->isCommercialTelephonique(),
+            ],
+            'agences' => $agences->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+        ]);
     }
 
     public function update(Request $request, User $user): RedirectResponse
@@ -205,7 +242,7 @@ class UserController extends Controller
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur supprimé.');
     }
 
-    public function transfertAgenceForm(Request $request, User $user): View
+    public function transfertAgenceForm(Request $request, User $user): Response
     {
         if (! $user->isCommercial() && ! $user->isCommercialTelephonique()) {
             abort(404);
@@ -240,9 +277,46 @@ class UserController extends Controller
 
         $modeProfil = $request->query('mode') === 'profil';
 
-        return view('admin.users.transfert-agence', compact(
-            'user', 'ventes', 'campagnes', 'agences', 'returnCampagne', 'modeProfil'
-        ));
+        $qFilters = array_filter([
+            'du' => $request->query('du'),
+            'au' => $request->query('au'),
+            'campagne_id' => $request->query('campagne_id'),
+            'agence_id' => $request->query('agence_id'),
+            'return_campagne' => $request->query('return_campagne'),
+            'mode' => $request->query('mode'),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return Inertia::render('Admin/Users/TransfertAgence', [
+            'user' => [
+                'id' => $user->id,
+                'nom_complet' => trim(($user->prenom ? $user->prenom.' ' : '').$user->name),
+                'agence_nom' => $user->agence?->nom,
+            ],
+            'ventes' => [
+                'data' => $ventes->getCollection()->map(fn (Vente $v) => [
+                    'id' => $v->id,
+                    'date' => $v->created_at->format('d/m/Y H:i'),
+                    'campagne_nom' => $v->campagne?->nom,
+                    'type_carte_code' => $v->typeCarte?->code,
+                    'agence_nom' => $v->agence?->nom,
+                ])->values(),
+                'links' => $ventes->linkCollection(),
+                'from' => $ventes->firstItem(),
+                'to' => $ventes->lastItem(),
+                'total' => $ventes->total(),
+            ],
+            'campagnes' => $campagnes->map(fn (Campagne $c) => ['id' => $c->id, 'nom' => $c->nom])->values(),
+            'agences' => $agences->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+            'returnCampagne' => $returnCampagne ? ['id' => $returnCampagne->id, 'nom' => $returnCampagne->nom] : null,
+            'modeProfil' => $modeProfil,
+            'filters' => [
+                'du' => $request->query('du', ''),
+                'au' => $request->query('au', ''),
+                'campagne_id' => $request->query('campagne_id', ''),
+                'agence_id' => $request->query('agence_id', ''),
+            ],
+            'qFilters' => $qFilters,
+        ]);
     }
 
     public function transfertAgenceApply(Request $request, User $user): RedirectResponse

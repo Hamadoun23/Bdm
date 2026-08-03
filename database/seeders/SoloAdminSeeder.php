@@ -18,7 +18,7 @@ class SoloAdminSeeder extends Seeder
     {
         $this->command->info('Vidage complet — recréation des comptes administrateurs (login par nom).');
 
-        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        Schema::disableForeignKeyConstraints();
 
         if (Schema::hasTable('reclamations')) {
             DB::table('reclamations')->truncate();
@@ -63,7 +63,7 @@ class SoloAdminSeeder extends Seeder
             DB::table('password_reset_tokens')->truncate();
         }
 
-        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        Schema::enableForeignKeyConstraints();
 
         /** @var list<array{name: string, password: string}> */
         $admins = [

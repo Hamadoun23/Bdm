@@ -20,7 +20,7 @@ class FreshMinimalSeeder extends Seeder
     {
         $this->command->info('Vidage de la base (données métier + utilisateurs + agences)...');
 
-        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        Schema::disableForeignKeyConstraints();
 
         if (Schema::hasTable('reclamations')) {
             DB::table('reclamations')->truncate();
@@ -65,7 +65,7 @@ class FreshMinimalSeeder extends Seeder
             DB::table('password_reset_tokens')->truncate();
         }
 
-        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        Schema::enableForeignKeyConstraints();
 
         foreach ([
             ['code' => 'ADAN', 'actif' => true],

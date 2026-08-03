@@ -218,6 +218,11 @@ class CampagneRapportService
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
+            } elseif ($driver === 'pgsql') {
+                $rows = $q->selectRaw("to_char(ventes.created_at, 'IYYY-\"W\"IW') as periode_cle, COUNT(ventes.id) as cnt")
+                    ->groupBy('periode_cle')
+                    ->orderBy('periode_cle')
+                    ->get();
             } else {
                 $rows = $q->selectRaw("strftime('%Y-W%W', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt")
                     ->groupBy('periode_cle')
@@ -227,6 +232,11 @@ class CampagneRapportService
         } else {
             if ($driver === 'mysql') {
                 $rows = $q->selectRaw("DATE_FORMAT(ventes.created_at, '%Y-%m') as periode_cle, COUNT(ventes.id) as cnt")
+                    ->groupBy('periode_cle')
+                    ->orderBy('periode_cle')
+                    ->get();
+            } elseif ($driver === 'pgsql') {
+                $rows = $q->selectRaw("to_char(ventes.created_at, 'YYYY-MM') as periode_cle, COUNT(ventes.id) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
@@ -259,7 +269,7 @@ class CampagneRapportService
     /**
      * Libellé lisible pour une clé de semaine :
      * — MySQL YEARWEEK(d, 3) : entier AAAASS (ex. 202614 → 2026, semaine ISO 14) ;
-     * — SQLite strftime('%Y-W%W') : ex. 2026-W14.
+     * — Postgres to_char(d, 'IYYY-"W"IW') et SQLite strftime('%Y-W%W') : ex. 2026-W14.
      */
     private function libelleSemaineIso(string $cle): string
     {

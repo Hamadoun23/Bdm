@@ -13,7 +13,8 @@ use App\Services\SpreadsheetExportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -24,7 +25,7 @@ class TelephoniqueRapportController extends Controller
         private CampagneRapportService $campagneRapportService
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): InertiaResponse
     {
         $baseQuery = $this->telephoniqueRapportsQueryFiltree($request);
         $totauxListe = $this->campagneRapportService->totauxTelephoniqueListe($baseQuery);
@@ -44,15 +45,88 @@ class TelephoniqueRapportController extends Controller
             ? null
             : CampagneStatsScope::libelle(null);
 
-        return view('admin.telephonique-rapports.index', compact('rapports', 'telephoniques', 'campagnes', 'totauxListe', 'libelleStatsCampagne'));
+        return Inertia::render('Admin/TelephoniqueRapports/Index', [
+            'filters' => $request->only(['user_id', 'campagne_id', 'date_debut', 'date_fin']),
+            'libelleStatsCampagne' => $libelleStatsCampagne,
+            'telephoniques' => $telephoniques->map(fn (User $t) => [
+                'id' => $t->id,
+                'label' => ($t->prenom ? trim($t->prenom.' '.$t->name) : $t->name).' — '.($t->agence?->nom ?? ''),
+            ])->values(),
+            'campagnes' => $campagnes->map(fn (Campagne $c) => [
+                'id' => $c->id,
+                'label' => $c->nom.' ('.$c->date_debut->format('d/m/y').'–'.$c->date_fin->format('d/m/y').')',
+            ])->values(),
+            'totauxListe' => $totauxListe,
+            'rapports' => [
+                'data' => $rapports->getCollection()->map(fn (TelephoniqueRapport $r) => [
+                    'id' => $r->id,
+                    'date' => $r->date_rapport->format('d/m/Y'),
+                    'campagne_nom' => $r->campagne?->nom,
+                    'user_nom' => $r->user?->prenom ? trim($r->user->prenom.' '.$r->user->name) : $r->user?->name,
+                    'agence_nom' => $r->user?->agence?->nom,
+                    'appels_emis' => $r->appels_emis,
+                    'appels_joignables' => $r->appels_joignables,
+                    'appels_non_joignables' => $r->appels_non_joignables,
+                    'clients_interesses_nombre' => $r->clients_interesses_nombre,
+                    'clients_deja_servis_nombre' => $r->clients_deja_servis_nombre,
+                    'cartes_resume' => $r->resumeCartesProposees(),
+                ])->values(),
+                'links' => $rapports->linkCollection(),
+                'from' => $rapports->firstItem(),
+                'to' => $rapports->lastItem(),
+                'total' => $rapports->total(),
+            ],
+        ]);
     }
 
-    public function show(TelephoniqueRapport $telephoniqueRapport): View
+    public function show(TelephoniqueRapport $telephoniqueRapport): InertiaResponse
     {
         $telephoniqueRapport->load(['user.agence', 'campagne']);
         $typesCartes = TypeCarte::query()->orderBy('code')->get()->keyBy('id');
+        $r = $telephoniqueRapport;
 
-        return view('admin.telephonique-rapports.show', compact('telephoniqueRapport', 'typesCartes'));
+        $cartes = [];
+        if (is_array($r->cartes_proposees)) {
+            foreach ($r->cartes_proposees as $id => $n) {
+                if ((int) $n > 0) {
+                    $cartes[] = ['code' => $typesCartes->get((int) $id)?->code ?? '#'.$id, 'quantite' => (int) $n];
+                }
+            }
+        }
+
+        return Inertia::render('Admin/TelephoniqueRapports/Show', [
+            'rapport' => [
+                'user_nom' => $r->user?->prenom ? trim($r->user->prenom.' '.$r->user->name) : $r->user?->name,
+                'date_rapport' => $r->date_rapport->format('d/m/Y'),
+                'campagne_nom' => $r->campagne?->nom,
+                'agence_nom' => $r->user?->agence?->nom,
+                'created_at' => $r->created_at?->format('d/m/Y H:i'),
+                'coherent' => $r->njAnalyseCoherente(),
+                'somme_nj_motifs' => $r->sommeNjMotifs(),
+                'appels_emis' => $r->appels_emis,
+                'appels_joignables' => $r->appels_joignables,
+                'appels_non_joignables' => $r->appels_non_joignables,
+                'appels_non_joignables_calcule' => max(0, $r->appels_emis - $r->appels_joignables),
+                'taux_joignabilite' => $r->taux_joignabilite !== null
+                    ? number_format((float) $r->taux_joignabilite, 2, ',', ' ').' %'
+                    : ($r->appels_emis > 0 ? number_format($r->appels_joignables / $r->appels_emis * 100, 2, ',', ' ').' % (recalculé)' : null),
+                'clients_interesses_nombre' => $r->clients_interesses_nombre,
+                'clients_interesses_pct' => $r->clients_interesses_pct !== null
+                    ? number_format((float) $r->clients_interesses_pct, 2, ',', ' ').' % (base)'
+                    : ($r->pctInteressesCalcule() !== null ? number_format($r->pctInteressesCalcule(), 2, ',', ' ').' % (sur appels émis)' : null),
+                'clients_deja_servis_nombre' => $r->clients_deja_servis_nombre,
+                'clients_deja_servis_pct' => $r->clients_deja_servis_pct !== null
+                    ? number_format((float) $r->clients_deja_servis_pct, 2, ',', ' ').' % (base)'
+                    : ($r->pctDejaServisCalcule() !== null ? number_format($r->pctDejaServisCalcule(), 2, ',', ' ').' % (sur appels émis)' : null),
+                'cartes' => $cartes,
+                'cartes_resume' => $r->resumeCartesProposees(),
+                'nj_repondeur' => $r->nj_repondeur,
+                'nj_numero_errone' => $r->nj_numero_errone,
+                'nj_hors_reseau' => $r->nj_hors_reseau,
+                'nj_autres_nombre' => $r->nj_autres_nombre,
+                'nj_autres_precision' => $r->nj_autres_precision,
+            ],
+        ]);
     }
 
     public function export(Request $request): StreamedResponse

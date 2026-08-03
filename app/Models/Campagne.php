@@ -21,8 +21,12 @@ class Campagne extends Model
 
     public const STATUT_TERMINEE = 'terminee';
 
+    public const TYPE_VENTE_CARTE = 'vente_carte';
+
+    public const TYPE_ENROLEMENT_APP = 'enrolement_app';
+
     protected $fillable = [
-        'nom', 'date_debut', 'date_fin',
+        'nom', 'type', 'date_debut', 'date_fin',
         'prime_meilleur_vendeur', 'actif',
         'statut', 'toutes_agences',
         'remise_pourcentage',
@@ -66,6 +70,11 @@ class Campagne extends Model
         return $this->hasMany(Vente::class);
     }
 
+    public function enrolements(): HasMany
+    {
+        return $this->hasMany(EnrolementClient::class);
+    }
+
     public function telephoniqueRapports(): HasMany
     {
         return $this->hasMany(TelephoniqueRapport::class);
@@ -89,6 +98,12 @@ class Campagne extends Model
         }
 
         return $this->statut_effectif === self::STATUT_EN_COURS;
+    }
+
+    /** Alias type-agnostique de {@see estOuverteAuxVentes()} — la logique est en réalité indépendante du type de campagne. */
+    public function estOuverte(int $agenceId): bool
+    {
+        return $this->estOuverteAuxVentes($agenceId);
     }
 
     /** Commerciaux explicitement choisis pour l'aide hebdomadaire (si « pas tous »). */
@@ -152,6 +167,21 @@ class Campagne extends Model
     public function idsAgencesPerimetre(): array
     {
         return $this->agencesPerimetre()->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /** Le commercial fait-il partie du périmètre engagé de cette campagne (cf. queryCommerciauxPerimetre) ? */
+    public function estEngageCommercial(int $userId): bool
+    {
+        return $this->queryCommerciauxPerimetre()->where('users.id', $userId)->exists();
+    }
+
+    /** Le commercial a-t-il explicitement accepté le contrat de prestation de cette campagne ? */
+    public function commercialAAccepteContrat(int $userId): bool
+    {
+        return $this->contratReponses()
+            ->where('user_id', $userId)
+            ->where('statut', ContratPrestationReponse::STATUT_ACCEPTE)
+            ->exists();
     }
 
     /**

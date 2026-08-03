@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\UserLoginLog;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class UserLoginLogController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): Response
     {
         $query = UserLoginLog::query()->with('user')->orderByDesc('logged_in_at');
 
@@ -28,6 +30,27 @@ class UserLoginLogController extends Controller
         $logs = $query->paginate(40)->withQueryString();
         $utilisateurs = User::query()->orderBy('name')->orderBy('prenom')->get();
 
-        return view('admin.login-logs.index', compact('logs', 'utilisateurs'));
+        return Inertia::render('Admin/LoginLogs/Index', [
+            'filters' => $request->only(['user_id', 'date_debut', 'date_fin']),
+            'utilisateurs' => $utilisateurs->map(fn (User $u) => [
+                'id' => $u->id,
+                'label' => ($u->prenom ? trim($u->prenom.' '.$u->name) : $u->name).' — '.$u->role.($u->telephone ? " ({$u->telephone})" : ''),
+            ])->values(),
+            'logs' => [
+                'data' => $logs->getCollection()->map(fn (UserLoginLog $log) => [
+                    'id' => $log->id,
+                    'date' => $log->logged_in_at->format('d/m/Y H:i:s'),
+                    'user_nom' => $log->user?->prenom ? trim($log->user->prenom.' '.$log->user->name) : $log->user?->name,
+                    'role' => $log->user?->role,
+                    'ip' => $log->ip_address,
+                    'user_agent' => Str::limit($log->user_agent, 80),
+                    'user_agent_full' => $log->user_agent,
+                ])->values(),
+                'links' => $logs->linkCollection(),
+                'from' => $logs->firstItem(),
+                'to' => $logs->lastItem(),
+                'total' => $logs->total(),
+            ],
+        ]);
     }
 }

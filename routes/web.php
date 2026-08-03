@@ -9,10 +9,12 @@ use App\Http\Controllers\Admin\TelephoniqueRapportController as AdminTelephoniqu
 use App\Http\Controllers\Admin\TypeCarteController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UserLoginLogController;
+use App\Http\Controllers\Api\EnrolementController as ApiEnrolementController;
 use App\Http\Controllers\Api\VenteController;
 use App\Http\Controllers\Clients\ClientController as ClientsClientController;
 use App\Http\Controllers\Commercial\ClientController as CommercialClientController;
 use App\Http\Controllers\Commercial\ContratPrestationController;
+use App\Http\Controllers\Commercial\EnrolementController as CommercialEnrolementController;
 use App\Http\Controllers\Commercial\TelephoniqueRapportController;
 use App\Http\Controllers\Commercial\VenteController as CommercialVenteController;
 use App\Http\Controllers\DashboardController;
@@ -63,6 +65,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/ventes/create', [CommercialVenteController::class, 'create'])->name('ventes.create')->middleware('role:commercial');
     Route::delete('/ventes/{vente}', [CommercialVenteController::class, 'destroy'])->name('ventes.destroy')->middleware('role:commercial');
     Route::post('/api/ventes', [VenteController::class, 'store'])->name('api.ventes.store')->middleware('role:commercial');
+
+    // Enrôlement clients BDM (app mobile) : commerciaux + lecture admin/direction
+    Route::get('/enrolements', [CommercialEnrolementController::class, 'index'])->name('enrolements.index')->middleware('role:admin,direction,commercial');
+    Route::get('/enrolements/create', [CommercialEnrolementController::class, 'create'])->name('enrolements.create')->middleware('role:commercial');
+    Route::delete('/enrolements/{enrolement}', [CommercialEnrolementController::class, 'destroy'])->name('enrolements.destroy')->middleware('role:commercial');
+    Route::post('/api/enrolements', [ApiEnrolementController::class, 'store'])->name('api.enrolements.store')->middleware('role:commercial');
 
     Route::middleware('role:commercial')->group(function () {
         Route::get('/mes-clients/{client}/modifier', [CommercialClientController::class, 'edit'])->name('commercial.clients.edit');
@@ -134,6 +142,8 @@ Route::middleware('auth')->group(function () {
         Route::post('campagnes/{campagne}/dates', [CampagneController::class, 'updateDates'])->name('campagnes.dates.update');
         Route::post('campagnes/{campagne}/sync-commerciaux', [CampagneController::class, 'syncCommerciaux'])->name('campagnes.sync-commerciaux');
         Route::post('campagnes/{campagne}/signataires', [CampagneController::class, 'updateSignataires'])->name('campagnes.signataires.update');
+        Route::post('campagnes/import-commerciaux/preview', [CampagneController::class, 'previsualiserImportCommerciaux'])->name('campagnes.import-commerciaux.preview');
+        Route::post('campagnes/{campagne}/import-commerciaux', [CampagneController::class, 'importCommerciaux'])->name('campagnes.import-commerciaux');
         Route::post('campagnes/{campagne}/republier-contrat', [CampagneController::class, 'republierContrat'])->name('campagnes.republier-contrat');
         Route::post('campagnes/{campagne}/contrat-reponses/{reponse}/reset', [CampagneController::class, 'resetContratReponse'])->name('campagnes.contrat-reponses.reset');
         Route::post('campagnes/{campagne}/versements', [CampagneAideVersementController::class, 'store'])->name('campagnes.versements.store');

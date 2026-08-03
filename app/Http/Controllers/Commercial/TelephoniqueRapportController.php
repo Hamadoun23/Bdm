@@ -14,7 +14,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -25,7 +26,7 @@ class TelephoniqueRapportController extends Controller
         private CampagneRapportService $campagneRapportService
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): Response
     {
         $user = $request->user();
         $agenceId = $user->agence_id ? (int) $user->agence_id : null;
@@ -39,10 +40,30 @@ class TelephoniqueRapportController extends Controller
 
         $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId);
 
-        return view('commercial.telephonique.index', compact('rapports', 'totauxListe', 'libelleStatsCampagne'));
+        return Inertia::render('Commercial/Telephonique/Index', [
+            'libelleStatsCampagne' => $libelleStatsCampagne,
+            'totauxListe' => $totauxListe,
+            'rapports' => [
+                'data' => $rapports->getCollection()->map(fn (TelephoniqueRapport $r) => [
+                    'id' => $r->id,
+                    'date_iso' => $r->date_rapport->format('Y-m-d'),
+                    'date' => $r->date_rapport->format('d/m/Y'),
+                    'appels_emis' => $r->appels_emis,
+                    'appels_joignables' => $r->appels_joignables,
+                    'appels_non_joignables' => $r->appels_non_joignables,
+                    'taux_joignabilite' => $r->taux_joignabilite !== null ? number_format((float) $r->taux_joignabilite, 2, ',', ' ').' %' : null,
+                    'clients_interesses_nombre' => $r->clients_interesses_nombre,
+                    'peut_modifier' => $r->peutEtreModifieOuSupprime(),
+                ])->values(),
+                'links' => $rapports->linkCollection(),
+                'from' => $rapports->firstItem(),
+                'to' => $rapports->lastItem(),
+                'total' => $rapports->total(),
+            ],
+        ]);
     }
 
-    public function create(Request $request): View
+    public function create(Request $request): Response
     {
         Campagne::syncStatuts();
         $user = $request->user();
@@ -57,11 +78,26 @@ class TelephoniqueRapportController extends Controller
             ? $campagneActive->typesCartesPourReportingTelephonique()
             : collect();
 
-        return view('commercial.telephonique.form', [
-            'rapport' => $rapport,
+        $rapportVerrouille = $rapport && ! $rapport->peutEtreModifieOuSupprime();
+
+        return Inertia::render('Commercial/Telephonique/Form', [
             'dateRapport' => $date,
-            'campagneActive' => $campagneActive,
-            'typesCampagne' => $typesCampagne,
+            'campagneActiveNom' => $campagneActive?->nom,
+            'rapportVerrouille' => $rapportVerrouille,
+            'typesCampagne' => $typesCampagne->map(fn (TypeCarte $t) => ['id' => $t->id, 'code' => $t->code])->values(),
+            'rapport' => $rapport ? [
+                'appels_emis' => $rapport->appels_emis,
+                'appels_joignables' => $rapport->appels_joignables,
+                'taux_joignabilite' => $rapport->taux_joignabilite,
+                'clients_interesses_nombre' => $rapport->clients_interesses_nombre,
+                'clients_deja_servis_nombre' => $rapport->clients_deja_servis_nombre,
+                'nj_repondeur' => $rapport->nj_repondeur,
+                'nj_numero_errone' => $rapport->nj_numero_errone,
+                'nj_hors_reseau' => $rapport->nj_hors_reseau,
+                'nj_autres_nombre' => $rapport->nj_autres_nombre,
+                'nj_autres_precision' => $rapport->nj_autres_precision,
+                'propose' => $typesCampagne->mapWithKeys(fn (TypeCarte $t) => [(string) $t->id => $rapport->nombreProposePourType((int) $t->id)])->all(),
+            ] : null,
         ]);
     }
 

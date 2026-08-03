@@ -33,7 +33,10 @@ class VenteService
         $agenceId = (int) $user->agence_id;
 
         Campagne::syncStatuts();
-        $ouvertes = Campagne::getActivesPourAgence($agenceId);
+        $ouvertes = Campagne::getActivesPourAgence($agenceId)
+            ->where('type', Campagne::TYPE_VENTE_CARTE)
+            ->filter(fn (Campagne $c) => $c->estEngageCommercial($user->id))
+            ->values();
         if ($ouvertes->isEmpty()) {
             throw new InvalidArgumentException(
                 'Aucune campagne en cours pour votre agence. Les ventes ne sont possibles que pendant une campagne active ; une campagne terminée ou arrêtée ne permet plus d’enregistrer de vente.'
@@ -62,6 +65,12 @@ class VenteService
         if (! $campagne->estOuverteAuxVentes($agenceId)) {
             throw new InvalidArgumentException(
                 'Cette campagne n’accepte pas les ventes pour votre agence pour le moment.'
+            );
+        }
+
+        if (! $campagne->commercialAAccepteContrat($user->id)) {
+            throw new InvalidArgumentException(
+                'Vous devez d’abord accepter le contrat de prestation de la campagne « '.$campagne->nom.' » (rubrique « Mon contrat ») avant de pouvoir enregistrer une vente.'
             );
         }
 

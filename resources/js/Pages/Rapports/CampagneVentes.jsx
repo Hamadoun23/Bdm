@@ -1,0 +1,121 @@
+import { useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { Download, ArrowLeft, BarChart3, Users } from 'lucide-react';
+import AppLayout from '@/Layouts/AppLayout';
+import { Card } from '@/Components/ui/Card';
+import Badge from '@/Components/ui/Badge';
+import Button from '@/Components/ui/Button';
+import { Input, Label } from '@/Components/ui/Input';
+import { Select } from '@/Components/ui/Select';
+import Pagination from '@/Components/ui/Pagination';
+
+const nf = new Intl.NumberFormat('fr-FR');
+
+export default function CampagneVentes({ campagne, periode, filtres, agencesChoix, commerciauxChoix, typesChoix, resumeListe, qListe, ventes }) {
+    const [du, setDu] = useState(filtres.du);
+    const [au, setAu] = useState(filtres.au);
+    const [agenceId, setAgenceId] = useState(filtres.agence_id ?? '');
+    const [userId, setUserId] = useState(filtres.user_id ?? '');
+    const [typeCarteId, setTypeCarteId] = useState(filtres.type_carte_id ?? '');
+
+    function applyFilters(e) {
+        e.preventDefault();
+        router.get(route('rapports.campagnes.ventes', campagne.id), { du, au, agence_id: agenceId, user_id: userId, type_carte_id: typeCarteId });
+    }
+
+    return (
+        <AppLayout
+            title={`Ventes — ${campagne.nom}`}
+            subtitle={`Campagne : ${campagne.date_debut} → ${campagne.date_fin} — Filtre affiché : ${periode.debut} → ${periode.fin}`}
+            actions={
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button href={route('rapports.campagnes.synthese', campagne.id)} size="sm"><BarChart3 size={14} /> Synthèse</Button>
+                    <Button href={route('rapports.campagnes.clients', campagne.id)} variant="outline" size="sm"><Users size={14} /> Clients</Button>
+                    <Button href={route('rapports.index')} variant="outline" size="sm"><ArrowLeft size={14} /> Rapports</Button>
+                </div>
+            }
+        >
+            <Head title={`Ventes — ${campagne.nom}`} />
+
+            <form onSubmit={applyFilters} className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-card">
+                <div>
+                    <Label htmlFor="du">Du</Label>
+                    <Input id="du" type="date" value={du} onChange={(e) => setDu(e.target.value)} min={campagne.date_debut_iso} max={campagne.date_fin_iso} />
+                </div>
+                <div>
+                    <Label htmlFor="au">Au</Label>
+                    <Input id="au" type="date" value={au} onChange={(e) => setAu(e.target.value)} min={campagne.date_debut_iso} max={campagne.date_fin_iso} />
+                </div>
+                <div className="w-48">
+                    <Label htmlFor="agence_id">Agence</Label>
+                    <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
+                        <option value="">— Toutes —</option>
+                        {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+                    </Select>
+                </div>
+                <div className="w-56">
+                    <Label htmlFor="user_id">Commercial</Label>
+                    <Select id="user_id" value={userId} onChange={(e) => setUserId(e.target.value)}>
+                        <option value="">— Tous —</option>
+                        {commerciauxChoix.map((u) => <option key={u.id} value={u.id}>{u.nom}</option>)}
+                    </Select>
+                </div>
+                <div className="w-40">
+                    <Label htmlFor="type_carte_id">Type carte</Label>
+                    <Select id="type_carte_id" value={typeCarteId} onChange={(e) => setTypeCarteId(e.target.value)}>
+                        <option value="">— Tous —</option>
+                        {typesChoix.map((t) => <option key={t.id} value={t.id}>{t.code}</option>)}
+                    </Select>
+                </div>
+                <Button type="submit" size="sm">Filtrer</Button>
+            </form>
+
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+                <div className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 shadow-card">
+                    <p className="text-xs text-gray-500">Lignes (filtre actuel)</p>
+                    <p className="text-lg font-semibold text-gray-900">{nf.format(resumeListe.count)}</p>
+                </div>
+                <Button href={route('rapports.campagnes.export', { campagne: campagne.id, section: 'ventes', ...qListe, format: 'xlsx' })} target="_blank" size="sm">
+                    <Download size={14} /> Excel
+                </Button>
+                <Button href={route('rapports.campagnes.export', { campagne: campagne.id, section: 'ventes', ...qListe })} target="_blank" variant="outline" size="sm">
+                    <Download size={14} /> CSV
+                </Button>
+            </div>
+
+            <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead>
+                            <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
+                                <th className="px-4 py-3 font-medium">Date</th>
+                                <th className="px-4 py-3 font-medium">Client</th>
+                                <th className="px-4 py-3 font-medium">Type carte</th>
+                                <th className="px-4 py-3 font-medium">Commercial</th>
+                                <th className="px-4 py-3 font-medium">Agence</th>
+                                <th className="px-4 py-3 font-medium">Activation</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {ventes.data.length === 0 ? (
+                                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Aucune vente ne correspond aux critères.</td></tr>
+                            ) : (
+                                ventes.data.map((v, i) => (
+                                    <tr key={i} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 text-gray-600">{v.date}</td>
+                                        <td className="px-4 py-3 font-medium text-gray-900">{v.client_nom}</td>
+                                        <td className="px-4 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>
+                                        <td className="px-4 py-3 text-gray-600">{v.commercial}</td>
+                                        <td className="px-4 py-3 text-gray-600">{v.agence_nom}</td>
+                                        <td className="px-4 py-3"><Badge>{v.statut_activation}</Badge></td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <Pagination links={ventes.links} from={ventes.from} to={ventes.to} total={ventes.total} />
+            </Card>
+        </AppLayout>
+    );
+}

@@ -7,16 +7,31 @@ use App\Models\Client;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ClientController extends Controller
 {
-    public function edit(Request $request, Client $client): View
+    public function edit(Request $request, Client $client): Response
     {
         $this->authorizeCommercialOwnClient($request, $client);
         $client->load('typeCarte');
 
-        return view('commercial.clients.edit', compact('client'));
+        return Inertia::render('Commercial/Clients/Edit', [
+            'client' => [
+                'id' => $client->id,
+                'prenom' => $client->prenom,
+                'nom' => $client->nom,
+                'telephone' => $client->telephone,
+                'ville' => $client->ville,
+                'quartier' => $client->quartier,
+                'carte_identite_url' => $client->carte_identite ? Storage::disk('public')->url($client->carte_identite) : null,
+                'type_carte_code' => $client->typeCarte?->code,
+                'verrouille' => ! $client->peutEtreModifieOuSupprimeParCommercial(),
+                'peut_supprimer' => $client->peutEtreModifieOuSupprimeParCommercial(),
+            ],
+            'delaiHeures' => Client::DELAI_SUPPRESSION_COMMERCIAL_HEURES,
+        ]);
     }
 
     public function update(Request $request, Client $client): RedirectResponse

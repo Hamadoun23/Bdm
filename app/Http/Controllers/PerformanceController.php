@@ -19,6 +19,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -32,7 +34,7 @@ class PerformanceController extends Controller
         private GraphiquesDashboardExportService $graphiquesDashboardExportService
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): InertiaResponse
     {
         Campagne::syncStatuts();
         $ctx = $this->performanceContext($request);
@@ -114,39 +116,68 @@ class PerformanceController extends Controller
             $stats['mon_rang'] = $ligneCommercialConnecte['rang'] ?? null;
         }
 
-        return view('performance.index', [
-            'classement' => $classement,
-            'classementLigneTop1' => $classementLigneTop1,
-            'ligneCommercialConnecte' => $ligneCommercialConnecte,
+        $campagnePrime = $campagneRef ?? Campagne::getCampagnePourPerformances($ctx['agenceId']);
+        $totalVentesPerfClassement = ! $vueCommerciale ? (int) ($stats['total_ventes'] ?? 0) : 0;
+        $userEstPremier = $vueCommerciale && $classementLigneTop1 && (int) $user->id === (int) $classementLigneTop1['user_id'];
+
+        $performancesDetailQuery = array_filter([
+            'du' => $ctx['filtreIntervalle'] ? $ctx['du'] : null,
+            'au' => $ctx['filtreIntervalle'] ? $ctx['au'] : null,
+            'agence' => $ctx['agenceId'],
+            'campagne_id' => $ctx['campagneIdSelected'],
+            'compare' => $compareEnabled ? '1' : null,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return Inertia::render('Performances/Index', [
+            'filters' => [
+                'du' => $ctx['filtreIntervalle'] ? $ctx['du'] : '',
+                'au' => $ctx['filtreIntervalle'] ? $ctx['au'] : '',
+                'agence' => $ctx['agenceId'],
+                'campagne_id' => $ctx['campagneIdSelected'],
+                'compare' => $compareEnabled,
+            ],
+            'canFilterAgence' => (bool) ($user?->isAdmin() || $user?->isDirection()),
+            'agencesSelect' => $agencesSelect->map(fn (Agence $a) => ['id' => $a->id, 'nom' => $a->nom])->values(),
+            'campagnesSelect' => $campagnesSelect->map(fn (Campagne $c) => [
+                'id' => $c->id,
+                'label' => $c->nom.' ('.$c->date_debut->format('d/m/y').'–'.$c->date_fin->format('d/m/y').')',
+            ])->values(),
+            'libellePeriode' => $ctx['libellePeriode'],
+            'vueCommerciale' => $vueCommerciale,
+            'vueChef' => $vueChef,
+            'canExport' => ! $vueCommerciale,
+            'exportQuery' => array_filter([
+                'du' => $request->query('du'), 'au' => $request->query('au'),
+                'agence' => $request->query('agence'), 'campagne_id' => $request->query('campagne_id'),
+                'compare' => $request->query('compare'),
+            ], fn ($v) => $v !== null && $v !== ''),
             'stats' => $stats,
             'statsPrev' => $statsPrev,
             'compareDelta' => $compareDelta,
             'compareEnabled' => $compareEnabled,
-            'parSemaine' => $parSemaine,
+            'typesCartes' => $typesCartes->map(fn (TypeCarte $t) => ['id' => $t->id, 'code' => $t->code])->values(),
             'topCommerciauxChart' => $topCommerciauxChart,
             'ventesParAgenceChart' => $ventesParAgenceChart,
+            'campagneRefNom' => $vueCommerciale ? $campagneRef?->nom : null,
+            'primeMeilleurVendeur' => $campagnePrime ? number_format($campagnePrime->prime_meilleur_vendeur, 0, ',', ' ') : null,
+            'classement' => $vueCommerciale ? [] : $classement->map(fn (array $c) => [
+                'user_id' => $c['user_id'],
+                'rang' => $c['rang'],
+                'user_name' => $c['user_name'],
+                'total_ventes' => $c['total_ventes'],
+                'pct_volume' => $totalVentesPerfClassement > 0 ? round($c['total_ventes'] / $totalVentesPerfClassement * 100, 1) : null,
+                'detail_url' => route('performances.commercial.show', array_merge(['user' => $c['user_id']], $performancesDetailQuery)),
+            ])->values(),
+            'classementLigneTop1' => $classementLigneTop1,
+            'ligneCommercialConnecte' => $ligneCommercialConnecte,
+            'userEstPremier' => $userEstPremier,
+            'monDetailUrl' => $vueCommerciale ? route('performances.commercial.show', array_merge(['user' => $user->id], $performancesDetailQuery)) : null,
             'classementAgences' => $classementAgences,
             'classementTypesCartes' => $classementTypesCartes,
-            'agenceId' => $ctx['agenceId'],
-            'typesCartes' => $typesCartes,
-            'vueCommerciale' => $vueCommerciale,
-            'vueChef' => $vueChef,
-            'user' => $user,
-            'libellePeriode' => $ctx['libellePeriode'],
-            'campagnePerformances' => $ctx['campagnePerformances'],
-            'campagneRef' => $campagneRef,
-            'campagneIdSelected' => $ctx['campagneIdSelected'],
-            'campagnesSelect' => $campagnesSelect,
-            'agencesSelect' => $agencesSelect,
-            'dateDebut' => $ctx['dateDebut'],
-            'dateFin' => $ctx['dateFin'],
-            'filtreIntervalle' => $ctx['filtreIntervalle'],
-            'du' => $ctx['du'],
-            'au' => $ctx['au'],
         ]);
     }
 
-    public function show(Request $request, User $user): View
+    public function show(Request $request, User $user): InertiaResponse
     {
         Campagne::syncStatuts();
         $viewer = $request->user();
@@ -205,19 +236,30 @@ class PerformanceController extends Controller
             'compare' => $ctx['compareEnabled'] ? '1' : null,
         ], fn ($v) => $v !== null && $v !== '');
 
-        return view('performance.show', [
-            'commercial' => $user,
+        return Inertia::render('Performances/Show', [
             'displayName' => $displayName,
-            'ventes' => $ventes,
-            'clients' => $clients,
-            'parType' => $parType,
-            'typesCartes' => $typesCartes,
+            'agenceNom' => $user->agence?->nom,
             'libellePeriode' => $ctx['libellePeriode'],
-            'dateDebut' => $ctx['dateDebut'],
-            'dateFin' => $ctx['dateFin'],
-            'agenceId' => $ctx['agenceId'],
-            'queryParams' => $queryParams,
-            'campagneRef' => $campagneRef,
+            'backUrl' => route('performances.index', $queryParams),
+            'exportUrl' => route('performances.commercial.export-excel', array_merge(['user' => $user->id], $queryParams)),
+            'ventesCount' => $ventes->count(),
+            'clientsCount' => $clients->count(),
+            'cartesVendues' => $typesCartes->map(fn (TypeCarte $tc) => [
+                'code' => $tc->code,
+                'total' => (int) ($parType->get($tc->id)?->total ?? 0),
+            ])->filter(fn ($r) => $r['total'] > 0)->values(),
+            'clients' => $clients->map(fn (Client $cl) => [
+                'nom_complet' => trim($cl->prenom.' '.$cl->nom),
+                'telephone' => $cl->telephone,
+                'ville' => $cl->ville,
+                'type_carte' => $cl->typeCarte?->code,
+            ])->values(),
+            'ventes' => $ventes->map(fn (Vente $v) => [
+                'date' => $v->created_at?->format('d/m/Y H:i'),
+                'client_nom' => $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
+                'type_carte' => $v->typeCarte?->code,
+                'agence_nom' => $v->agence?->nom,
+            ])->values(),
         ]);
     }
 

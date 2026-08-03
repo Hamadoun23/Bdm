@@ -6,22 +6,31 @@ use App\Http\Controllers\Controller;
 use App\Models\Agence;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class AgenceController extends Controller
 {
-    public function index(): View
+    public function index(): Response
     {
         $agences = Agence::query()->orderBy('ordre')->orderBy('nom')->get();
 
-        return view('admin.agences.index', compact('agences'));
+        return Inertia::render('Admin/Agences/Index', [
+            'agences' => $agences->map(fn (Agence $a) => [
+                'id' => $a->id,
+                'ordre' => $a->ordre,
+                'nom' => $a->nom,
+            ])->values(),
+        ]);
     }
 
-    public function create(): View
+    public function create(): Response
     {
         $ordreSuggest = (int) (Agence::max('ordre') ?? 0) + 1;
 
-        return view('admin.agences.create', compact('ordreSuggest'));
+        return Inertia::render('Admin/Agences/Create', [
+            'ordreSuggest' => $ordreSuggest,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -41,9 +50,15 @@ class AgenceController extends Controller
         return redirect()->route('admin.agences.index')->with('success', 'Agence créée.');
     }
 
-    public function edit(Agence $agence): View
+    public function edit(Agence $agence): Response
     {
-        return view('admin.agences.edit', compact('agence'));
+        return Inertia::render('Admin/Agences/Edit', [
+            'agence' => [
+                'id' => $agence->id,
+                'ordre' => $agence->ordre,
+                'nom' => $agence->nom,
+            ],
+        ]);
     }
 
     public function update(Request $request, Agence $agence): RedirectResponse

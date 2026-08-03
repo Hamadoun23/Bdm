@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Direction;
 
 use App\Http\Controllers\Controller;
 use App\Models\TypeCarte;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ReferentielController extends Controller
 {
-    public function typesCartes(): View
+    public function typesCartes(): Response
     {
         $typesCartes = TypeCarte::orderBy('code')->get();
 
-        return view('direction.referentiel.types-cartes', compact('typesCartes'));
+        return Inertia::render('Direction/Referentiel/TypesCartes', [
+            'typesCartes' => $typesCartes->pluck('code')->values(),
+        ]);
     }
 }

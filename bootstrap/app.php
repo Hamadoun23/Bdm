@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\EnsureCompteActif;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Campagne;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => CheckRole::class,
         ]);
         $middleware->web(append: [
+            HandleInertiaRequests::class,
             EnsureCompteActif::class,
         ]);
     })

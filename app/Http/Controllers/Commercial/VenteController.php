@@ -13,7 +13,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -23,7 +24,7 @@ class VenteController extends Controller
         private SpreadsheetExportService $spreadsheetExportService
     ) {}
 
-    public function index(Request $request): View
+    public function index(Request $request): Response
     {
         $query = Vente::with(['client', 'agence', 'user', 'typeCarte', 'campagne']);
 
@@ -45,7 +46,31 @@ class VenteController extends Controller
         $ventes = $query->with('typeCarte')->latest()->paginate(15);
         $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId);
 
-        return view('commercial.ventes.index', compact('ventes', 'libelleStatsCampagne'));
+        $canManage = (bool) $user?->isCommercial();
+        $canSeeCommercial = (bool) ($user?->isAdmin() || $user?->isDirection());
+
+        return Inertia::render('Ventes/Index', [
+            'libelleStatsCampagne' => $libelleStatsCampagne,
+            'canManage' => $canManage,
+            'canSeeCommercial' => $canSeeCommercial,
+            'ventes' => [
+                'data' => $ventes->getCollection()->map(fn (Vente $v) => [
+                    'id' => $v->id,
+                    'date' => $v->created_at->format('d/m/Y H:i'),
+                    'client_nom' => trim($v->client->prenom.' '.$v->client->nom),
+                    'type_carte' => $v->typeCarte?->code ?? '?',
+                    'commercial' => $v->user->name ?? '-',
+                    'agence' => $v->agence->nom ?? '-',
+                    'peut_modifier_client' => $v->client?->peutEtreModifieOuSupprimeParCommercial() ?? false,
+                    'peut_supprimer' => $v->peutEtreSupprimeeParCommercial(),
+                    'client_id' => $v->client_id,
+                ])->values(),
+                'links' => $ventes->linkCollection(),
+                'from' => $ventes->firstItem(),
+                'to' => $ventes->lastItem(),
+                'total' => $ventes->total(),
+            ],
+        ]);
     }
 
     public function exportExcel(Request $request): StreamedResponse
@@ -96,18 +121,33 @@ class VenteController extends Controller
         return $this->spreadsheetExportService->download($spreadsheet, $fn);
     }
 
-    public function create(Request $request): View
+    public function create(Request $request): Response
     {
         Campagne::syncStatuts();
         $user = $request->user();
         $agenceId = $user->agence_id ? (int) $user->agence_id : null;
-        $campagnesOuvertes = $agenceId ? Campagne::getActivesPourAgence($agenceId) : collect();
+        $campagnesOuvertes = $agenceId
+            ? Campagne::getActivesPourAgence($agenceId)
+                ->where('type', Campagne::TYPE_VENTE_CARTE)
+                ->filter(fn (Campagne $c) => $c->estEngageCommercial($user->id))
+                ->values()
+            : collect();
         $campagneActive = $campagnesOuvertes->first();
         $peutVendre = $agenceId && $campagnesOuvertes->isNotEmpty();
+        $contratAccepte = $campagnesOuvertes->contains(fn (Campagne $c) => $c->commercialAAccepteContrat($user->id));
 
         $typesCartes = TypeCarte::actifs()->get();
 
-        return view('commercial.ventes.create', compact('typesCartes', 'campagneActive', 'campagnesOuvertes', 'peutVendre'));
+        return Inertia::render('Ventes/Create', [
+            'typesCartes' => $typesCartes->map(fn (TypeCarte $t) => ['id' => $t->id, 'code' => $t->code])->values(),
+            'campagnesOuvertes' => $campagnesOuvertes->map(fn (Campagne $c) => [
+                'id' => $c->id,
+                'nom' => $c->nom,
+                'date_fin' => $c->date_fin->format('d/m/Y'),
+            ])->values(),
+            'peutVendre' => $peutVendre,
+            'contratAccepte' => $contratAccepte,
+        ]);
     }
 
     public function destroy(Request $request, Vente $vente): RedirectResponse

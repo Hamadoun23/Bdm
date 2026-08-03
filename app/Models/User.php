@@ -44,6 +44,11 @@ class User extends Authenticatable
         return $this->hasMany(Client::class);
     }
 
+    public function enrolements(): HasMany
+    {
+        return $this->hasMany(EnrolementClient::class);
+    }
+
     public function reclamations(): HasMany
     {
         return $this->hasMany(Reclamation::class);
