@@ -1,0 +1,51 @@
+# Build de production : assets front compilés en étape séparée, puis image PHP-FPM
+# autonome (code + vendor + assets déjà dedans, pas de bind-mount du host).
+
+FROM node:20-alpine AS node-build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM php:8.2-fpm AS app
+
+RUN apt-get update && apt-get install -y \
+        libpq-dev \
+        default-mysql-client \
+        libzip-dev \
+        libpng-dev \
+        libjpeg62-turbo-dev \
+        libfreetype6-dev \
+        libicu-dev \
+        libonig-dev \
+        unzip \
+        git \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" \
+        pdo_pgsql \
+        pdo_mysql \
+        pgsql \
+        gd \
+        intl \
+        zip \
+        bcmath \
+        mbstring \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+COPY . .
+COPY --from=node-build /app/public/build ./public/build
+
+RUN composer install --no-dev --optimize-autoloader --no-interaction \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+COPY docker/php/entrypoint.prod.sh /usr/local/bin/entrypoint.prod.sh
+RUN chmod +x /usr/local/bin/entrypoint.prod.sh
+
+EXPOSE 9000
+ENTRYPOINT ["entrypoint.prod.sh"]
+CMD ["php-fpm"]
