@@ -97,7 +97,11 @@ function DrawerItem({ item, onClick }) {
 function Brand({ compact = false }) {
     return (
         <Link href={route('dashboard')} className="flex items-center gap-2.5">
-            <img src="/logo/gdamoney.png" alt="" width={34} height={34} className="rounded-xl" />
+            <img
+                src="/logo/gdamoney-mark.png"
+                alt=""
+                className={compact ? 'h-auto w-14 object-contain' : 'h-9 w-auto object-contain'}
+            />
             {!compact && <span className="font-brand text-sm font-semibold text-gray-900">Campagne BDM</span>}
         </Link>
     );
@@ -126,12 +130,12 @@ export default function Sidebar({ open, onClose }) {
             {/* Rail icônes — desktop */}
             <aside className="fixed inset-y-0 left-0 z-30 hidden w-[76px] flex-col items-center border-r border-gray-200 bg-white py-5 lg:flex">
                 <Brand compact />
-                <nav className="mt-8 flex flex-1 flex-col items-center gap-1">
+                <nav className="mt-8 flex flex-1 flex-col items-center gap-1.5 scrollbar-thin overflow-y-auto">
                     {items.map((item) => (
                         <RailItem key={item.label + item.href} item={item} />
                     ))}
                 </nav>
-                <button onClick={logout} title="Déconnexion" className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <button onClick={logout} title="Déconnexion" className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500">
                     <LogOut size={19} />
                 </button>
                 <UserAvatar user={user} />
@@ -150,23 +154,23 @@ export default function Sidebar({ open, onClose }) {
                     style={{ paddingTop: 'env(safe-area-inset-top)', height: 'calc(3.5rem + env(safe-area-inset-top))' }}
                 >
                     <Brand />
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
                         <X size={18} />
                     </button>
                 </div>
-                <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+                <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4 scrollbar-thin">
                     {items.map((item) => (
                         <DrawerItem key={item.label + item.href} item={item} onClick={onClose} />
                     ))}
                 </nav>
                 <div className="border-t border-gray-100 p-3" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
-                    <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+                    <div className="flex items-center gap-3 rounded-xl px-2 py-2">
                         <UserAvatar user={user} />
                         <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-gray-900">{user.prenom || user.name}</p>
                             <p className="truncate text-xs capitalize text-gray-500">{user.role?.replace('_', ' ')}</p>
                         </div>
-                        <button onClick={logout} title="Déconnexion" className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                        <button onClick={logout} title="Déconnexion" className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500">
                             <LogOut size={16} />
                         </button>
                     </div>

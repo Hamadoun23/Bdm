@@ -13,14 +13,13 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                // UI courante : pile système neutre et lisible (esprit
-                // shadcn/21st.dev). Futura reste réservée à la marque
-                // (logo/wordmark) via `font-brand`, pas au texte d'appli.
+                // Inter (auto-hébergée via @fontsource) pour une UI plus nette. Futura reste
+                // réservée à la marque (logo/wordmark) via `font-brand`.
                 sans: [
+                    'Inter',
                     '-apple-system',
                     'BlinkMacSystemFont',
                     '"Segoe UI"',
-                    'Inter',
                     'Roboto',
                     '"Helvetica Neue"',
                     'Arial',

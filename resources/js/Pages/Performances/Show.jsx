@@ -6,7 +6,8 @@ import StatCard from '@/Components/ui/StatCard';
 import Badge from '@/Components/ui/Badge';
 import Button from '@/Components/ui/Button';
 
-export default function PerformanceShow({ displayName, agenceNom, libellePeriode, backUrl, exportUrl, ventesCount, clientsCount, cartesVendues, clients, ventes }) {
+export default function PerformanceShow({ displayName, agenceNom, libellePeriode, backUrl, exportUrl, ventesCount, clientsCount, cartesVendues, clients, ventes, estEnrolement }) {
+    const libelle = estEnrolement ? 'Enrôlements' : 'Ventes';
     return (
         <AppLayout
             title={`Détail — ${displayName}`}
@@ -23,35 +24,37 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
             {agenceNom && <p className="mb-3 text-sm text-gray-500">Agence : <strong className="text-gray-900">{agenceNom}</strong></p>}
 
             <div className="mb-6 grid gap-4 sm:grid-cols-2">
-                <StatCard label="Ventes (période)" value={ventesCount} tone="orange" />
+                <StatCard label={`${libelle} (période)`} value={ventesCount} tone="orange" />
                 <StatCard label="Clients touchés" value={clientsCount} tone="blue" />
             </div>
 
-            <Card className="mb-4">
-                <CardHeader><CardTitle>Cartes vendues (volume)</CardTitle></CardHeader>
-                <CardBody className="p-0">
-                    {cartesVendues.length === 0 ? (
-                        <p className="px-5 py-4 text-sm text-gray-500">Aucune vente sur cette période.</p>
-                    ) : (
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
-                                    <th className="px-5 py-2.5 font-medium">Type de carte</th>
-                                    <th className="px-5 py-2.5 text-right font-medium">Quantité</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {cartesVendues.map((r) => (
-                                    <tr key={r.code}>
-                                        <td className="px-5 py-2.5"><Badge tone="blue">{r.code}</Badge></td>
-                                        <td className="px-5 py-2.5 text-right">{r.total}</td>
+            {!estEnrolement && (
+                <Card className="mb-4">
+                    <CardHeader><CardTitle>Cartes vendues (volume)</CardTitle></CardHeader>
+                    <CardBody className="p-0">
+                        {cartesVendues.length === 0 ? (
+                            <p className="px-5 py-4 text-sm text-gray-500">Aucune vente sur cette période.</p>
+                        ) : (
+                            <table className="w-full text-left text-sm">
+                                <thead>
+                                    <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
+                                        <th className="px-5 py-2.5 font-medium">Type de carte</th>
+                                        <th className="px-5 py-2.5 text-right font-medium">Quantité</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </CardBody>
-            </Card>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {cartesVendues.map((r) => (
+                                        <tr key={r.code}>
+                                            <td className="px-5 py-2.5"><Badge tone="blue">{r.code}</Badge></td>
+                                            <td className="px-5 py-2.5 text-right">{r.total}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </CardBody>
+                </Card>
+            )}
 
             <Card className="mb-4 overflow-hidden">
                 <CardHeader><CardTitle>Clients ({clientsCount})</CardTitle></CardHeader>
@@ -63,8 +66,8 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-2.5 font-medium">Nom</th>
                                 <th className="px-5 py-2.5 font-medium">Téléphone</th>
-                                <th className="px-5 py-2.5 font-medium">Ville</th>
-                                <th className="px-5 py-2.5 font-medium">Carte</th>
+                                <th className="px-5 py-2.5 font-medium">{estEnrolement ? 'Adresse' : 'Ville'}</th>
+                                {!estEnrolement && <th className="px-5 py-2.5 font-medium">Carte</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -73,7 +76,7 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                                     <td className="px-5 py-2.5 font-medium text-gray-900">{c.nom_complet}</td>
                                     <td className="px-5 py-2.5 text-gray-600">{c.telephone}</td>
                                     <td className="px-5 py-2.5 text-gray-600">{c.ville ?? '—'}</td>
-                                    <td className="px-5 py-2.5 text-gray-600">{c.type_carte ?? '—'}</td>
+                                    {!estEnrolement && <td className="px-5 py-2.5 text-gray-600">{c.type_carte ?? '—'}</td>}
                                 </tr>
                             ))}
                         </tbody>
@@ -82,16 +85,16 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
             </Card>
 
             <Card className="overflow-hidden">
-                <CardHeader><CardTitle>Ventes ({ventesCount})</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{libelle} ({ventesCount})</CardTitle></CardHeader>
                 {ventes.length === 0 ? (
-                    <p className="px-5 py-4 text-sm text-gray-500">Aucune vente enregistrée sur cette période.</p>
+                    <p className="px-5 py-4 text-sm text-gray-500">Aucun{estEnrolement ? ' enrôlement enregistré' : 'e vente enregistrée'} sur cette période.</p>
                 ) : (
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-2.5 font-medium">Date</th>
                                 <th className="px-5 py-2.5 font-medium">Client</th>
-                                <th className="px-5 py-2.5 font-medium">Carte vendue</th>
+                                {!estEnrolement && <th className="px-5 py-2.5 font-medium">Carte vendue</th>}
                                 <th className="px-5 py-2.5 font-medium">Agence</th>
                             </tr>
                         </thead>
@@ -100,7 +103,7 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                                 <tr key={i} className="hover:bg-gray-50">
                                     <td className="px-5 py-2.5 text-gray-600">{v.date}</td>
                                     <td className="px-5 py-2.5 font-medium text-gray-900">{v.client_nom}</td>
-                                    <td className="px-5 py-2.5 text-gray-600">{v.type_carte ?? '—'}</td>
+                                    {!estEnrolement && <td className="px-5 py-2.5 text-gray-600">{v.type_carte ?? '—'}</td>}
                                     <td className="px-5 py-2.5 text-gray-600">{v.agence_nom ?? '—'}</td>
                                 </tr>
                             ))}

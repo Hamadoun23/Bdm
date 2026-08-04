@@ -22,10 +22,15 @@ function rangLabel(r) {
     return r === 1 ? '1ᵉʳ' : `${r}ᵉ`;
 }
 
-function RangBadge({ rang }) {
-    if (rang === 1) return <Badge tone="amber">Top 1</Badge>;
-    if (rang === 2) return <Badge tone="neutral">Top 2</Badge>;
-    return <span>{rang}</span>;
+/**
+ * Sans aucune activité, tout le monde est ex æquo au rang 1 : afficher « Top 1 »
+ * sur les dizaines de lignes à 0 donnait une page entièrement badgée, illisible.
+ * Le badge de podium n'apparaît donc que si la ligne a réellement du volume.
+ */
+function RangBadge({ rang, total = 0 }) {
+    if (total > 0 && rang === 1) return <Badge tone="amber">Top 1</Badge>;
+    if (total > 0 && rang === 2) return <Badge tone="neutral">Top 2</Badge>;
+    return <span className="tabular-nums text-gray-500">{rang}</span>;
 }
 
 export default function PerformancesIndex(props) {
@@ -35,7 +40,7 @@ export default function PerformancesIndex(props) {
         stats, statsPrev, compareDelta, compareEnabled, typesCartes,
         topCommerciauxChart, ventesParAgenceChart, campagneRefNom, primeMeilleurVendeur,
         classement, classementLigneTop1, ligneCommercialConnecte, userEstPremier, monDetailUrl,
-        classementAgences, classementTypesCartes,
+        classementAgences, classementTypesCartes, estEnrolement,
     } = props;
 
     const [du, setDu] = useState(filters.du || '');
@@ -51,6 +56,8 @@ export default function PerformancesIndex(props) {
 
     const totalVentes = stats.total_ventes ?? 0;
     const showCharts = !vueCommerciale && totalVentes > 0;
+    const libelle = estEnrolement ? 'Enrôlements' : 'Ventes';
+    const libelleUn = estEnrolement ? 'enrôlement(s)' : 'vente(s)';
 
     return (
         <AppLayout
@@ -87,7 +94,7 @@ export default function PerformancesIndex(props) {
                         <li><strong>Période :</strong> {libellePeriode}</li>
                         {!vueCommerciale ? (
                             <li>
-                                <strong>Volume :</strong> {nf.format(totalVentes)} vente(s)
+                                <strong>Volume :</strong> {nf.format(totalVentes)} {libelleUn}
                                 {compareEnabled && compareDelta?.ventes_pct !== null && compareDelta?.ventes_pct !== undefined && (
                                     <span className="text-gray-400"> ({compareDelta.ventes_pct >= 0 ? '+' : ''}{compareDelta.ventes_pct.toFixed(1).replace('.', ',')} % vs période précédente)</span>
                                 )}
@@ -151,14 +158,14 @@ export default function PerformancesIndex(props) {
                         <Button href={monDetailUrl} variant="outline" size="sm"><Eye size={14} /> Voir mon détail (ventes, clients, cartes)</Button>
                     </div>
                     <div className="mb-6 grid gap-4 sm:grid-cols-2">
-                        <StatCard label="Mes ventes" value={stats.mes_ventes ?? 0} tone="orange" />
+                        <StatCard label={`Mes ${libelle.toLowerCase()}`} value={stats.mes_ventes ?? 0} tone="orange" />
                         <StatCard label="Mon rang" value={stats.mon_rang ? rangLabel(stats.mon_rang) : '—'} tone="blue" />
                     </div>
                 </>
             ) : (
                 <>
                     <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <StatCard label="Total ventes" value={nf.format(totalVentes)} sub={compareEnabled && statsPrev ? `Avant : ${nf.format(statsPrev.total_ventes)}` : undefined} tone="orange" />
+                        <StatCard label={`Total ${libelle.toLowerCase()}`} value={nf.format(totalVentes)} sub={compareEnabled && statsPrev ? `Avant : ${nf.format(statsPrev.total_ventes)}` : undefined} tone="orange" />
                         {typesCartes.map((tc) => (
                             <StatCard key={tc.id} label={tc.code} value={stats.par_type?.[tc.id] ?? 0} tone="gray" />
                         ))}
@@ -167,12 +174,12 @@ export default function PerformancesIndex(props) {
                     {showCharts && (
                         <div className="mb-6 grid gap-4 lg:grid-cols-3">
                             <Card>
-                                <CardHeader><CardTitle>Top commercial — ventes</CardTitle></CardHeader>
+                                <CardHeader><CardTitle>Top commercial — {libelle.toLowerCase()}</CardTitle></CardHeader>
                                 <CardBody style={{ height: 280 }}>
                                     <Bar
                                         data={{
                                             labels: topCommerciauxChart.map((r) => r.label),
-                                            datasets: [{ label: 'Ventes', data: topCommerciauxChart.map((r) => r.ventes), backgroundColor: 'rgba(255,106,58,0.85)', borderColor: '#FF6A3A', borderWidth: 1 }],
+                                            datasets: [{ label: libelle, data: topCommerciauxChart.map((r) => r.ventes), backgroundColor: 'rgba(255,106,58,0.85)', borderColor: '#FF6A3A', borderWidth: 1 }],
                                         }}
                                         options={{
                                             indexAxis: 'y',
@@ -195,18 +202,20 @@ export default function PerformancesIndex(props) {
                                     />
                                 </CardBody>
                             </Card>
-                            <Card>
-                                <CardHeader><CardTitle>Ventes par type de carte</CardTitle></CardHeader>
-                                <CardBody style={{ height: 280 }}>
-                                    <Bar
-                                        data={{
-                                            labels: typesCartes.map((t) => t.code),
-                                            datasets: [{ label: 'Ventes par type', data: typesCartes.map((t) => stats.par_type?.[t.id] ?? 0), backgroundColor: typesCartes.map((_, i) => PALETTE[i % PALETTE.length]) }],
-                                        }}
-                                        options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => nf.format(v) } } } }}
-                                    />
-                                </CardBody>
-                            </Card>
+                            {!estEnrolement && (
+                                <Card>
+                                    <CardHeader><CardTitle>Ventes par type de carte</CardTitle></CardHeader>
+                                    <CardBody style={{ height: 280 }}>
+                                        <Bar
+                                            data={{
+                                                labels: typesCartes.map((t) => t.code),
+                                                datasets: [{ label: 'Ventes par type', data: typesCartes.map((t) => stats.par_type?.[t.id] ?? 0), backgroundColor: typesCartes.map((_, i) => PALETTE[i % PALETTE.length]) }],
+                                            }}
+                                            options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => nf.format(v) } } } }}
+                                        />
+                                    </CardBody>
+                                </Card>
+                            )}
                         </div>
                     )}
                 </>
@@ -225,9 +234,9 @@ export default function PerformancesIndex(props) {
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-3 font-medium">Rang</th>
                                 <th className="px-5 py-3 font-medium">Commercial</th>
-                                <th className="px-5 py-3 text-right font-medium">Ventes</th>
+                                <th className="px-5 py-3 text-right font-medium">{libelle}</th>
                                 {!vueCommerciale && <th className="px-5 py-3 text-right font-medium">Part %</th>}
-                                <th className="px-5 py-3 font-medium">Prime (estimée)</th>
+                                {!estEnrolement && <th className="px-5 py-3 font-medium">Prime (estimée)</th>}
                                 {!vueCommerciale && <th className="px-5 py-3"></th>}
                             </tr>
                         </thead>
@@ -242,40 +251,40 @@ export default function PerformancesIndex(props) {
                                                 {userEstPremier && <Badge tone="neutral" className="ml-1.5">vous</Badge>}
                                             </td>
                                             <td className="px-5 py-3 text-right">{nf.format(classementLigneTop1.total_ventes)}</td>
-                                            <td className="px-5 py-3">{primeMeilleurVendeur ? `${primeMeilleurVendeur} F` : '-'}</td>
+                                            {!estEnrolement && <td className="px-5 py-3">{primeMeilleurVendeur ? `${primeMeilleurVendeur} F` : '-'}</td>}
                                         </tr>
                                     )}
                                     {ligneCommercialConnecte && !userEstPremier && (
                                         <>
-                                            <tr className="bg-gray-50"><td colSpan={4} className="px-5 py-2 text-xs font-semibold text-gray-500">Ma position</td></tr>
+                                            <tr className="bg-gray-50"><td colSpan={estEnrolement ? 3 : 4} className="px-5 py-2 text-xs font-semibold text-gray-500">Ma position</td></tr>
                                             <tr className="bg-blue-50/40">
                                                 <td className="px-5 py-3"><Badge>{rangLabel(ligneCommercialConnecte.rang)}</Badge></td>
                                                 <td className="px-5 py-3 font-medium text-gray-900">{ligneCommercialConnecte.user_name} <Badge tone="neutral" className="ml-1.5">vous</Badge></td>
                                                 <td className="px-5 py-3 text-right">{nf.format(ligneCommercialConnecte.total_ventes)}</td>
-                                                <td className="px-5 py-3">-</td>
+                                                {!estEnrolement && <td className="px-5 py-3">-</td>}
                                             </tr>
                                         </>
                                     )}
                                     {!classementLigneTop1 && !ligneCommercialConnecte && (
-                                        <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">Aucun classement à afficher pour cette période.</td></tr>
+                                        <tr><td colSpan={estEnrolement ? 3 : 4} className="px-5 py-8 text-center text-gray-500">Aucun classement à afficher pour cette période.</td></tr>
                                     )}
                                 </>
                             ) : (
                                 <>
                                     {classement.map((c) => (
                                         <tr key={c.user_id} className="hover:bg-gray-50">
-                                            <td className="px-5 py-3"><RangBadge rang={c.rang} /></td>
+                                            <td className="px-5 py-3"><RangBadge rang={c.rang} total={c.total_ventes} /></td>
                                             <td className="px-5 py-3 font-medium text-gray-900">{c.user_name}</td>
                                             <td className="px-5 py-3 text-right">{nf.format(c.total_ventes)}</td>
                                             <td className="px-5 py-3 text-right">{c.pct_volume !== null ? `${c.pct_volume.toFixed(1).replace('.', ',')} %` : '—'}</td>
-                                            <td className="px-5 py-3">{primeMeilleurVendeur && c.rang === 1 ? `${primeMeilleurVendeur} F` : '-'}</td>
+                                            {!estEnrolement && <td className="px-5 py-3">{primeMeilleurVendeur && c.rang === 1 ? `${primeMeilleurVendeur} F` : '-'}</td>}
                                             <td className="px-5 py-3 text-right">
                                                 <Button href={c.detail_url} variant="outline" size="sm">Détail</Button>
                                             </td>
                                         </tr>
                                     ))}
                                     {classement.length === 0 && (
-                                        <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-500">Aucun commercial à afficher.</td></tr>
+                                        <tr><td colSpan={estEnrolement ? 5 : 6} className="px-5 py-8 text-center text-gray-500">Aucun commercial à afficher.</td></tr>
                                     )}
                                 </>
                             )}
@@ -293,17 +302,17 @@ export default function PerformancesIndex(props) {
                                 <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                     <th className="px-5 py-3 font-medium">Rang</th>
                                     <th className="px-5 py-3 font-medium">Agence</th>
-                                    <th className="px-5 py-3 text-right font-medium">Ventes</th>
+                                    <th className="px-5 py-3 text-right font-medium">{libelle}</th>
                                     <th className="px-5 py-3 text-right font-medium">Part %</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {classementAgences.length === 0 ? (
-                                    <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">Aucune vente sur la période et les filtres choisis.</td></tr>
+                                    <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">Aucun{estEnrolement ? ' enrôlement' : 'e vente'} sur la période et les filtres choisis.</td></tr>
                                 ) : (
                                     classementAgences.map((a) => (
                                         <tr key={a.agence_nom} className="hover:bg-gray-50">
-                                            <td className="px-5 py-3"><RangBadge rang={a.rang} /></td>
+                                            <td className="px-5 py-3"><RangBadge rang={a.rang} total={a.total_ventes} /></td>
                                             <td className="px-5 py-3 font-medium text-gray-900">{a.agence_nom}</td>
                                             <td className="px-5 py-3 text-right">{nf.format(a.total_ventes)}</td>
                                             <td className="px-5 py-3 text-right">{a.pct_volume.toFixed(1).replace('.', ',')} %</td>
@@ -314,33 +323,35 @@ export default function PerformancesIndex(props) {
                         </table>
                     </Card>
 
-                    <Card className="mt-4 overflow-hidden">
-                        <CardHeader><CardTitle>Classement des types de cartes</CardTitle></CardHeader>
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
-                                    <th className="px-5 py-3 font-medium">Rang</th>
-                                    <th className="px-5 py-3 font-medium">Type</th>
-                                    <th className="px-5 py-3 text-right font-medium">Ventes</th>
-                                    <th className="px-5 py-3 text-right font-medium">Part %</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {classementTypesCartes.length === 0 ? (
-                                    <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">Aucune vente sur la période et les filtres choisis.</td></tr>
-                                ) : (
-                                    classementTypesCartes.map((t) => (
-                                        <tr key={t.code} className="hover:bg-gray-50">
-                                            <td className="px-5 py-3"><RangBadge rang={t.rang} /></td>
-                                            <td className="px-5 py-3"><code className="text-xs">{t.code}</code></td>
-                                            <td className="px-5 py-3 text-right">{nf.format(t.total_ventes)}</td>
-                                            <td className="px-5 py-3 text-right">{t.pct_volume.toFixed(1).replace('.', ',')} %</td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </Card>
+                    {!estEnrolement && (
+                        <Card className="mt-4 overflow-hidden">
+                            <CardHeader><CardTitle>Classement des types de cartes</CardTitle></CardHeader>
+                            <table className="w-full text-left text-sm">
+                                <thead>
+                                    <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
+                                        <th className="px-5 py-3 font-medium">Rang</th>
+                                        <th className="px-5 py-3 font-medium">Type</th>
+                                        <th className="px-5 py-3 text-right font-medium">Ventes</th>
+                                        <th className="px-5 py-3 text-right font-medium">Part %</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {classementTypesCartes.length === 0 ? (
+                                        <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">Aucune vente sur la période et les filtres choisis.</td></tr>
+                                    ) : (
+                                        classementTypesCartes.map((t) => (
+                                            <tr key={t.code} className="hover:bg-gray-50">
+                                                <td className="px-5 py-3"><RangBadge rang={t.rang} total={t.total_ventes} /></td>
+                                                <td className="px-5 py-3"><code className="text-xs">{t.code}</code></td>
+                                                <td className="px-5 py-3 text-right">{nf.format(t.total_ventes)}</td>
+                                                <td className="px-5 py-3 text-right">{t.pct_volume.toFixed(1).replace('.', ',')} %</td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </Card>
+                    )}
                 </>
             )}
         </AppLayout>

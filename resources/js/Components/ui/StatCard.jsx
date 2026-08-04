@@ -11,11 +11,11 @@ const iconTones = {
 export default function StatCard({ label, value, sub, icon: Icon, tone = 'orange', className }) {
     return (
         <Card className={cn('p-5', className)}>
-            <div className="flex items-start justify-between">
-                <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
                     <p className="mt-1.5 text-2xl font-semibold text-gray-900">{value}</p>
-                    {sub && <p className="mt-1 text-xs text-gray-500">{sub}</p>}
+                    {sub && <p className="mt-1 truncate text-xs text-gray-500">{sub}</p>}
                 </div>
                 {Icon && (
                     <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', iconTones[tone])}>

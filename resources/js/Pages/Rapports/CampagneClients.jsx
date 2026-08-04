@@ -7,18 +7,20 @@ import Badge from '@/Components/ui/Badge';
 import Button from '@/Components/ui/Button';
 import Modal from '@/Components/ui/Modal';
 
-export default function CampagneClients({ campagne, clients }) {
+export default function CampagneClients({ campagne, clients, estEnrolement }) {
     const [exportClient, setExportClient] = useState(null);
 
     return (
         <AppLayout
             title={`Clients — ${campagne.nom}`}
-            subtitle="Clients ayant au moins une vente sur cette campagne"
+            subtitle={estEnrolement ? 'Clients enrôlés sur cette campagne' : 'Clients ayant au moins une vente sur cette campagne'}
             actions={
                 <div className="flex flex-wrap items-center gap-2">
                     <Button href={route('rapports.campagnes.synthese', campagne.id)} size="sm"><BarChart3 size={14} /> Synthèse</Button>
-                    <Button href={route('rapports.campagnes.ventes', campagne.id)} variant="outline" size="sm"><List size={14} /> Ventes</Button>
-                    <Button href={route('rapports.campagnes.reporting-telephonique', campagne.id)} variant="outline" size="sm"><Phone size={14} /> Tél.</Button>
+                    <Button href={route('rapports.campagnes.ventes', campagne.id)} variant="outline" size="sm"><List size={14} /> {estEnrolement ? 'Enrôlements' : 'Ventes'}</Button>
+                    {!estEnrolement && (
+                        <Button href={route('rapports.campagnes.reporting-telephonique', campagne.id)} variant="outline" size="sm"><Phone size={14} /> Tél.</Button>
+                    )}
                     <Button href={route('rapports.index')} variant="outline" size="sm"><ArrowLeft size={14} /> Rapports</Button>
                 </div>
             }
@@ -32,29 +34,31 @@ export default function CampagneClients({ campagne, clients }) {
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-3 font-medium">Nom</th>
                                 <th className="px-4 py-3 font-medium">Téléphone</th>
-                                <th className="px-4 py-3 font-medium">Ville</th>
-                                <th className="px-4 py-3 font-medium">Type carte</th>
+                                <th className="px-4 py-3 font-medium">{estEnrolement ? 'Adresse' : 'Ville'}</th>
+                                {!estEnrolement && <th className="px-4 py-3 font-medium">Type carte</th>}
                                 <th className="px-4 py-3 font-medium">Commercial</th>
-                                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                                {!estEnrolement && <th className="px-4 py-3 text-right font-medium">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {clients.length === 0 ? (
-                                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Aucun client.</td></tr>
+                                <tr><td colSpan={estEnrolement ? 4 : 6} className="px-4 py-8 text-center text-gray-500">Aucun client.</td></tr>
                             ) : (
                                 clients.map((c) => (
                                     <tr key={c.id} className="hover:bg-gray-50">
                                         <td className="px-4 py-3 font-medium text-gray-900">{c.nom_complet}</td>
                                         <td className="px-4 py-3 text-gray-600">{c.telephone ?? '—'}</td>
                                         <td className="px-4 py-3 text-gray-600">{c.ville ?? '—'}</td>
-                                        <td className="px-4 py-3"><Badge tone="blue">{c.type_carte}</Badge></td>
+                                        {!estEnrolement && <td className="px-4 py-3"><Badge tone="blue">{c.type_carte}</Badge></td>}
                                         <td className="px-4 py-3 text-gray-600">{c.commercial}</td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-1.5">
-                                                <Button href={route('clients.show', c.id)} variant="outline" size="sm">Fiche</Button>
-                                                <Button onClick={() => setExportClient(c)} size="sm"><Download size={13} /> Exporter</Button>
-                                            </div>
-                                        </td>
+                                        {!estEnrolement && (
+                                            <td className="px-4 py-3">
+                                                <div className="flex justify-end gap-1.5">
+                                                    <Button href={route('clients.show', c.id)} variant="outline" size="sm">Fiche</Button>
+                                                    <Button onClick={() => setExportClient(c)} size="sm"><Download size={13} /> Exporter</Button>
+                                                </div>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             )}

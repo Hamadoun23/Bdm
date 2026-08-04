@@ -11,17 +11,31 @@ import Sparkline from '@/Components/ui/Sparkline';
 import Gauge from '@/Components/ui/Gauge';
 import { cn } from '@/lib/cn';
 
-function StatTile({ label, value, icon: Icon, trend, dark = false }) {
+function hasData(values) {
+    return Array.isArray(values) && values.some((v) => v > 0);
+}
+
+function StatTile({ label, value, icon: Icon, trend, dark = false, textValue = false }) {
+    const showTrend = hasData(trend);
     return (
         <Card className={dark ? 'border-0 bg-gda-orange text-white' : ''}>
             <CardBody className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                    <p className={dark ? 'text-xs font-medium uppercase tracking-wide text-white/60' : 'text-xs font-medium uppercase tracking-wide text-gray-500'}>
+                    <p className={dark ? 'text-xs font-medium uppercase tracking-wide text-white/70' : 'text-xs font-medium uppercase tracking-wide text-gray-500'}>
                         {label}
                     </p>
-                    <p className="mt-1.5 text-2xl font-semibold">{value}</p>
+                    {/* Les valeurs textuelles (noms) sont plus longues : taille réduite + 2 lignes
+                        au lieu d'une troncature qui coupait « Adiaratou A ... ». */}
+                    <p
+                        className={cn(
+                            'mt-1.5 font-semibold',
+                            textValue ? 'line-clamp-2 text-lg leading-snug' : 'truncate text-2xl',
+                        )}
+                    >
+                        {value}
+                    </p>
                 </div>
-                {trend ? (
+                {showTrend ? (
                     <Sparkline values={trend} color={dark ? '#ffffff' : '#FF6A3A'} />
                 ) : (
                     Icon && (
@@ -57,6 +71,11 @@ function DashboardAdmin(props) {
         libelleStatsCampagne, user, agencesCount, commerciauxCount,
     } = props;
 
+    // Sans aucune vente, tous les commerciaux sont ex æquo au rang 1 : afficher la liste
+    // telle quelle donnait « 1 » quatre fois de suite, ce qui passait pour un bug.
+    const classementActif = classement.filter((c) => (c.total_ventes ?? 0) > 0);
+    const meilleur = classementActif[0] ?? null;
+
     return (
         <>
             {libelleStatsCampagne && (
@@ -68,13 +87,14 @@ function DashboardAdmin(props) {
 
             {/* Ligne 1 — indicateurs clés */}
             <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile label="Ventes (campagne)" value={ventesTotal} trend={venteTrend} />
+                <StatTile label="Ventes (campagne)" value={ventesTotal} icon={CreditCard} trend={venteTrend} />
                 <StatTile label="Ventes sur la période" value={ventesMois} icon={TrendingUp} />
                 <StatTile label="Campagnes" value={campagnesTotal} icon={Megaphone} />
                 <StatTile
                     label="Meilleur commercial"
-                    value={classement[0]?.user_name ?? '—'}
+                    value={meilleur ? meilleur.user_name : 'Aucune vente'}
                     icon={Trophy}
+                    textValue
                     dark
                 />
             </div>
@@ -85,7 +105,11 @@ function DashboardAdmin(props) {
                     <CardBody>
                         <p className="text-sm font-semibold text-gray-900">Tendance des ventes</p>
                         <p className="mb-4 text-xs text-gray-500">6 dernières semaines</p>
-                        <Sparkline values={venteTrend?.length ? venteTrend : [0]} height={64} />
+                        {hasData(venteTrend) ? (
+                            <Sparkline values={venteTrend} height={64} />
+                        ) : (
+                            <p className="flex h-16 items-center text-sm text-gray-400">Aucune vente sur la période.</p>
+                        )}
                     </CardBody>
                 </Card>
 
@@ -121,23 +145,22 @@ function DashboardAdmin(props) {
             </div>
 
             {/* Ligne 3 — campagne active, top performances, action rapide */}
-            <div className="grid gap-4 lg:grid-cols-5">
-                <Card
-                    className={cn(
-                        'overflow-hidden lg:col-span-2',
-                        campagneActive
-                            ? 'border-0 bg-gradient-to-br from-gda-orange to-[#e85a2e] text-white'
-                            : 'border-dashed bg-white',
-                    )}
-                >
+            <div className="grid items-start gap-4 lg:grid-cols-5">
+                <Card className="lg:col-span-2">
                     <CardBody>
-                        <p className={cn('text-xs font-medium uppercase tracking-wide', campagneActive ? 'text-white/70' : 'text-gray-400')}>
-                            Campagne
-                        </p>
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Campagne</p>
                         {campagneActive ? (
                             <>
-                                <p className="mt-2 text-lg font-semibold">{campagneActive.nom}</p>
-                                <p className="mt-1 text-sm text-white/80">{campagneActive.date_debut} – {campagneActive.date_fin}</p>
+                                <p className="mt-2 text-lg font-semibold text-gray-900">{campagneActive.nom}</p>
+                                <p className="mt-1 text-sm text-gray-500">
+                                    {campagneActive.date_debut} – {campagneActive.date_fin}
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <Badge tone="orange">En cours</Badge>
+                                    {campagnesProgrammees > 0 && (
+                                        <Badge>{campagnesProgrammees} programmée(s)</Badge>
+                                    )}
+                                </div>
                             </>
                         ) : (
                             <p className="mt-2 text-sm text-gray-500">
@@ -148,9 +171,9 @@ function DashboardAdmin(props) {
                         )}
                         <Button
                             href={readOnly ? route('direction.campagnes.index') : route('admin.campagnes.index')}
-                            variant={campagneActive ? 'secondary' : 'outline'}
+                            variant="outline"
                             size="sm"
-                            className={campagneActive ? 'mt-5 bg-white text-gda-orange hover:bg-white/90' : 'mt-5'}
+                            className="mt-4"
                         >
                             Voir les campagnes <ArrowRight size={14} />
                         </Button>
@@ -163,17 +186,19 @@ function DashboardAdmin(props) {
                             <p className="text-sm font-semibold text-gray-900">Top performances</p>
                             <Trophy className="h-4 w-4 text-gray-400" size={16} />
                         </div>
-                        {classement.length === 0 ? (
-                            <p className="text-sm text-gray-500">Aucune vente sur la campagne de référence.</p>
+                        {classementActif.length === 0 ? (
+                            <p className="text-sm text-gray-500">
+                                Aucune vente enregistrée sur la campagne de référence.
+                            </p>
                         ) : (
                             <ul className="space-y-1">
-                                {classement.slice(0, 4).map((c) => (
+                                {classementActif.slice(0, 4).map((c) => (
                                     <li key={c.user_id} className="flex items-center justify-between py-1.5 text-sm">
-                                        <span className="flex items-center gap-2.5">
-                                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
+                                        <span className="flex min-w-0 items-center gap-2.5">
+                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
                                                 {c.rang}
                                             </span>
-                                            <span className="text-gray-800">{c.user_name}</span>
+                                            <span className="truncate text-gray-800">{c.user_name}</span>
                                         </span>
                                         <Badge tone="green">+{c.total_ventes}</Badge>
                                     </li>

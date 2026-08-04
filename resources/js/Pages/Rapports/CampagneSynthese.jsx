@@ -15,22 +15,26 @@ import { cn } from '@/lib/cn';
 ChartJS.register(...registerables);
 const nf = new Intl.NumberFormat('fr-FR');
 
-const TABS = [
-    { key: 'commerciaux', label: 'Commerciaux' },
-    { key: 'agences', label: 'Agences' },
-    { key: 'types', label: 'Types de carte' },
-    { key: 'temps', label: 'Semaines / Mois' },
-];
-
 export default function CampagneSynthese({
     campagne, periode, filtres, agencesChoix, commerciauxChoix, resume, commerciaux, agences,
-    parTypeCarte, parSemaine, parMois, telephonique, chartCommerciaux, chartAgences, qExp,
+    parTypeCarte, parSemaine, parMois, telephonique, chartCommerciaux, chartAgences, qExp, estEnrolement,
 }) {
     const [du, setDu] = useState(filtres.du);
     const [au, setAu] = useState(filtres.au);
     const [agenceId, setAgenceId] = useState(filtres.agence_id ?? '');
     const [userId, setUserId] = useState(filtres.user_id ?? '');
     const [tab, setTab] = useState('commerciaux');
+
+    const libelleVentes = estEnrolement ? 'Enrôlements' : 'Ventes';
+    const TABS = [
+        { key: 'commerciaux', label: 'Commerciaux' },
+        { key: 'agences', label: 'Agences' },
+        ...(estEnrolement ? [] : [{ key: 'types', label: 'Types de carte' }]),
+        { key: 'temps', label: 'Semaines / Mois' },
+    ];
+    const sectionsExport = estEnrolement
+        ? ['ventes', 'commerciaux', 'agences', 'semaines', 'mois']
+        : ['ventes', 'commerciaux', 'agences', 'types', 'semaines', 'mois'];
 
     function applyFilters(e) {
         e.preventDefault();
@@ -81,16 +85,16 @@ export default function CampagneSynthese({
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-card">
                 <span className="text-xs text-gray-500">Excel (.xlsx) :</span>
                 <Button href={route('rapports.campagnes.export', { campagne: campagne.id, section: 'all', ...qExp, format: 'xlsx' })} target="_blank" size="sm">Classeur complet</Button>
-                {['ventes', 'commerciaux', 'agences', 'types', 'semaines', 'mois'].map((s) => (
+                {sectionsExport.map((s) => (
                     <Button key={s} href={route('rapports.campagnes.export', { campagne: campagne.id, section: s, ...qExp, format: 'xlsx' })} target="_blank" variant="outline" size="sm" className="capitalize">{s}</Button>
                 ))}
             </div>
 
             <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
-                <StatCard label="Total ventes" value={nf.format(resume.total_ventes)} tone="orange" />
+                <StatCard label={`Total ${libelleVentes.toLowerCase()}`} value={nf.format(resume.total_ventes)} tone="orange" />
                 <StatCard label="Commerciaux (périmètre)" value={resume.nb_commerciaux_perimetre} tone="gray" />
-                <StatCard label="Avec ventes" value={resume.nb_avec_ventes} tone="green" />
-                <StatCard label="À 0 vente" value={resume.nb_zero_vente} tone="gray" />
+                <StatCard label={`Avec ${libelleVentes.toLowerCase()}`} value={resume.nb_avec_ventes} tone="green" />
+                <StatCard label="À 0" value={resume.nb_zero_vente} tone="gray" />
                 <StatCard label="Agences actives" value={resume.nb_agences_avec_ventes} tone="blue" />
             </div>
 
@@ -101,17 +105,19 @@ export default function CampagneSynthese({
 
             {(parTypeCarte.length > 0 || chartCommerciaux.length > 0 || chartAgences.length > 0) && (
                 <div className="mb-6 grid gap-4 lg:grid-cols-3">
+                    {!estEnrolement && (
+                        <Card>
+                            <CardHeader><CardTitle>Mix des ventes par type de carte</CardTitle></CardHeader>
+                            <CardBody style={{ height: 240 }}>
+                                <Doughnut
+                                    data={{ labels: parTypeCarte.map((r) => r.code), datasets: [{ data: parTypeCarte.map((r) => r.total_ventes), backgroundColor: parTypeCarte.map((_, i) => ['#FF6A3A', '#0d6efd', '#6610f2', '#20c997', '#d63384', '#fd7e14', '#198754', '#6f42c1', '#ffc107', '#4d8ef7'][i % 10]) }] }}
+                                    options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
+                                />
+                            </CardBody>
+                        </Card>
+                    )}
                     <Card>
-                        <CardHeader><CardTitle>Mix des ventes par type de carte</CardTitle></CardHeader>
-                        <CardBody style={{ height: 240 }}>
-                            <Doughnut
-                                data={{ labels: parTypeCarte.map((r) => r.code), datasets: [{ data: parTypeCarte.map((r) => r.total_ventes), backgroundColor: parTypeCarte.map((_, i) => ['#FF6A3A', '#0d6efd', '#6610f2', '#20c997', '#d63384', '#fd7e14', '#198754', '#6f42c1', '#ffc107', '#4d8ef7'][i % 10]) }] }}
-                                options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
-                            />
-                        </CardBody>
-                    </Card>
-                    <Card>
-                        <CardHeader><CardTitle>Top 5 vendeurs — part du total</CardTitle></CardHeader>
+                        <CardHeader><CardTitle>Top 5 commerciaux — part du total</CardTitle></CardHeader>
                         <CardBody style={{ height: 280 }}>
                             <Bar
                                 data={{ labels: chartCommerciaux.map((r) => r.label), datasets: [{ label: 'Part (%)', data: chartCommerciaux.map((r) => r.pct_part), backgroundColor: chartCommerciaux.map((r) => r.label.startsWith('Autres') ? 'rgba(108,117,125,0.75)' : '#FF6A3A'), borderRadius: 4 }] }}
@@ -131,20 +137,22 @@ export default function CampagneSynthese({
                 </div>
             )}
 
-            <Card className="mb-6">
-                <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle>Reporting téléphonique (période et filtres comme ci-dessus)</CardTitle>
-                    <Button href={route('rapports.campagnes.reporting-telephonique', { campagne: campagne.id, date_debut: filtres.du, date_fin: filtres.au, user_id: filtres.user_id, agence_id: filtres.agence_id })} size="sm">Liste des fiches</Button>
-                </CardHeader>
-                <CardBody className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                    <div>Fiches : <strong>{nf.format(telephonique.nb_fiches)}</strong></div>
-                    <div>Appels émis : <strong>{nf.format(telephonique.appels_emis)}</strong></div>
-                    <div>Joignables : <strong>{nf.format(telephonique.appels_joignables)}</strong></div>
-                    <div>Non joignables : <strong>{nf.format(telephonique.appels_non_joignables)}</strong></div>
-                    <div>Intéressés : <strong>{nf.format(telephonique.clients_interesses)}</strong></div>
-                    <div>Déjà servis : <strong>{nf.format(telephonique.clients_deja_servis)}</strong></div>
-                </CardBody>
-            </Card>
+            {!estEnrolement && telephonique && (
+                <Card className="mb-6">
+                    <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+                        <CardTitle>Reporting téléphonique (période et filtres comme ci-dessus)</CardTitle>
+                        <Button href={route('rapports.campagnes.reporting-telephonique', { campagne: campagne.id, date_debut: filtres.du, date_fin: filtres.au, user_id: filtres.user_id, agence_id: filtres.agence_id })} size="sm">Liste des fiches</Button>
+                    </CardHeader>
+                    <CardBody className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                        <div>Fiches : <strong>{nf.format(telephonique.nb_fiches)}</strong></div>
+                        <div>Appels émis : <strong>{nf.format(telephonique.appels_emis)}</strong></div>
+                        <div>Joignables : <strong>{nf.format(telephonique.appels_joignables)}</strong></div>
+                        <div>Non joignables : <strong>{nf.format(telephonique.appels_non_joignables)}</strong></div>
+                        <div>Intéressés : <strong>{nf.format(telephonique.clients_interesses)}</strong></div>
+                        <div>Déjà servis : <strong>{nf.format(telephonique.clients_deja_servis)}</strong></div>
+                    </CardBody>
+                </Card>
+            )}
 
             <div className="mb-3 flex flex-wrap gap-1 border-b border-gray-200">
                 {TABS.map((t) => (
@@ -169,7 +177,7 @@ export default function CampagneSynthese({
                                 <th className="px-4 py-2.5 font-medium">Rang</th>
                                 <th className="px-4 py-2.5 font-medium">Commercial</th>
                                 <th className="px-4 py-2.5 font-medium">Agence</th>
-                                <th className="px-4 py-2.5 text-right font-medium">Ventes</th>
+                                <th className="px-4 py-2.5 text-right font-medium">{libelleVentes}</th>
                                 <th className="px-4 py-2.5"></th>
                             </tr>
                         </thead>
@@ -196,7 +204,7 @@ export default function CampagneSynthese({
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-2.5 font-medium">Agence</th>
-                                <th className="px-4 py-2.5 text-right font-medium">Ventes</th>
+                                <th className="px-4 py-2.5 text-right font-medium">{libelleVentes}</th>
                                 <th className="px-4 py-2.5 text-right font-medium">Part %</th>
                                 <th className="px-4 py-2.5 text-right font-medium">Commerciaux</th>
                                 <th className="px-4 py-2.5"></th>
@@ -204,7 +212,7 @@ export default function CampagneSynthese({
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {agences.length === 0 ? (
-                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Aucune vente sur cette période.</td></tr>
+                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Aucun{estEnrolement ? ' enrôlement' : 'e vente'} sur cette période.</td></tr>
                             ) : (
                                 agences.map((l, i) => (
                                     <tr key={i} className="hover:bg-gray-50">
@@ -229,7 +237,7 @@ export default function CampagneSynthese({
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-2.5 font-medium">Type</th>
-                                <th className="px-4 py-2.5 text-right font-medium">Ventes</th>
+                                <th className="px-4 py-2.5 text-right font-medium">{libelleVentes}</th>
                                 <th className="px-4 py-2.5 text-right font-medium">Part %</th>
                                 <th className="px-4 py-2.5"></th>
                             </tr>
@@ -260,7 +268,7 @@ export default function CampagneSynthese({
                 <div className="grid gap-4 lg:grid-cols-2">
                     <Card className="overflow-hidden">
                         <table className="w-full text-left text-sm">
-                            <thead><tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500"><th className="px-4 py-2.5 font-medium">Période</th><th className="px-4 py-2.5 text-right font-medium">Ventes</th></tr></thead>
+                            <thead><tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500"><th className="px-4 py-2.5 font-medium">Période</th><th className="px-4 py-2.5 text-right font-medium">{libelleVentes}</th></tr></thead>
                             <tbody className="divide-y divide-gray-100">
                                 {parSemaine.length === 0 ? <tr><td colSpan={2} className="px-4 py-4 text-gray-400">—</td></tr> : parSemaine.map((l, i) => (
                                     <tr key={i}><td className="px-4 py-2.5 text-gray-600">{l.libelle}</td><td className="px-4 py-2.5 text-right">{l.total_ventes}</td></tr>
@@ -270,7 +278,7 @@ export default function CampagneSynthese({
                     </Card>
                     <Card className="overflow-hidden">
                         <table className="w-full text-left text-sm">
-                            <thead><tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500"><th className="px-4 py-2.5 font-medium">Mois</th><th className="px-4 py-2.5 text-right font-medium">Ventes</th></tr></thead>
+                            <thead><tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500"><th className="px-4 py-2.5 font-medium">Mois</th><th className="px-4 py-2.5 text-right font-medium">{libelleVentes}</th></tr></thead>
                             <tbody className="divide-y divide-gray-100">
                                 {parMois.length === 0 ? <tr><td colSpan={2} className="px-4 py-4 text-gray-400">—</td></tr> : parMois.map((l, i) => (
                                     <tr key={i}><td className="px-4 py-2.5 text-gray-600">{l.libelle}</td><td className="px-4 py-2.5 text-right">{l.total_ventes}</td></tr>

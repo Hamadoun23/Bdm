@@ -1,9 +1,13 @@
 import { cn } from '@/lib/cn';
 
-export function Card({ className, children, ...props }) {
+export function Card({ className, children, interactive = false, ...props }) {
     return (
         <div
-            className={cn('rounded-xl border border-gray-200 bg-white shadow-card', className)}
+            className={cn(
+                'rounded-xl border border-gray-200 bg-white shadow-card',
+                interactive && 'transition-colors hover:border-gray-300',
+                className,
+            )}
             {...props}
         >
             {children}

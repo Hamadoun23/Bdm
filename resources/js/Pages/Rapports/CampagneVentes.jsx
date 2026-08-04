@@ -11,12 +11,13 @@ import Pagination from '@/Components/ui/Pagination';
 
 const nf = new Intl.NumberFormat('fr-FR');
 
-export default function CampagneVentes({ campagne, periode, filtres, agencesChoix, commerciauxChoix, typesChoix, resumeListe, qListe, ventes }) {
+export default function CampagneVentes({ campagne, periode, filtres, agencesChoix, commerciauxChoix, typesChoix, resumeListe, qListe, ventes, estEnrolement }) {
     const [du, setDu] = useState(filtres.du);
     const [au, setAu] = useState(filtres.au);
     const [agenceId, setAgenceId] = useState(filtres.agence_id ?? '');
     const [userId, setUserId] = useState(filtres.user_id ?? '');
     const [typeCarteId, setTypeCarteId] = useState(filtres.type_carte_id ?? '');
+    const libelle = estEnrolement ? 'Enrôlements' : 'Ventes';
 
     function applyFilters(e) {
         e.preventDefault();
@@ -25,7 +26,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
 
     return (
         <AppLayout
-            title={`Ventes — ${campagne.nom}`}
+            title={`${libelle} — ${campagne.nom}`}
             subtitle={`Campagne : ${campagne.date_debut} → ${campagne.date_fin} — Filtre affiché : ${periode.debut} → ${periode.fin}`}
             actions={
                 <div className="flex flex-wrap items-center gap-2">
@@ -35,7 +36,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                 </div>
             }
         >
-            <Head title={`Ventes — ${campagne.nom}`} />
+            <Head title={`${libelle} — ${campagne.nom}`} />
 
             <form onSubmit={applyFilters} className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-card">
                 <div>
@@ -60,13 +61,15 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                         {commerciauxChoix.map((u) => <option key={u.id} value={u.id}>{u.nom}</option>)}
                     </Select>
                 </div>
-                <div className="w-40">
-                    <Label htmlFor="type_carte_id">Type carte</Label>
-                    <Select id="type_carte_id" value={typeCarteId} onChange={(e) => setTypeCarteId(e.target.value)}>
-                        <option value="">— Tous —</option>
-                        {typesChoix.map((t) => <option key={t.id} value={t.id}>{t.code}</option>)}
-                    </Select>
-                </div>
+                {!estEnrolement && (
+                    <div className="w-40">
+                        <Label htmlFor="type_carte_id">Type carte</Label>
+                        <Select id="type_carte_id" value={typeCarteId} onChange={(e) => setTypeCarteId(e.target.value)}>
+                            <option value="">— Tous —</option>
+                            {typesChoix.map((t) => <option key={t.id} value={t.id}>{t.code}</option>)}
+                        </Select>
+                    </div>
+                )}
                 <Button type="submit" size="sm">Filtrer</Button>
             </form>
 
@@ -90,24 +93,24 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-3 font-medium">Date</th>
                                 <th className="px-4 py-3 font-medium">Client</th>
-                                <th className="px-4 py-3 font-medium">Type carte</th>
+                                {!estEnrolement && <th className="px-4 py-3 font-medium">Type carte</th>}
                                 <th className="px-4 py-3 font-medium">Commercial</th>
                                 <th className="px-4 py-3 font-medium">Agence</th>
-                                <th className="px-4 py-3 font-medium">Activation</th>
+                                {!estEnrolement && <th className="px-4 py-3 font-medium">Activation</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {ventes.data.length === 0 ? (
-                                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Aucune vente ne correspond aux critères.</td></tr>
+                                <tr><td colSpan={estEnrolement ? 4 : 6} className="px-4 py-8 text-center text-gray-500">Aucun{estEnrolement ? ' enrôlement' : 'e vente'} ne correspond aux critères.</td></tr>
                             ) : (
                                 ventes.data.map((v, i) => (
                                     <tr key={i} className="hover:bg-gray-50">
                                         <td className="px-4 py-3 text-gray-600">{v.date}</td>
                                         <td className="px-4 py-3 font-medium text-gray-900">{v.client_nom}</td>
-                                        <td className="px-4 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>
+                                        {!estEnrolement && <td className="px-4 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>}
                                         <td className="px-4 py-3 text-gray-600">{v.commercial}</td>
                                         <td className="px-4 py-3 text-gray-600">{v.agence_nom}</td>
-                                        <td className="px-4 py-3"><Badge>{v.statut_activation}</Badge></td>
+                                        {!estEnrolement && <td className="px-4 py-3"><Badge>{v.statut_activation}</Badge></td>}
                                     </tr>
                                 ))
                             )}
