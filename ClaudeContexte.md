@@ -2,7 +2,7 @@
 
 > Document de passation. La session précédente a pris fin en plein chantier — ce fichier permet de reprendre sans perdre le contexte. Lis-le en entier avant de reprendre le travail.
 
-**Dernière mise à jour** : 2026-07-30 (session 3 — fin de la Phase 3, conversion Inertia terminée à 100% des pages accessibles)
+**Dernière mise à jour** : 2026-08-03 (session 4 — fonctionnalité "Enrôlement app mobile" + déploiement VPS fonctionnel en MySQL)
 
 ---
 
@@ -16,7 +16,9 @@ L'utilisateur (Cissé) trouve l'app **Campagne BDM** (Laravel 12 / Blade / Boots
 
 Design demandé : **moderne, simple**, inspiré de templates Envato haut de gamme et de **21st.dev** (esthétique shadcn/ui). L'utilisateur a explicitement validé la direction sidebar-icônes + cartes après un premier essai raté (trop "détails" pas top), puis a demandé de reproduire un dashboard fintech de référence (Dribbble) — **adapté aux vraies données de l'app**, pas copié tel quel. Dernière consigne ferme : **l'orange `#FF6A3A` est la SEULE couleur d'accent** — le marron/brun de la charte GDA (`#381419`, `#b26440`) a été **explicitement banni et retiré partout**.
 
-⚠️ **Le mot de passe root du VPS a été partagé en clair dans le chat** à un moment de la session précédente. Il doit être considéré comme compromis : mettre en place une auth par clé SSH et changer ce mot de passe **avant toute connexion réelle au VPS**. Le VPS n'a été touché à aucun moment — tout le travail s'est fait en local.
+✅ **Résolu (session 4)** : le mot de passe root du VPS, partagé en clair dans le chat, a été neutralisé. Auth SSH par clé uniquement (`~/.ssh/bdm_vps_ed25519` en local), `PasswordAuthentication no` forcé via `/etc/ssh/sshd_config.d/00-harden-ssh.conf` (préfixe `00-` pour primer sur les fichiers cloud-init existants qui se contredisaient), mot de passe root verrouillé (`passwd -l root`). Vérifié : connexion par mot de passe refusée, connexion par clé fonctionnelle.
+
+⚠️ **Important découvert en déployant** : le VPS `194.163.187.59` est **mutualisé** avec d'autres projets déjà en production (conteneurs `pulsemotors-app`, un stack **Supabase self-hosted complet** déjà actif — postgres/kong/gotrue/realtime/storage/studio/postgrest —, `n8n`, une API WhatsApp Evolution, Redis). Une autre clé SSH (`pulsemotors-vps-admin`) est déjà présente dans `authorized_keys` — ne jamais la retirer. Nginx hôte gère déjà plusieurs vhosts (`pulse`, `pulse-api`, `pulse-www`, `n8n`, `event`, `whatsapp`) via `/etc/nginx/sites-available/`. **Tout ce qui concerne BDM doit rester isolé** (réseau Docker, conteneurs, volumes dédiés) — ne jamais toucher aux conteneurs/configs des autres projets.
 
 ---
 
@@ -197,25 +199,62 @@ Toujours lancer `npm run build` après des changements JS pour attraper les erre
 
 ---
 
-## 7. Prochaines étapes suggérées (par ordre logique)
+## 7. Fonctionnalité "Enrôlement app mobile" (session 4, 2026-08-03)
 
-**État au 2026-07-30 fin de session** : **Phase 3 terminée** — toutes les pages atteignables par une route réelle sont converties Inertia/React et vérifiées (lint + build + appel contrôleur en tinker). Il ne reste plus de "pages en box" (fallback Blade) sur un flux utilisateur normal. Reste :
+Deuxième type de campagne ajouté à côté de `vente_carte` : `enrolement_app` — les commerciaux enrôlent des clients BDM existants sur leur appli mobile (pas de carte, pas de vente). Détail complet du design dans le plan (`C:\Users\cisse\.claude\plans\linked-munching-bachman.md`, section "Feature — Campagnes Enrôlement app mobile").
 
-1. **Nettoyage final Blade/Alpine** (non fait, à faire en premier — rapide) :
-   - Vérifier qu'aucune vue ne référence plus `resources/js/app.js` (Alpine) ni `layouts/guest.blade.php`/`layouts/app.blade.php`/`navigation.blade.php` (`grep -rn "app.js\|layouts.guest\|layouts.app\|@extends" resources/views/`).
-   - Si confirmé inutilisés : supprimer ces fichiers, retirer l'entrée `app.js` de `vite.config.js`, et supprimer les vues Blade converties devenues mortes (`resources/views/admin/`, `resources/views/commercial/`, `resources/views/auth/*.blade.php` sauf celles encore nécessaires pour les exports PDF/Excel/Word, `resources/views/profile/`, etc.) — **vérifier avant de supprimer qu'aucune n'est encore `@include`e par une vue d'export restante**.
-   - Revérifier une dernière fois `grep -rn "gda-brun\|gda-cuivre\|381419\|b26440" resources/js/` (déjà propre au 2026-07-30) et faire un tour visuel rapide des dernières pages ajoutées (Transfert d'agence, Profil, pages Auth secondaires) une fois qu'un accès navigateur est possible.
-2. **Validation Docker/Postgres réelle** (Phases 0-1 du plan, jamais testées en conditions réelles) : une fois **Docker Desktop qui répond** correctement, lancer `docker compose up`, `php artisan migrate --seed` contre Postgres, vérifier les données dans Supabase Studio, et se connecter avec les 4 rôles. Rester attentif aux autres projets Docker déjà présents sur la machine (§2) — ne jamais toucher un container qui n'appartient pas à BDM.
-3. **Checklist de validation locale complète** (§Phase 4 du plan `linked-munching-bachman.md`) — dérouler item par item une fois Docker/Postgres validés : saisie vente mobile, fenêtre 48h modif/suppression vente ET client, upload pièce d'identité, les ~13 routes d'export, scheduler `Campagne::syncStatuts()`, `php artisan test`.
-4. **Phase VPS** (Phase 5 du plan) seulement après validation locale complète — ne pas commencer avant. ⚠️ Premier geste sur le VPS : remplacer l'auth par mot de passe root (partagé en clair dans le chat, considéré compromis) par une clé SSH, puis désactiver l'auth par mot de passe.
+**Composants clés** :
+- `Campagne.type` (`vente_carte` par défaut / `enrolement_app`), table `enrolement_clients` (modèle `EnrolementClient`, mirroir de `Client` sans notion de carte).
+- `CampagneCommerciauxImportService` : parse un texte collé depuis Excel (Nom/Prénom/[Quartier]/Agence/Téléphone), résout ou crée agences/commerciaux, génère le mot de passe initial `[Initiale prénom][2 derniers chiffres tel][Initiale nom]@bdm`. UI d'import dans l'onglet Commerciaux du détail de campagne (`Pages/Admin/Campagnes/partials/Commerciaux.jsx`).
+- **Séparation stricte vente/enrôlement** : `Campagne::estEngageCommercial()` vérifie l'appartenance réelle (pas juste "agence couverte"). Utilisé partout — `VenteService`/`EnrolementService`, `VenteController`/`EnrolementController` (web + API), et partagé globalement via `HandleInertiaRequests::share()` (`auth.user.peut_vendre`/`peut_enroler`) pour piloter la Sidebar et le Dashboard (`DashboardController::dashboardCommercial()` renvoie des props `vente`/`enrolement` séparées).
+- **Contrat de prestation obligatoire pour les deux types** : `CampagneContratArticle::seedDefaultsIfEmpty($id, $type)` a deux jeux d'articles (le texte par défaut parle de "vente de cartes" — inadapté à l'enrôlement, d'où une variante `defaultArticlesDefinitionsEnrolement()`). `Campagne::commercialAAccepteContrat()` **bloque** `VenteService::enregistrerVente()` / `EnrolementService::enregistrerEnrolement()` tant que le commercial n'a pas accepté (`ContratPrestationReponse::STATUT_ACCEPTE`) — vérifié aussi côté UI (`Pages/Ventes/Create.jsx` / `Pages/Enrolements/Create.jsx` affichent un état bloquant avec lien vers "Mon contrat").
+- Nouvelles pages commerciales : `Pages/Enrolements/{Create,Index}.jsx` (mirroir exact de `Ventes/{Create,Index}.jsx`).
 
-**Astuce pour reprendre vite** : le système de composants (`Components/ui/`) et les patterns établis (Form.jsx colocalisé, vérification systématique via `php -l` + `npm run build` + appel contrôleur en tinker avec `X-Inertia: true`, tableau + Card + Badge + Pagination pour les listes, `errorBag` pour les formulaires multiples sur une page, `_method: 'put'` + `forceFormData` pour les uploads) couvrent maintenant l'intégralité de l'app réelle — pour toute nouvelle page (si de nouvelles fonctionnalités sont ajoutées), copier le pattern d'une page similaire déjà faite va plus vite que repartir de zéro.
+**Piège à retenir** : `Campagne::getActivesPourAgence()`/`getActiveForAgence()` ne filtrent **que** par agence (via `toutes_agences`/pivot `campagne_agence`), jamais par type ni par engagement réel du commercial. **Ne jamais les utiliser seules** pour déterminer l'accès d'un commercial à une fonctionnalité — toujours chaîner `->where('type', ...)` puis `->filter(fn($c) => $c->estEngageCommercial($user->id))`. Repéré après un bug réel (capture d'écran de l'utilisateur montrant une commerciale enrôlement-only voyant "Nouvelle vente" sur son dashboard).
+
+Une vraie campagne "Août 2026" (id 20, enrôlement) a été créée en production avec les 15 commerciaux du tableau BDM-PI fourni par l'utilisateur (6 comptes créés, 9 réutilisés, 1 nouvelle agence "API" — possible doublon de "AP 1", à vérifier/fusionner si confirmé).
 
 ---
 
-## 8. Fichiers de référence utiles
+## 8. Déploiement VPS (session 4, 2026-08-03) — ✅ fonctionnel, DNS pas encore basculé
+
+L'app tourne **réellement sur le VPS** `194.163.187.59`, testée et vérifiée (voir §7 du plan pour le détail complet des commandes). Résumé :
+
+- **SSH sécurisé** : clé dédiée `~/.ssh/bdm_vps_ed25519` (locale), mot de passe désactivé + verrouillé côté serveur. Config dans `/etc/ssh/sshd_config.d/00-harden-ssh.conf` (préfixe `00-` volontaire pour primer sur des fichiers cloud-init contradictoires déjà présents).
+- ⚠️ **VPS mutualisé** — voir l'avertissement en §1. Tout BDM vit dans `/opt/bdm` (repo git), conteneurs préfixés `bdm-*`, réseau Docker `bdm_bdm_prod`, volumes `bdm_*`. Ne jamais toucher aux conteneurs/nginx sites des autres projets (`pulse*`, `n8n`, `whatsapp`, `event`, le stack `supabase-*`).
+- **Stack** : `docker-compose.prod.yml` + `docker/php/Dockerfile.prod` (multi-stage : assets Vite compilés à l'image via un stage `node:20-alpine`, pas de node qui tourne en prod) — **MySQL, pas Postgres** (décision de l'utilisateur : déployer vite avec ce qui est testé, migrer vers Postgres/Docker plus tard une fois Docker Desktop réparé en local). `docker-compose.yml` (racine, local) reste le stack Postgres/Supabase original, jamais utilisé en prod pour l'instant.
+- **Secrets** : `/opt/bdm/.env.production` (app Laravel) et `/opt/bdm/.env.docker.prod` (mots de passe MySQL) créés **directement sur le serveur**, jamais commités (`.gitignore` couvre déjà `.env.production`). Mots de passe générés aléatoirement, non réutilisés d'ailleurs.
+- **Nginx** : le nginx du conteneur `web` écoute seulement sur `127.0.0.1:8090`. Le nginx **hôte** (déjà en place pour les autres sites) fait le reverse-proxy public via un nouveau vhost `/etc/nginx/sites-available/bdm` (`server_name bdm.gdamali.net`) — **HTTP seulement pour l'instant**, pas de certificat (impossible tant que le DNS ne pointe pas ici).
+- **Données réelles migrées** : dump `mysqldump --no-create-info --complete-insert` en excluant les tables d'infra (`migrations`, `sessions`, `cache*`, `jobs*`, `password_reset_tokens`) **et** `types_cartes` (déjà seedée par une migration — sinon conflit de clé primaire). Importé après un `migrate:fresh --force` propre. Vérifié : 54 agences, 64 users, 4 campagnes, 2118 ventes/clients, 11 types de cartes, campagne "Août 2026" avec ses 15 engagements/8 articles/15 réponses de contrat intacts.
+- **Vérifié fonctionnel** : page de login 200, assets JS/CSS servis, redirection auth correcte, aucune erreur applicative (les quelques `Connection refused` dans les logs datent du tout premier démarrage du conteneur `db`, avant que MySQL accepte les connexions — transitoire, résolu automatiquement par le `retry()` de Laravel, sans impact).
+
+**Reste à faire pour le VPS** (aucun n'est urgent, l'app tourne) :
+1. **Bascule DNS + SSL** — dès que `bdm.gdamali.net` pointe vers `194.163.187.59`, lancer `certbot --nginx -d bdm.gdamali.net` sur le VPS (pattern déjà utilisé pour `pulse.toguna-motors.com`, `n8n.gdamali.net`, `wa.gdamali.net` — donc `n8n`/`wa` sont déjà sur ce VPS, `bdm` sera cohérent). Décision du moment de bascule = à l'utilisateur.
+2. **Scheduler** (`Campagne::syncStatuts()` prévu 01h00) — pas de conteneur/cron dédié sur le VPS pour l'instant ; fonctionne quand même car resynchronisé de façon réactive à quasi chaque requête, mais pas encore automatisé.
+3. **Sauvegardes automatiques** de la base MySQL de prod — rien en place.
+4. **Migration Postgres/Docker en prod** — plus tard, une fois Docker Desktop réparé et le stack Postgres validé en local (Phases 0-1 du plan original), migrer le VPS de MySQL vers ce stack (l'utilisateur a dit vouloir "garder docker local pour connecter en prod docker").
+5. **Durcissement additionnel** (pare-feu ufw/fail2ban, etc.) — pas vérifié, seul SSH a été traité.
+
+---
+
+## 9. Prochaines étapes suggérées (par ordre logique)
+
+1. **Nettoyage final Blade/Alpine** (non fait) : vérifier qu'aucune vue ne référence plus `resources/js/app.js` (Alpine) ni les anciens layouts Blade (`grep -rn "app.js\|layouts.guest\|layouts.app\|@extends" resources/views/`), puis supprimer si confirmé inutilisés.
+2. **Bascule DNS + SSL** (§8) quand l'utilisateur est prêt.
+3. **Scheduler + sauvegardes** sur le VPS (§8).
+4. **Validation Docker/Postgres en local**, puis migration du VPS vers ce stack (§8, point 4).
+5. **Durcissement serveur additionnel** (§8, point 5).
+
+**Astuce pour reprendre vite** : le système de composants (`Components/ui/`) et les patterns établis (Form.jsx colocalisé, vérification systématique via `php -l` + `npm run build` + appel contrôleur en tinker avec `X-Inertia: true`, `errorBag` pour les formulaires multiples, `_method: 'put'` + `forceFormData` pour les uploads, `estEngageCommercial()`/`commercialAAccepteContrat()` pour tout nouveau flux commercial) couvrent maintenant l'intégralité de l'app réelle — copier le pattern d'une page/flux similaire déjà fait va plus vite que repartir de zéro.
+
+---
+
+## 10. Fichiers de référence utiles
 
 - `bdm_v1.md` — doc d'architecture complète du projet original (avant refonte)
 - `docu.md`, `Info.md` — doc opérationnelle et référentiel agences/commerciaux
-- `C:\Users\cisse\.claude\plans\linked-munching-bachman.md` — plan détaillé approuvé (5 phases)
+- `C:\Users\cisse\.claude\plans\linked-munching-bachman.md` — plan détaillé approuvé (5 phases + section "Feature — Enrôlement app mobile" ajoutée en session 4)
+- `docker-compose.prod.yml`, `docker/php/Dockerfile.prod`, `docker/php/entrypoint.prod.sh` — stack de prod MySQL actuellement utilisé sur le VPS
+- `docker-compose.yml`, `docker/php/Dockerfile` (sans `.prod`) — stack Postgres/Supabase original, pour la Phase 0-1 locale pas encore validée
+- Accès VPS : IP `194.163.187.59`, utilisateur `root`, clé privée locale `~/.ssh/bdm_vps_ed25519` (aucun mot de passe ne fonctionne plus). Code déployé dans `/opt/bdm` sur le serveur, repo GitHub `https://github.com/Hamadoun23/Bdm`.
 - Ce fichier (`ClaudeContexte.md`) — à **mettre à jour à la fin de chaque session** si le travail doit continuer sur un autre compte/une autre session.

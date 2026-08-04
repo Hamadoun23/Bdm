@@ -1,26 +1,29 @@
-# BDM v1 — Guide complet de développement
+# BDM v1 — Guide complet de développement (Laravel, en production)
 
-> **Document maître** : retrace tout ce qui a été construit pour l'application **Campagne BDM** (Gda Money), de la première ligne de code à la version en production.  
-> **Objectif** : te permettre de reproduire ce type d'app Laravel (métier + rôles + reporting + exports) rapidement sur d'autres projets.  
+> **Document de référence de l'existant** : retrace tout ce qui a été construit pour l'application **Campagne BDM** (Gda Money), de la première ligne de code à la version en production. C'est le **cahier des charges métier** de la réécriture v2.  
+> **La v2 (Django · microservices · React) a son propre document : [`bdm_v2.md`](bdm_v2.md)** — cible technique, règles d'architecture, invariants, **roadmap M0 → M10**.  
 > **Complément** : [`docu.md`](docu.md) (référence opérationnelle à jour), [`Info.md`](Info.md) (référentiel agences/commerciaux).
 
-**Stack** : Laravel 12 · PHP 8.2 · MySQL · Blade + Bootstrap 5 · Breeze (auth) · DomPDF · PhpSpreadsheet · PhpWord  
+**Stack v1 (actuelle, en prod)** : Laravel 12 · PHP 8.2 · MySQL (dev) / PostgreSQL 16 (stack Docker) · Inertia.js + React 18 + Tailwind (ex-Blade/Bootstrap) · Breeze (auth) · DomPDF · PhpSpreadsheet · PhpWord  
 **Production** : https://bdm.gdamali.net  
-**Dernière mise à jour doc** : juin 2026
+**Dernière mise à jour doc** : 4 août 2026
 
 ---
 
-## Document unique — tout est ici
+## Comment ce document s'articule avec `bdm_v2.md`
 
-Ce fichier **`bdm_v1.md`** contient **l'intégralité** du guide de développement BDM :
-architecture, base de données, backend, frontend, **et tous tes prompts Cursor en texte intégral** (section 13).
+| Document | Rôle | À jour de |
+|----------|------|-----------|
+| **`bdm_v1.md`** (ici) | Ce que l'app **fait** et **comment elle est faite** aujourd'hui : métier, base de données, backend, frontend, patterns, historique complet des prompts | Août 2026, prod |
+| **[`bdm_v2.md`](bdm_v2.md)** | Ce qu'on **construit ensuite** : architecture Django/microservices, invariants à porter, **roadmap et jalons**, reprise de données, bascule | Cadrage (M0) |
 
-| Contenu | Section |
+| Contenu de ce fichier | Section |
 |---------|---------|
-| Guide technique complet | Sections 1 à 12 |
-| **Historique prompts (texte intégral)** | [Section 13](#13-journal-complet-des-prompts) |
-| Prompt starter nouvelle app | Section 14 |
-| Annexes & reporting manager | Fin du document |
+| **Partie I — v1 Laravel** : architecture, BDD, backend, frontend, patterns | Sections 1 à 12 |
+| **Annexe — Historique prompts (texte intégral, 229 prompts)** | [Section 13](#13-journal-complet-des-prompts) |
+| **Partie II — passerelle vers la v2** | [Section 14](#14-ce-que-devient-bdm) → renvoie à `bdm_v2.md` |
+
+> **Comment lire ce doc quand on développe la v2** : les sections 1, 5, 8, 12 décrivent le **métier** (règles, entités, invariants) — c'est la partie qui ne change pas et qu'il faut reporter telle quelle en Django. Les sections 6, 7, 9, 10, 11 décrivent l'**implémentation Laravel** — référence de traduction, pas modèle à copier.
 
 **Chats bruts Cursor** (backup technique) : `C:\Users\cisse\.cursor\projects\c-xampp-htdocs-BDM\agent-transcripts\`  
 **Regénérer la section 13** depuis les transcripts : `python scripts/merge_bdm_v1.py`
@@ -39,6 +42,8 @@ architecture, base de données, backend, frontend, **et tous tes prompts Cursor 
 
 ## Table des matières
 
+### Partie I — BDM v1 (Laravel, en production)
+
 1. [Résumé du produit](#1-résumé-du-produit)
 2. [Chronologie du développement](#2-chronologie-du-développement)
 3. [Recette rapide — créer une app similaire](#3-recette-rapide--créer-une-app-similaire)
@@ -48,13 +53,21 @@ architecture, base de données, backend, frontend, **et tous tes prompts Cursor 
 7. [Modèles Eloquent](#7-modèles-eloquent)
 8. [Backend — contrôleurs, middleware, services](#8-backend--contrôleurs-middleware-services)
 9. [Routes et sécurité](#9-routes-et-sécurité)
-10. [Frontend — Blade, thème, PWA](#10-frontend--blade-thème-pwa)
+10. [Frontend — Inertia/React, thème, PWA](#10-frontend--inertiareact-thème-pwa)
 11. [Seeders et commandes artisan](#11-seeders-et-commandes-artisan)
 12. [Patterns réutilisables](#12-patterns-réutilisables)
+
+### Annexe — Historique
+
 13. [Journal complet des prompts — texte intégral](#13-journal-complet-des-prompts)
-14. [Prompt starter pour une nouvelle app](#14-prompt-starter-pour-une-nouvelle-app)
+
+### Partie II — Passerelle vers la v2
+
+14. [Ce que devient BDM](#14-ce-que-devient-bdm) — puis tout le détail dans [`bdm_v2.md`](bdm_v2.md) (architecture, invariants, **roadmap M0 → M10**, extraction des microservices, reprise de données, bascule)
 
 ---
+
+# Partie I — BDM v1 (Laravel, en production)
 
 ## 1. Résumé du produit
 
@@ -259,6 +272,21 @@ Ces prototypes ont servi de base conceptuelle avant la vraie implémentation.
 
 ---
 
+### Phase 14 — Refonte Inertia/React + enrôlement + Docker prod (juillet–août 2026)
+
+**Réalisé** :
+- **Sortie de Blade** : toutes les vues métier passées en **Inertia.js + React 18 + Tailwind** (`resources/js/Pages/`), design system maison (`Components/ui/` : Button, Card, Badge, StatCard), Sidebar unique
+- Suppression des 90 vues Blade et des composants `App\View\Components\*`
+- **Enrôlement app mobile** : modèle `EnrolementClient` + `EnrolementService`, campagnes typées (`campagnes.type`) — une campagne « enrôlement » ne saisit pas de vente carte mais un enrôlement client (nom, prénom, tél, adresse), délai 48 h identique
+- `CampagneCommerciauxImportService` — import en masse des commerciaux d'une campagne
+- **PostgreSQL** : migration `2026_07_30_000000_pgsql_consolidated_schema.php` — schéma final consolidé pour le driver `pgsql` (no-op sur MySQL), ENUM MySQL → string + `Rule::in`, JSON → `jsonb`
+- **Stack Docker de production** (`docker-compose.prod.yml`, `docker/nginx`, `docker/php`), isolée des autres projets du VPS
+- `TrustProxies` sur `X-Forwarded-Proto` (fix contenu mixte derrière nginx)
+
+> **Ce que cette phase prouve pour la v2** : la couche métier (services + modèles) a survécu telle quelle au changement complet de couche de présentation. C'est exactement la frontière à respecter en Django : `services.py` / `selectors.py` indépendants du transport.
+
+---
+
 ## 3. Recette rapide — créer une app similaire
 
 ### Étape 1 — Initialisation (30 min)
@@ -381,14 +409,15 @@ BDM/
 │   │   ├── DashboardController.php
 │   │   └── PerformanceController.php
 │   ├── Http/Middleware/CheckRole.php, EnsureCompteActif.php
-│   ├── Models/             (15 modèles)
-│   └── Services/           (10 services)
-├── database/migrations/    (33 fichiers)
+│   ├── Models/             (16 modèles)
+│   └── Services/           (12 services)
+├── database/migrations/    (36 fichiers, dont le schéma consolidé pgsql)
 ├── database/seeders/       (12 seeders)
-├── resources/views/        (90 fichades Blade)
-├── public/css/gda-theme.css
+├── resources/js/           (Pages + Layouts + Components React — Inertia)
+├── resources/css/app.css   (Tailwind + tokens charte GDA)
+├── docker/, docker-compose.yml, docker-compose.prod.yml
 ├── public/logo/
-├── routes/web.php, auth.php
+├── routes/web.php, api.php, auth.php
 ├── docu.md                 (doc opérationnelle)
 ├── Info.md                 (référentiel GDA)
 └── bdm_v1.md               (ce fichier)
@@ -442,6 +471,7 @@ erDiagram
 | `contrat_prestation_reponses` | Acceptation/refus contrat par commercial |
 | `telephonique_rapports` | Fiches reporting téléphonique journalières |
 | `commercial_agence_transferts` | Historique transferts agence commerciaux |
+| `enrolement_clients` | Enrôlements app mobile (campagnes de type `enrolement`) |
 | `primes` | Primes calculées |
 | `reclamations` | Module legacy (non utilisé UI) |
 | `user_login_logs` | Journal connexions réussies |
@@ -492,6 +522,9 @@ erDiagram
 | `2026_04_03_100000_add_cartes_proposees_to_telephonique_rapports.php` | JSON cartes proposées |
 | `2026_04_04_100000_add_campagne_id_to_telephonique_rapports.php` | Lien reporting → campagne |
 | `2026_04_30_000000_drop_stocks_and_mouvements_stock_tables.php` | Suppression stocks |
+| `2026_07_30_000000_pgsql_consolidated_schema.php` | Schéma final consolidé PostgreSQL (no-op sur MySQL) |
+| `2026_08_03_100000_add_type_to_campagnes_table.php` | `campagnes.type` (vente cartes / enrôlement) |
+| `2026_08_03_100001_create_enrolement_clients_table.php` | Enrôlements app mobile |
 
 ```bash
 php artisan migrate:status   # état actuel
@@ -520,6 +553,7 @@ php artisan migrate:fresh --seed  # reset complet (attention prod!)
 | `Prime` | `app/Models/Prime.php` | Primes calculées |
 | `Reclamation` | `app/Models/Reclamation.php` | Legacy |
 | `UserLoginLog` | `app/Models/UserLoginLog.php` | Logs connexion |
+| `EnrolementClient` | `app/Models/EnrolementClient.php` | Enrôlement mobile, `peutEtreModifieOuSupprimeParCommercial()` (48 h) |
 
 ---
 
@@ -563,6 +597,8 @@ php artisan migrate:fresh --seed  # reset complet (attention prod!)
 | `ClientExportService` | Exports client PDF/Excel/Word |
 | `ContratPrestationService` | Logique contrat, verrouillage 5 jours |
 | `TransfertVentesAgenceService` | Réattribution ventes lors transfert agence |
+| `EnrolementService` | Règles enrôlement mobile (campagne de type `enrolement`, délai 48 h) |
+| `CampagneCommerciauxImportService` | Import en masse des commerciaux d'une campagne |
 
 ### Middleware
 
@@ -610,62 +646,53 @@ Voir [`routes/web.php`](routes/web.php) — 160 lignes, routes groupées par mid
 
 ---
 
-## 10. Frontend — Blade, thème, PWA
+## 10. Frontend — Inertia/React, thème, PWA
 
-### Structure des vues (90 fichiers)
+> **État actuel (août 2026)** : Blade a été entièrement retiré (phase 14). Les vues sont des composants React servis par Inertia. Cette section décrit l'état post-refonte ; l'ancienne organisation Blade est conservée plus bas à titre historique — c'est elle qu'on retrouve dans le journal des prompts (section 13).
+
+### Structure des pages React
 
 ```
-resources/views/
-├── layouts/
-│   ├── app.blade.php          # Layout principal + nav par rôle
-│   ├── guest.blade.php        # Layout login (Gda Money)
-│   └── navigation.blade.php
-├── dashboard/
-│   ├── admin.blade.php
-│   ├── commercial.blade.php
-│   ├── telephonique.blade.php
-│   └── guest.blade.php
-├── admin/
-│   ├── campagnes/             # index, create, edit, show + partials
-│   ├── users/, agences/, types_cartes/
-│   ├── login-logs/, telephonique-rapports/
-├── commercial/
-│   ├── ventes/, clients/, contrat/, telephonique/
-├── direction/
-│   ├── campagnes/, referentiel/
-├── rapports/
-│   ├── campagne-synthese, campagne-ventes, cumul…
-├── performance/
-│   ├── index, show
-├── clients/
-├── contrats/
-├── exports/
-└── auth/login.blade.php
+resources/js/
+├── app.jsx                    # Point d'entrée Inertia (createInertiaApp)
+├── Layouts/
+│   ├── AuthenticatedLayout.jsx  # Sidebar + header, nav par rôle
+│   └── AuthCard.jsx             # Écran login
+├── Components/
+│   ├── Sidebar.jsx
+│   └── ui/                      # Design system : Button, Card, Badge, StatCard…
+├── lib/                       # helpers (cn/clsx, formatage FR, hooks)
+└── Pages/
+    ├── Dashboard.jsx
+    ├── Auth/                  # Login
+    ├── Admin/                 # campagnes, users, agences, types de cartes, logs
+    ├── Commercial/            # ventes, clients, contrat, téléphonique
+    ├── Direction/             # lecture seule
+    ├── Ventes/, Clients/, Enrolements/
+    ├── Performances/          # Index, Show
+    ├── Rapports/              # Index, CampagneSynthese, CampagneVentes, CampagneClients
+    └── Profile/
 ```
 
 ### Stack front
 
 | Couche | Techno |
 |--------|--------|
-| Templates | Blade |
-| CSS app | Bootstrap 5 CDN + `public/css/gda-theme.css` |
-| CSS auth | Tailwind (Breeze/Vite) |
-| JS | Vanilla + Chart.js CDN |
-| Build | Vite (`resources/js/app.js`) |
-| PWA | `site.webmanifest` route + SW dans layouts |
+| Rendu | Inertia.js 2 + React 18 (`@inertiajs/react`) |
+| CSS | Tailwind 3 + `resources/css/app.css` (tokens charte GDA) + `clsx`/`tailwind-merge` |
+| Icônes | `lucide-react` |
+| Graphiques | `chart.js` + `react-chartjs-2` |
+| Routes JS | `ziggy-js` (helper `route()` côté React) |
+| Typo | `@fontsource/inter` |
+| Build | Vite 7 + `@vitejs/plugin-react` |
+| PWA | `site.webmanifest` route + service worker |
 
-### Partials campagne admin (juin 2026)
+**Pourquoi Inertia et pas une SPA + API dès v1** : Inertia garde les contrôleurs Laravel comme source de vérité (props sérialisées côté serveur), donc la refonte n'a touché que la présentation. **En v2 cette béquille disparaît** : Django expose du JSON via DRF, React devient une vraie SPA autonome (section 18).
 
-```
-admin/campagnes/partials/
-├── show-pilotage.blade.php    # Dates, statut, sync comptes
-├── show-commerciaux.blade.php # Signataires, activation
-├── show-contrat.blade.php     # Articles, republication
-├── show-aide.blade.php        # Versements aide
-├── show-performances.blade.php
-├── show-historique.blade.php  # Actions campagne
-└── show-modals.blade.php
-```
+### Historique — organisation Blade (jusqu'en juin 2026)
+
+90 fichiers `resources/views/` : `layouts/` (app, guest, navigation), `dashboard/` (une vue par rôle), `admin/` (campagnes + 7 partials `show-*`, users, agences, types_cartes, login-logs, telephonique-rapports), `commercial/` (ventes, clients, contrat, telephonique), `direction/`, `rapports/`, `performance/`, `clients/`, `contrats/`, `exports/`, `auth/login`.
+CSS : Bootstrap 5 CDN + `public/css/gda-theme.css`, JS vanilla + Chart.js CDN.
 
 ---
 
@@ -760,7 +787,11 @@ Pivot `campagne_agence` + `campagne_id` sur ventes → pas de flag global `toute
 
 ---
 
+# Annexe — Historique des prompts
+
 ## 13. Journal complet des prompts
+
+> **Long appendice** — la Partie II (cap Django/microservices/React) reprend [après ce journal](#14-cap-v2--pourquoi-django-et-la-trajectoire-recommandée).
 
 > Tous tes messages utilisateur Cursor, **texte intégral**, extraits des transcripts locaux.  
 > **Total : 229 prompts** dans **5 sessions**.  
@@ -4023,9 +4054,55 @@ je ne retrouve pas mes prompt ni les historique de mes chat
 
 ---
 
-## 14. Prompt starter pour une nouvelle app
+# Partie II — Cap v2 : Django · microservices · React
 
-Copie-colle et adapte les `[PLACEHOLDERS]` :
+> **Le détail de la v2 vit désormais dans son propre document : [`bdm_v2.md`](bdm_v2.md).**
+> Ce document-ci (`bdm_v1.md`) reste la **référence du métier et de l'existant** ; `bdm_v2.md` porte la cible technique et la roadmap d'exécution. Une seule source de vérité par sujet, pas deux copies qui divergent.
+
+## 14. Ce que devient BDM
+
+| | v1 (ce document) | v2 ([`bdm_v2.md`](bdm_v2.md)) |
+|---|---|---|
+| Backend | Laravel 12 / PHP 8.2 | Django 5 + DRF / Python 3.12 |
+| Base | PostgreSQL 16 (schéma consolidé 07/2026) | PostgreSQL 16, un schéma par service |
+| Front | Inertia.js + React 18 + Tailwind | React 18 + Vite + TypeScript, SPA autonome |
+| Découpage | Application unique | Monolithe modulaire Django → extraction en services |
+| Tâches | Scheduler Laravel | Celery + Celery beat |
+| Exports | PhpSpreadsheet · PhpWord · DomPDF | openpyxl · python-docx · WeasyPrint, en asynchrone |
+| Portée | Une application | **Un module d'un ERP** regroupant les autres apps |
+
+**Ce qui ne change pas** : le métier. Les sections 1, 5, 8 et 12 de ce document restent le cahier des charges de la v2.
+
+## Où trouver quoi dans `bdm_v2.md`
+
+| Besoin | Section de `bdm_v2.md` |
+|--------|------------------------|
+| Les règles d'architecture à respecter dès la 1ʳᵉ ligne | § 2 — Les 10 règles |
+| Les invariants métier à ne pas perdre (I1 → I12) | § 3 — Invariants hérités de v1 |
+| Le schéma des services, les événements, l'auth JWT | § 4 — Architecture cible |
+| L'organisation du monorepo et d'un service Django | § 5 — Structure du code |
+| **La roadmap : jalons M0 → M10, durées, critères de sortie** | § 6 et § 7 |
+| Quand et comment extraire un microservice | § 8 — Ordre et méthode d'extraction |
+| La reprise des données de production | § 9 |
+| La bascule et le rollback | § 10 |
+| La checklist de parité v1/v2 | § 11 |
+| La table de traduction Laravel → Django | § 13 |
+| Le contrat d'API cible | § 14 |
+| Les prompts starter Django | § 16 |
+| Les décisions techniques encore ouvertes | § 17 — journal ADR |
+
+## Les 12 invariants — rappel
+
+Ce sont les règles accumulées en 18 mois de v1. Chacune devient un test automatisé en v2, écrit avant le code.
+
+I1 campagne ouverte obligatoire · I2 délai 48 h · I3 stats sur campagnes en cours (fallback dernière) · I4 direction en lecture seule · I5 classements complets avec ex æquo · I6 contrat verrouillé à 5 jours + resynchronisation · I7 multi-campagnes par pivot agence · I8 aucun prix ni montant · I9 compte inactif bloqué · I10 contraintes du reporting téléphonique · I11 transfert d'agence avec réattribution · I12 campagne de type enrôlement.
+
+Détail et origine de chacun : [`bdm_v2.md` § 3](bdm_v2.md).
+
+## Prompt starter Laravel d'origine (legacy)
+
+<details>
+<summary>Prompt utilisé pour construire la v1 — conservé pour mémoire</summary>
 
 ```
 Tu es un développeur Laravel senior. Crée une application web appelée [NOM_APP]
@@ -4072,6 +4149,8 @@ Commence par Phase 1. Ne touche pas à Phase 4 avant ma validation.
 Documente dans [NOM]_v1.md au fur et à mesure.
 ```
 
+</details>
+
 ---
 
 ## Annexe — Fichiers de référence rapide
@@ -4080,13 +4159,26 @@ Documente dans [NOM]_v1.md au fur et à mesure.
 |--------|---------|
 | Doc opérationnelle | [`docu.md`](docu.md) |
 | Agences/commerciaux | [`Info.md`](Info.md) |
-| Routes | [`routes/web.php`](routes/web.php) |
+| Routes | [`routes/web.php`](routes/web.php), [`routes/api.php`](routes/api.php) |
 | Middleware | [`bootstrap/app.php`](bootstrap/app.php) |
-| Thème CSS | [`public/css/gda-theme.css`](public/css/gda-theme.css) |
-| Scope stats | [`app/Services/CampagneStatsScope.php`](app/Services/CampagneStatsScope.php) |
+| Thème / design system | [`resources/css/app.css`](resources/css/app.css), [`resources/js/Components/ui/`](resources/js/Components/ui/) |
+| Scope stats (à porter en `selectors.py`) | [`app/Services/CampagneStatsScope.php`](app/Services/CampagneStatsScope.php) |
 | Modèle central | [`app/Models/Campagne.php`](app/Models/Campagne.php) |
+| Schéma PostgreSQL consolidé | [`database/migrations/2026_07_30_000000_pgsql_consolidated_schema.php`](database/migrations/2026_07_30_000000_pgsql_consolidated_schema.php) |
 | Merge prod | [`database/MERGE_PROD_README.md`](database/MERGE_PROD_README.md) |
-| Dépendances | [`composer.json`](composer.json) |
+| Stack Docker | [`docker-compose.yml`](docker-compose.yml), [`docker-compose.prod.yml`](docker-compose.prod.yml), [`docker/`](docker/) |
+| Dépendances | [`composer.json`](composer.json), [`package.json`](package.json) |
+
+### Les 6 fichiers à lire avant d'écrire la première ligne de Django
+
+| Ordre | Fichier v1 | Ce qu'on y cherche |
+|-------|-----------|--------------------|
+| 1 | `database/migrations/2026_07_30_000000_pgsql_consolidated_schema.php` | Le schéma final réel, en un seul endroit |
+| 2 | `app/Models/Campagne.php` | Le cœur du domaine : statuts, ouverture aux ventes, périmètre des stats |
+| 3 | `app/Services/VenteService.php` + `EnrolementService.php` | Les règles de saisie (campagne active, 48 h) |
+| 4 | `app/Services/CampagneStatsScope.php` | La règle « campagnes en cours, sinon la dernière » |
+| 5 | `app/Services/PrimeService.php` + `CampagneRapportService.php` | Classements, ex æquo, agrégations à reproduire à l'identique |
+| 6 | `resources/js/Components/ui/` | Le design system à reprendre tel quel côté React |
 
 ---
 
@@ -4104,6 +4196,9 @@ Pour reproduire le même niveau de pilotage sur une autre app :
 
 **Détail entité** : drill-down commercial (ventes, clients, cartes), drill-down campagne admin (pilotage complet sans SQL).
 
+> **En v2** : ce périmètre est celui du service `reporting`. Il est intégralement en lecture — c'est ce qui en fait le premier candidat à l'extraction en microservice, et le premier endroit où mesurer la parité v1/v2 (mêmes chiffres, mêmes classements, mêmes exports).
+
 ---
 
-*Document maître BDM — guide technique + historique complet des prompts Cursor. Sessions : `46793e72`, `8d2973fb`, `94a5723d`, `d71f5dcf`, `b42f5a3d`.*
+*Document BDM v1 — l'existant : guide technique (Laravel/Inertia/React, en production) + historique complet des prompts Cursor, sessions `46793e72`, `8d2973fb`, `94a5723d`, `d71f5dcf`, `b42f5a3d`.*
+*La suite — Django, microservices, React, roadmap et jalons — est dans [`bdm_v2.md`](bdm_v2.md).*
