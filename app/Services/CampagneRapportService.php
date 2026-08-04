@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Agence;
 use App\Models\Campagne;
+use App\Models\EnrolementClient;
 use App\Models\TelephoniqueRapport;
 use App\Models\TypeCarte;
 use App\Models\User;
@@ -150,8 +151,8 @@ class CampagneRapportService
         }
         $parTypeCarte = $parTypeCarte->sortByDesc('total_ventes')->values();
 
-        $parSemaine = $this->agregerParPeriode($ventesBase, 'semaine');
-        $parMois = $this->agregerParPeriode($ventesBase, 'mois');
+        $parSemaine = $this->agregerVentesParPeriode(clone $ventesBase, 'semaine');
+        $parMois = $this->agregerVentesParPeriode(clone $ventesBase, 'mois');
 
         return [
             'date_debut' => $dateDebut,
@@ -166,6 +167,128 @@ class CampagneRapportService
             'commerciaux' => $commerciaux,
             'agences' => $agences,
             'par_type_carte' => $parTypeCarte,
+            'par_semaine' => $parSemaine,
+            'par_mois' => $parMois,
+        ];
+    }
+
+    /**
+     * Équivalent de synthese() pour une campagne enrolement_app : mêmes clés de retour
+     * (mêmes noms — «total_ventes» etc. — pour que les pages React réutilisent la même forme),
+     * sauf « par_type_carte » qui n'a pas de sens ici et revient toujours vide.
+     *
+     * @return array{date_debut: Carbon, date_fin: Carbon, resume: array, commerciaux: Collection, agences: Collection, par_type_carte: Collection, par_semaine: Collection, par_mois: Collection}
+     */
+    public function syntheseEnrolement(
+        Campagne $campagne,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        ?int $filtreAgenceId = null,
+        ?int $filtreUserId = null
+    ): array {
+        $campagne->loadMissing('agences');
+        $dateDebut = $dateDebut->copy()->startOfDay();
+        $dateFin = $dateFin->copy()->endOfDay();
+
+        $base = $this->enrolementsFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+
+        $total = (clone $base)->count();
+
+        $usersQuery = $this->usersPerimetreQuery($campagne);
+        if ($filtreAgenceId !== null) {
+            $usersQuery->where('users.agence_id', $filtreAgenceId);
+        }
+        if ($filtreUserId !== null) {
+            $usersQuery->where('users.id', $filtreUserId);
+        }
+
+        $nbCommerciauxPerimetre = (clone $usersQuery)->count();
+
+        $agrega = EnrolementClient::query()
+            ->selectRaw('enrolement_clients.user_id, COUNT(enrolement_clients.id) as cnt')
+            ->where('enrolement_clients.campagne_id', $campagne->id)
+            ->whereBetween('enrolement_clients.created_at', [$dateDebut, $dateFin])
+            ->when($filtreAgenceId !== null, fn ($q) => $q->where('enrolement_clients.agence_id', $filtreAgenceId))
+            ->when($filtreUserId !== null, fn ($q) => $q->where('enrolement_clients.user_id', $filtreUserId))
+            ->groupBy('enrolement_clients.user_id');
+
+        $commerciauxRows = (clone $usersQuery)
+            ->leftJoinSub($agrega, 'e', 'users.id', '=', 'e.user_id')
+            ->selectRaw('users.id as user_id, users.name, users.prenom, users.agence_id, COALESCE(e.cnt, 0) as total_ventes')
+            ->orderByDesc('total_ventes')
+            ->orderBy('users.id')
+            ->get();
+
+        $agenceIds = $commerciauxRows->pluck('agence_id')->filter()->unique()->values()->all();
+        $agencesById = Agence::query()->whereIn('id', $agenceIds)->get()->keyBy('id');
+
+        $rangCompetition = 1;
+        $commerciaux = collect();
+        foreach ($commerciauxRows as $index => $row) {
+            if ($index > 0 && (int) $row->total_ventes < (int) $commerciauxRows[$index - 1]->total_ventes) {
+                $rangCompetition = $index + 1;
+            }
+            $agence = $row->agence_id ? $agencesById->get($row->agence_id) : null;
+            $commerciaux->push([
+                'user_id' => (int) $row->user_id,
+                'user_name' => $row->prenom ? trim($row->prenom.' '.$row->name) : $row->name,
+                'agence_id' => $row->agence_id ? (int) $row->agence_id : null,
+                'agence_nom' => $agence?->nom,
+                'total_ventes' => (int) $row->total_ventes,
+                'rang' => $rangCompetition,
+            ]);
+        }
+
+        $nbAvecVentes = $commerciaux->where('total_ventes', '>', 0)->count();
+        $nbZeroVente = $commerciaux->where('total_ventes', 0)->count();
+
+        $parAgence = (clone $base)
+            ->selectRaw('enrolement_clients.agence_id, COUNT(enrolement_clients.id) as cnt')
+            ->groupBy('enrolement_clients.agence_id')
+            ->pluck('cnt', 'agence_id');
+
+        $commerciauxParAgence = (clone $usersQuery)
+            ->selectRaw('users.agence_id, COUNT(users.id) as cnt')
+            ->groupBy('users.agence_id')
+            ->pluck('cnt', 'agence_id');
+
+        $agencesPerimetre = $campagne->agencesPerimetre();
+        if ($filtreAgenceId !== null) {
+            $agencesPerimetre = $agencesPerimetre->where('id', $filtreAgenceId)->values();
+        }
+
+        $nbAgencesAvecVentes = $agencesPerimetre->filter(fn (Agence $a) => (int) ($parAgence[$a->id] ?? 0) > 0)->count();
+
+        $agences = collect();
+        foreach ($agencesPerimetre as $agence) {
+            $cnt = (int) ($parAgence[$agence->id] ?? 0);
+            $pct = $total > 0 ? round($cnt / $total * 100, 2) : 0.0;
+            $agences->push([
+                'agence_id' => (int) $agence->id,
+                'agence_nom' => $agence->nom,
+                'total_ventes' => $cnt,
+                'pct_volume' => $pct,
+                'nb_commerciaux' => (int) ($commerciauxParAgence[$agence->id] ?? 0),
+            ]);
+        }
+        $agences = $agences->sortByDesc('total_ventes')->values();
+
+        $parSemaine = $this->agregerEnrolementsParPeriode($base, 'semaine');
+        $parMois = $this->agregerEnrolementsParPeriode($base, 'mois');
+
+        return [
+            'date_debut' => $dateDebut,
+            'date_fin' => $dateFin,
+            'resume' => [
+                'total_ventes' => $total,
+                'nb_commerciaux_perimetre' => $nbCommerciauxPerimetre,
+                'nb_avec_ventes' => $nbAvecVentes,
+                'nb_zero_vente' => $nbZeroVente,
+                'nb_agences_avec_ventes' => $nbAgencesAvecVentes,
+            ],
+            'commerciaux' => $commerciaux,
+            'agences' => $agences,
+            'par_type_carte' => collect(),
             'par_semaine' => $parSemaine,
             'par_mois' => $parMois,
         ];
@@ -187,6 +310,21 @@ class CampagneRapportService
             ->when($filtreTypeCarteId !== null, fn ($q) => $q->where('type_carte_id', $filtreTypeCarteId));
     }
 
+    /** Équivalent de ventesFiltreesQuery() pour une campagne de type enrolement_app (pas de type de carte). */
+    public function enrolementsFiltreesQuery(
+        int $campagneId,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        ?int $filtreAgenceId = null,
+        ?int $filtreUserId = null
+    ): Builder {
+        return EnrolementClient::query()
+            ->where('campagne_id', $campagneId)
+            ->whereBetween('created_at', [$dateDebut, $dateFin])
+            ->when($filtreAgenceId !== null, fn ($q) => $q->where('agence_id', $filtreAgenceId))
+            ->when($filtreUserId !== null, fn ($q) => $q->where('user_id', $filtreUserId));
+    }
+
     /**
      * Agrégation temporelle sur une requête ventes déjà filtrée (performances, exports croisés).
      *
@@ -195,7 +333,18 @@ class CampagneRapportService
      */
     public function agregerVentesParPeriode(Builder $ventesBase, string $mode): Collection
     {
-        return $this->agregerParPeriode($ventesBase, $mode);
+        return $this->agregerParPeriode($ventesBase, $mode, 'ventes.created_at', 'ventes.id');
+    }
+
+    /**
+     * Même agrégation temporelle, pour une requête enrôlements (pas de table ventes).
+     *
+     * @param  'semaine'|'mois'  $mode
+     * @return Collection<int, array{cle: string, libelle: string, total_ventes: int}>
+     */
+    public function agregerEnrolementsParPeriode(Builder $enrolementsBase, string $mode): Collection
+    {
+        return $this->agregerParPeriode($enrolementsBase, $mode, 'enrolement_clients.created_at', 'enrolement_clients.id');
     }
 
     /** Requête commerciaux engagés sur la campagne (signataires ou tous selon configuration). */
@@ -207,41 +356,41 @@ class CampagneRapportService
     /**
      * @return Collection<int, array{cle: string, libelle: string, total_ventes: int}>
      */
-    private function agregerParPeriode(Builder $ventesBase, string $mode): Collection
+    private function agregerParPeriode(Builder $base, string $mode, string $dateColumn, string $idColumn): Collection
     {
         $driver = DB::getDriverName();
-        $q = clone $ventesBase;
+        $q = clone $base;
 
         if ($mode === 'semaine') {
             if ($driver === 'mysql') {
-                $rows = $q->selectRaw('YEARWEEK(ventes.created_at, 3) as periode_cle, COUNT(ventes.id) as cnt')
+                $rows = $q->selectRaw("YEARWEEK({$dateColumn}, 3) as periode_cle, COUNT({$idColumn}) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             } elseif ($driver === 'pgsql') {
-                $rows = $q->selectRaw("to_char(ventes.created_at, 'IYYY-\"W\"IW') as periode_cle, COUNT(ventes.id) as cnt")
+                $rows = $q->selectRaw("to_char({$dateColumn}, 'IYYY-\"W\"IW') as periode_cle, COUNT({$idColumn}) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             } else {
-                $rows = $q->selectRaw("strftime('%Y-W%W', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt")
+                $rows = $q->selectRaw("strftime('%Y-W%W', {$dateColumn}) as periode_cle, COUNT({$idColumn}) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             }
         } else {
             if ($driver === 'mysql') {
-                $rows = $q->selectRaw("DATE_FORMAT(ventes.created_at, '%Y-%m') as periode_cle, COUNT(ventes.id) as cnt")
+                $rows = $q->selectRaw("DATE_FORMAT({$dateColumn}, '%Y-%m') as periode_cle, COUNT({$idColumn}) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             } elseif ($driver === 'pgsql') {
-                $rows = $q->selectRaw("to_char(ventes.created_at, 'YYYY-MM') as periode_cle, COUNT(ventes.id) as cnt")
+                $rows = $q->selectRaw("to_char({$dateColumn}, 'YYYY-MM') as periode_cle, COUNT({$idColumn}) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();
             } else {
-                $rows = $q->selectRaw("strftime('%Y-%m', ventes.created_at) as periode_cle, COUNT(ventes.id) as cnt")
+                $rows = $q->selectRaw("strftime('%Y-%m', {$dateColumn}) as periode_cle, COUNT({$idColumn}) as cnt")
                     ->groupBy('periode_cle')
                     ->orderBy('periode_cle')
                     ->get();

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Agence;
 use App\Models\Campagne;
 use App\Models\Client;
+use App\Models\EnrolementClient;
 use App\Models\TelephoniqueRapport;
 use App\Models\TypeCarte;
 use App\Models\User;
@@ -40,7 +41,6 @@ class RapportController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $campagneIdsStats = CampagneStatsScope::idsPour(null);
         $libelleStatsCampagne = CampagneStatsScope::libelle(null);
 
         $campagnes = Campagne::query()->orderByDesc('date_debut')->orderByDesc('id')->get();
@@ -51,10 +51,14 @@ class RapportController extends Controller
             'campagnes' => $campagnes->map(fn (Campagne $c) => [
                 'id' => $c->id,
                 'nom' => $c->nom,
+                'type' => $c->type,
+                'estEnrolement' => $c->type === Campagne::TYPE_ENROLEMENT_APP,
                 'date_debut' => $c->date_debut->format('d/m/Y'),
                 'date_fin' => $c->date_fin->format('d/m/Y'),
                 'statut' => $c->statut_effectif,
-                'nb_ventes' => $c->ventes()->count(),
+                'nb_ventes' => $c->type === Campagne::TYPE_ENROLEMENT_APP
+                    ? EnrolementClient::query()->where('campagne_id', $c->id)->count()
+                    : $c->ventes()->count(),
             ])->values(),
         ]);
     }
@@ -87,6 +91,11 @@ class RapportController extends Controller
         Campagne::syncStatuts();
         $campagnes = Campagne::query()->whereIn('id', $ids)->orderByDesc('date_debut')->orderByDesc('id')->get();
         $campagneIds = $campagnes->pluck('id')->all();
+
+        $erreurType = $this->assertCumulTypeHomogeneVente($campagnes);
+        if ($erreurType !== null) {
+            return redirect()->route('rapports.index')->with('warning', $erreurType);
+        }
 
         $baseVente = Vente::query()->whereIn('campagne_id', $campagneIds);
 
@@ -290,6 +299,12 @@ class RapportController extends Controller
         Campagne::syncStatuts();
         $campagnes = Campagne::query()->whereIn('id', $ids)->orderByDesc('date_debut')->orderByDesc('id')->get();
         $campagneIds = $campagnes->pluck('id')->all();
+
+        $erreurType = $this->assertCumulTypeHomogeneVente($campagnes);
+        if ($erreurType !== null) {
+            return redirect()->route('rapports.index')->with('warning', $erreurType);
+        }
+
         $baseVente = Vente::query()->whereIn('campagne_id', $campagneIds);
 
         $totalVentes = (clone $baseVente)->count();
@@ -727,32 +742,26 @@ class RapportController extends Controller
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
 
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
-        $filtreTypeCarteId = $this->parseFiltreTypeCarteId($request);
+        $filtreTypeCarteId = $estEnrolement ? null : $this->parseFiltreTypeCarteId($request);
 
-        $base = $this->campagneRapportService->ventesFiltreesQuery(
-            $campagne->id,
-            $dateDebut,
-            $dateFin,
-            $filtreAgenceId,
-            $filtreUserId,
-            $filtreTypeCarteId
-        );
+        $base = $estEnrolement
+            ? $this->campagneRapportService->enrolementsFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+            : $this->campagneRapportService->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId, $filtreTypeCarteId);
         $resumeListe = [
             'count' => (clone $base)->count(),
         ];
 
-        $ventes = (clone $base)
-            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
-            ->orderByDesc('created_at')
-            ->paginate(25)
-            ->withQueryString();
+        $lignes = $estEnrolement
+            ? (clone $base)->with(['user', 'agence'])->orderByDesc('created_at')->paginate(25)->withQueryString()
+            : (clone $base)->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])->orderByDesc('created_at')->paginate(25)->withQueryString();
 
         $commerciauxChoix = $this->campagneRapportService->usersPerimetreQuery($campagne)
             ->orderBy('name')
             ->get();
         $agencesChoix = $campagne->agencesPerimetre();
-        $typesChoix = TypeCarte::query()->orderBy('code')->get();
+        $typesChoix = $estEnrolement ? collect() : TypeCarte::query()->orderBy('code')->get();
 
         $qListe = array_filter([
             'du' => $request->query('du'),
@@ -771,6 +780,7 @@ class RapportController extends Controller
                 'date_debut_iso' => $campagne->date_debut->format('Y-m-d'),
                 'date_fin_iso' => $campagne->date_fin->format('Y-m-d'),
             ],
+            'estEnrolement' => $estEnrolement,
             'periode' => ['debut' => $dateDebut->format('d/m/Y'), 'fin' => $dateFin->format('d/m/Y')],
             'filtres' => [
                 'du' => $request->query('du', $dateDebut->format('Y-m-d')),
@@ -785,18 +795,27 @@ class RapportController extends Controller
             'resumeListe' => $resumeListe,
             'qListe' => $qListe,
             'ventes' => [
-                'data' => $ventes->getCollection()->map(fn (Vente $v) => [
-                    'date' => $v->created_at->format('d/m/Y H:i'),
-                    'client_nom' => trim($v->client->prenom.' '.$v->client->nom),
-                    'type_carte' => $v->typeCarte?->code ?? '?',
-                    'commercial' => $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '—',
-                    'agence_nom' => $v->agence->nom ?? '—',
-                    'statut_activation' => $v->statut_activation,
-                ])->values(),
-                'links' => $ventes->linkCollection(),
-                'from' => $ventes->firstItem(),
-                'to' => $ventes->lastItem(),
-                'total' => $ventes->total(),
+                'data' => $estEnrolement
+                    ? $lignes->getCollection()->map(fn (EnrolementClient $e) => [
+                        'date' => $e->created_at->format('d/m/Y H:i'),
+                        'client_nom' => trim($e->prenom.' '.$e->nom),
+                        'type_carte' => null,
+                        'commercial' => $e->user ? ($e->user->prenom ? trim($e->user->prenom.' '.$e->user->name) : $e->user->name) : '—',
+                        'agence_nom' => $e->agence->nom ?? '—',
+                        'statut_activation' => null,
+                    ])->values()
+                    : $lignes->getCollection()->map(fn (Vente $v) => [
+                        'date' => $v->created_at->format('d/m/Y H:i'),
+                        'client_nom' => trim($v->client->prenom.' '.$v->client->nom),
+                        'type_carte' => $v->typeCarte?->code ?? '?',
+                        'commercial' => $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '—',
+                        'agence_nom' => $v->agence->nom ?? '—',
+                        'statut_activation' => $v->statut_activation,
+                    ])->values(),
+                'links' => $lignes->linkCollection(),
+                'from' => $lignes->firstItem(),
+                'to' => $lignes->lastItem(),
+                'total' => $lignes->total(),
             ],
         ]);
     }
@@ -804,6 +823,28 @@ class RapportController extends Controller
     public function campagneClients(Request $request, Campagne $campagne): \Inertia\Response
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
+
+        if ($campagne->type === Campagne::TYPE_ENROLEMENT_APP) {
+            $enrolements = EnrolementClient::query()
+                ->where('campagne_id', $campagne->id)
+                ->with('user')
+                ->orderBy('nom')
+                ->orderBy('prenom')
+                ->get();
+
+            return \Inertia\Inertia::render('Rapports/CampagneClients', [
+                'campagne' => ['id' => $campagne->id, 'nom' => $campagne->nom],
+                'estEnrolement' => true,
+                'clients' => $enrolements->map(fn (EnrolementClient $e) => [
+                    'id' => $e->id,
+                    'nom_complet' => trim($e->prenom.' '.$e->nom),
+                    'telephone' => $e->telephone,
+                    'ville' => $e->adresse,
+                    'type_carte' => null,
+                    'commercial' => $e->user?->name ?? '—',
+                ])->values(),
+            ]);
+        }
 
         $clientIds = Vente::query()
             ->where('campagne_id', $campagne->id)
@@ -821,6 +862,7 @@ class RapportController extends Controller
 
         return \Inertia\Inertia::render('Rapports/CampagneClients', [
             'campagne' => ['id' => $campagne->id, 'nom' => $campagne->nom],
+            'estEnrolement' => false,
             'clients' => $clients->map(fn (Client $c) => [
                 'id' => $c->id,
                 'nom_complet' => trim($c->prenom.' '.$c->nom),
@@ -838,9 +880,15 @@ class RapportController extends Controller
         Campagne::syncStatuts();
 
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
 
-        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
-        $telephonique = $this->campagneRapportService->agregatsTelephonique($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $synthese = $estEnrolement
+            ? $this->campagneRapportService->syntheseEnrolement($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+            : $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        // Le reporting téléphonique n'existe pas pour les campagnes d'enrôlement (pas de flux commercial_telephonique dédié à ce type).
+        $telephonique = $estEnrolement
+            ? null
+            : $this->campagneRapportService->agregatsTelephonique($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
 
         $commerciauxChoix = $this->campagneRapportService->usersPerimetreQuery($campagne)
             ->orderBy('name')
@@ -897,6 +945,7 @@ class RapportController extends Controller
                 'date_debut_iso' => $campagne->date_debut->format('Y-m-d'),
                 'date_fin_iso' => $campagne->date_fin->format('Y-m-d'),
             ],
+            'estEnrolement' => $estEnrolement,
             'periode' => ['debut' => $dateDebut->format('d/m/Y'), 'fin' => $dateFin->format('d/m/Y')],
             'filtres' => [
                 'du' => $request->query('du', $dateDebut->format('Y-m-d')),
@@ -925,7 +974,9 @@ class RapportController extends Controller
         Campagne::syncStatuts();
 
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
-        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $synthese = $campagne->type === Campagne::TYPE_ENROLEMENT_APP
+            ? $this->campagneRapportService->syntheseEnrolement($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+            : $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
         $fileBase = 'synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d');
 
         return $this->graphiquesDashboardExportService->downloadSyntheseCampagneExcel(
@@ -943,7 +994,9 @@ class RapportController extends Controller
         Campagne::syncStatuts();
 
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
-        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $synthese = $campagne->type === Campagne::TYPE_ENROLEMENT_APP
+            ? $this->campagneRapportService->syntheseEnrolement($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+            : $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
         $fileBase = 'synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d');
 
         return $this->graphiquesDashboardExportService->downloadSyntheseCampagneWord(
@@ -1643,6 +1696,26 @@ class RapportController extends Controller
             return;
         }
         abort(403, 'Accès non autorisé à cette campagne.');
+    }
+
+    /**
+     * Le cumul multi-campagnes (cumul()/exportCumul()) reste bâti sur `ventes` — pas d'équivalent
+     * enrolement pour l'instant. On refuse tout mélange de types, et toute sélection 100% enrolement,
+     * plutôt que d'afficher silencieusement un cumul vide/faux.
+     *
+     * @param  Collection<int, Campagne>  $campagnes
+     */
+    private function assertCumulTypeHomogeneVente(Collection $campagnes): ?string
+    {
+        $types = $campagnes->pluck('type')->unique();
+        if ($types->count() > 1) {
+            return 'Impossible de cumuler des campagnes de types différents (vente et enrôlement).';
+        }
+        if ($types->first() === Campagne::TYPE_ENROLEMENT_APP) {
+            return 'Le cumul multi-campagnes n’est pas encore disponible pour les campagnes d’enrôlement.';
+        }
+
+        return null;
     }
 
     /**

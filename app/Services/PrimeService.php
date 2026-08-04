@@ -145,10 +145,73 @@ class PrimeService
         return $lignes;
     }
 
+    /**
+     * Équivalent de getClassementPourCampagnesIds() pour des campagnes enrolement_app : mêmes clés
+     * de retour (rang/user_id/user_name/total_ventes), comptage sur enrolement_clients au lieu de ventes.
+     *
+     * @param  list<int>  $campagneIds
+     */
+    public function getClassementEnrolementPourCampagnesIds(
+        array $campagneIds,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        bool $seulementSignatairesActifs = false,
+        ?int $agenceId = null
+    ): Collection {
+        if ($campagneIds === []) {
+            return collect();
+        }
+
+        $userIds = Campagne::idsCommerciauxPerimetrePourCampagnes($campagneIds);
+        if ($userIds === []) {
+            return collect();
+        }
+
+        $query = User::query()
+            ->whereIn('users.id', $userIds)
+            ->when($seulementSignatairesActifs, fn ($q) => $q->where('users.actif', true))
+            ->leftJoin('enrolement_clients', function ($join) use ($campagneIds, $dateDebut, $dateFin, $agenceId) {
+                $join->on('users.id', '=', 'enrolement_clients.user_id')
+                    ->whereIn('enrolement_clients.campagne_id', $campagneIds)
+                    ->whereBetween('enrolement_clients.created_at', [$dateDebut, $dateFin]);
+                if ($agenceId !== null) {
+                    $join->where('enrolement_clients.agence_id', '=', $agenceId);
+                }
+            })
+            ->selectRaw('users.id as user_id, users.name, users.prenom, COALESCE(COUNT(enrolement_clients.id), 0) as total')
+            ->groupBy('users.id', 'users.name', 'users.prenom')
+            ->orderByDesc('total')
+            ->orderBy('users.id');
+
+        $rows = $query->get()->values();
+        $lignes = collect();
+        $rangCompetition = 1;
+
+        foreach ($rows as $index => $row) {
+            if ($index > 0 && (int) $row->total < (int) $rows[$index - 1]->total) {
+                $rangCompetition = $index + 1;
+            }
+            $displayName = $row->prenom ? trim($row->prenom.' '.$row->name) : $row->name;
+            $lignes->push([
+                'rang' => $rangCompetition,
+                'user_id' => (int) $row->user_id,
+                'user_name' => $displayName,
+                'total_ventes' => (int) $row->total,
+            ]);
+        }
+
+        return $lignes;
+    }
+
     public function calculerPrimes(string $periode, ?int $agenceId = null): array
     {
         $classement = $this->getClassement($periode, $agenceId, true);
-        $campagne = Campagne::getActiveForAgence($agenceId);
+        // Prime « meilleur vendeur » : concept propre aux campagnes de vente, pas aux campagnes
+        // d'enrôlement (pas de schéma de commission défini pour ce type) — on ne cible donc que
+        // les campagnes vente_carte ici.
+        $campagne = Campagne::getActivesPourAgence($agenceId)
+            ->where('type', Campagne::TYPE_VENTE_CARTE)
+            ->first();
 
         if (! $campagne) {
             return [];
