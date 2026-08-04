@@ -40,6 +40,11 @@ WORKDIR /var/www/html
 COPY . .
 COPY --from=node-build /app/public/build ./public/build
 
+# Copie figée de public/ : à l'exécution, public/ est masqué par le volume nommé
+# partagé avec nginx (que Docker ne réinitialise que s'il est vide). L'entrypoint
+# resynchronise depuis cette copie, sinon les assets restent ceux du 1er déploiement.
+RUN cp -a /var/www/html/public /var/www/html/public-dist
+
 RUN composer install --no-dev --optimize-autoloader --no-interaction \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
