@@ -313,6 +313,8 @@ class PerformanceController extends Controller
     {
         Campagne::syncStatuts();
         $ctx = $this->performanceContext($request);
+        $estEnrolement = $ctx['type'] === Campagne::TYPE_ENROLEMENT_APP;
+        $libelleVolume = $estEnrolement ? 'Enrôlements' : 'Ventes';
         $campagneRef = $ctx['campagneRef'];
         $campagneIdsFilter = $ctx['campagneIdsFilter'];
 
@@ -320,23 +322,34 @@ class PerformanceController extends Controller
         $filtreVentesAgencePourClassement = ($viewer?->isAdmin() || $viewer?->isDirection())
             ? $ctx['agenceId']
             : null;
-        $classement = $this->classementPerformance(
-            $campagneIdsFilter,
-            $ctx['dateDebut'],
-            $ctx['dateFin'],
-            $filtreVentesAgencePourClassement
-        );
+        $classement = $estEnrolement
+            ? $this->classementEnrolementPerformance(
+                $campagneIdsFilter,
+                $ctx['dateDebut'],
+                $ctx['dateFin'],
+                $filtreVentesAgencePourClassement
+            )
+            : $this->classementPerformance(
+                $campagneIdsFilter,
+                $ctx['dateDebut'],
+                $ctx['dateFin'],
+                $filtreVentesAgencePourClassement
+            );
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
-        $stats = $this->aggregatePerformanceStats($baseVentes);
-        $parSemaine = $this->campagneRapportService->agregerVentesParPeriode(clone $baseVentes, 'semaine');
+        $baseVentes = $estEnrolement
+            ? $this->enrolementsQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter)
+            : $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
+        $stats = $estEnrolement ? $this->aggregateEnrolementStats($baseVentes) : $this->aggregatePerformanceStats($baseVentes);
+        $parSemaine = $estEnrolement
+            ? $this->campagneRapportService->agregerEnrolementsParPeriode(clone $baseVentes, 'semaine')
+            : $this->campagneRapportService->agregerVentesParPeriode(clone $baseVentes, 'semaine');
 
         $resumeBody = [
             ['Période affichée', $ctx['libellePeriode']],
             ['Date début (filtre)', $ctx['dateDebut']->format('d/m/Y')],
             ['Date fin (filtre)', $ctx['dateFin']->format('d/m/Y')],
-            ['Campagne (filtre ventes)', CampagneStatsScope::libelle($ctx['agenceId'])],
-            ['Total ventes', $stats['total_ventes']],
+            ['Campagne (filtre '.mb_strtolower($libelleVolume).')', CampagneStatsScope::libelle($ctx['agenceId'], $ctx['type'])],
+            ['Total '.mb_strtolower($libelleVolume), $stats['total_ventes']],
         ];
 
         $totalVentesExport = (int) ($stats['total_ventes'] ?? 0);
@@ -352,7 +365,7 @@ class PerformanceController extends Controller
             $baseVentes,
             Campagne::agencesPerimetrePourCampagnes($campagneIdsFilter)->pluck('id')->map(fn ($id) => (int) $id)->all()
         );
-        $classementTypesCartes = $this->classementTypesCartesPourPerformances($baseVentes);
+        $classementTypesCartes = $estEnrolement ? collect() : $this->classementTypesCartesPourPerformances($baseVentes);
 
         $agencesRows = $classementAgences->map(fn (array $r) => [
             $r['rang'], $r['agence_nom'], $r['total_ventes'], $r['pct_volume'],
@@ -362,21 +375,40 @@ class PerformanceController extends Controller
             $r['rang'], $r['code'], $r['total_ventes'], $r['pct_volume'],
         ])->all();
 
-        $ventesDetail = (clone $baseVentes)
-            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
-            ->orderByDesc('created_at')
-            ->get();
+        $nomUser = fn (?User $u) => $u ? ($u->prenom ? trim($u->prenom.' '.$u->name) : $u->name) : '';
 
-        $ventesDetailRows = $ventesDetail->map(fn (Vente $v) => [
-            $v->created_at->format('d/m/Y H:i'),
-            $v->campagne?->nom ?? '—',
-            $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
-            $v->client?->telephone ?? '',
-            $v->typeCarte?->code ?? '—',
-            $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
-            $v->agence->nom ?? '—',
-            $v->statut_activation ?? '',
-        ])->all();
+        if ($estEnrolement) {
+            $detailHeaders = ['Date', 'Campagne', 'Client', 'Téléphone', 'Adresse', 'Commercial', 'Agence'];
+            $detailRows = (clone $baseVentes)
+                ->with(['user', 'agence', 'campagne'])
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn (EnrolementClient $e) => [
+                    $e->created_at->format('d/m/Y H:i'),
+                    $e->campagne?->nom ?? '—',
+                    trim($e->prenom.' '.$e->nom),
+                    $e->telephone ?? '',
+                    $e->adresse ?? '',
+                    $nomUser($e->user),
+                    $e->agence->nom ?? '—',
+                ])->all();
+        } else {
+            $detailHeaders = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'];
+            $detailRows = (clone $baseVentes)
+                ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn (Vente $v) => [
+                    $v->created_at->format('d/m/Y H:i'),
+                    $v->campagne?->nom ?? '—',
+                    $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
+                    $v->client?->telephone ?? '',
+                    $v->typeCarte?->code ?? '—',
+                    $nomUser($v->user),
+                    $v->agence->nom ?? '—',
+                    $v->statut_activation ?? '',
+                ])->all();
+        }
 
         $definitions = [
             [
@@ -386,28 +418,29 @@ class PerformanceController extends Controller
             ],
             [
                 'title' => 'Classement commerciaux',
-                'headers' => ['Rang', 'Commercial', 'Nombre de ventes', 'Part % volume'],
+                'headers' => ['Rang', 'Commercial', 'Nombre d\''.mb_strtolower($libelleVolume), 'Part % volume'],
                 'rows' => $classementRows,
             ],
             [
                 'title' => 'Classement agences',
-                'headers' => ['Rang', 'Agence', 'Ventes', 'Part % volume'],
+                'headers' => ['Rang', 'Agence', $libelleVolume, 'Part % volume'],
                 'rows' => $agencesRows,
             ],
-            [
+            // Types de carte : sans objet pour une campagne d'enrôlement.
+            ...($estEnrolement ? [] : [[
                 'title' => 'Types cartes',
                 'headers' => ['Rang', 'Type carte', 'Ventes', 'Part % volume'],
                 'rows' => $typesRows,
-            ],
+            ]]),
             [
                 'title' => 'Par semaine',
-                'headers' => ['Période', 'Ventes'],
+                'headers' => ['Période', $libelleVolume],
                 'rows' => $semRows,
             ],
             [
-                'title' => 'Ventes détail',
-                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'],
-                'rows' => $ventesDetailRows,
+                'title' => $libelleVolume.' détail',
+                'headers' => $detailHeaders,
+                'rows' => $detailRows,
             ],
         ];
 
@@ -426,19 +459,19 @@ class PerformanceController extends Controller
         }
 
         $ctx = $this->performanceContext($request);
+        $estEnrolement = $ctx['type'] === Campagne::TYPE_ENROLEMENT_APP;
         $campagneIdsFilter = $ctx['campagneIdsFilter'];
         $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
             ? $ctx['agenceId']
             : null;
-        $classementComplet = $this->classementPerformance(
-            $campagneIdsFilter,
-            $ctx['dateDebut'],
-            $ctx['dateFin'],
-            $filtreVentesAgencePourClassement
-        );
+        $classementComplet = $estEnrolement
+            ? $this->classementEnrolementPerformance($campagneIdsFilter, $ctx['dateDebut'], $ctx['dateFin'], $filtreVentesAgencePourClassement)
+            : $this->classementPerformance($campagneIdsFilter, $ctx['dateDebut'], $ctx['dateFin'], $filtreVentesAgencePourClassement);
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
-        $stats = $this->aggregatePerformanceStats($baseVentes);
+        $baseVentes = $estEnrolement
+            ? $this->enrolementsQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter)
+            : $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
+        $stats = $estEnrolement ? $this->aggregateEnrolementStats($baseVentes) : $this->aggregatePerformanceStats($baseVentes);
 
         $topCommerciauxChart = $classementComplet
             ->filter(fn (array $c) => ($c['total_ventes'] ?? 0) > 0)
@@ -450,7 +483,7 @@ class PerformanceController extends Controller
             ->values();
 
         $ventesParAgenceChart = $this->ventesParAgencePourChart($baseVentes);
-        $typesCartes = TypeCarte::orderBy('code')->get();
+        $typesCartes = $estEnrolement ? collect() : TypeCarte::orderBy('code')->get();
 
         $perfPeriodSlug = Str::slug(Str::ascii(Str::limit($ctx['libellePeriode'] ?? 'periode', 48, '')), '-');
         $fileBase = 'graphiques-performances-'.($ctx['campagneIdSelected'] ?: 'ref').'-'.($perfPeriodSlug !== '' ? $perfPeriodSlug : 'export-'.now()->format('Ymd-His'));
@@ -461,7 +494,8 @@ class PerformanceController extends Controller
             $topCommerciauxChart,
             $ventesParAgenceChart,
             $typesCartes,
-            $fileBase
+            $fileBase,
+            $estEnrolement
         );
     }
 
@@ -474,19 +508,19 @@ class PerformanceController extends Controller
         }
 
         $ctx = $this->performanceContext($request);
+        $estEnrolement = $ctx['type'] === Campagne::TYPE_ENROLEMENT_APP;
         $campagneIdsFilter = $ctx['campagneIdsFilter'];
         $filtreVentesAgencePourClassement = ($user?->isAdmin() || $user?->isDirection())
             ? $ctx['agenceId']
             : null;
-        $classementComplet = $this->classementPerformance(
-            $campagneIdsFilter,
-            $ctx['dateDebut'],
-            $ctx['dateFin'],
-            $filtreVentesAgencePourClassement
-        );
+        $classementComplet = $estEnrolement
+            ? $this->classementEnrolementPerformance($campagneIdsFilter, $ctx['dateDebut'], $ctx['dateFin'], $filtreVentesAgencePourClassement)
+            : $this->classementPerformance($campagneIdsFilter, $ctx['dateDebut'], $ctx['dateFin'], $filtreVentesAgencePourClassement);
 
-        $baseVentes = $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
-        $stats = $this->aggregatePerformanceStats($baseVentes);
+        $baseVentes = $estEnrolement
+            ? $this->enrolementsQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter)
+            : $this->ventesQueryPerformance($ctx['dateDebut'], $ctx['dateFin'], $ctx['agenceId'], $campagneIdsFilter);
+        $stats = $estEnrolement ? $this->aggregateEnrolementStats($baseVentes) : $this->aggregatePerformanceStats($baseVentes);
 
         $topCommerciauxChart = $classementComplet
             ->filter(fn (array $c) => ($c['total_ventes'] ?? 0) > 0)
@@ -498,7 +532,7 @@ class PerformanceController extends Controller
             ->values();
 
         $ventesParAgenceChart = $this->ventesParAgencePourChart($baseVentes);
-        $typesCartes = TypeCarte::orderBy('code')->get();
+        $typesCartes = $estEnrolement ? collect() : TypeCarte::orderBy('code')->get();
 
         $perfPeriodSlug = Str::slug(Str::ascii(Str::limit($ctx['libellePeriode'] ?? 'periode', 48, '')), '-');
         $fileBase = 'graphiques-performances-'.($ctx['campagneIdSelected'] ?: 'ref').'-'.($perfPeriodSlug !== '' ? $perfPeriodSlug : 'export-'.now()->format('Ymd-His'));
@@ -509,7 +543,8 @@ class PerformanceController extends Controller
             $topCommerciauxChart,
             $ventesParAgenceChart,
             $typesCartes,
-            $fileBase
+            $fileBase,
+            $estEnrolement
         );
     }
 
@@ -532,36 +567,56 @@ class PerformanceController extends Controller
 
         $user->load('agence');
         $campagneIdsFilter = $ctx['campagneIdsFilter'];
+        $estEnrolement = $ctx['type'] === Campagne::TYPE_ENROLEMENT_APP;
+        $libelleVolume = $estEnrolement ? 'Enrôlements' : 'Ventes';
 
-        $ventes = Vente::query()
-            ->where('user_id', $user->id)
-            ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
-            ->when($campagneIdsFilter !== [], fn ($q) => $q->whereIn('campagne_id', $campagneIdsFilter), fn ($q) => $q->whereRaw('0 = 1'))
-            ->with(['client', 'typeCarte', 'agence', 'campagne'])
-            ->orderByDesc('created_at')
-            ->get();
+        if ($estEnrolement) {
+            $lignes = EnrolementClient::query()
+                ->where('user_id', $user->id)
+                ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
+                ->when($campagneIdsFilter !== [], fn ($q) => $q->whereIn('campagne_id', $campagneIdsFilter), fn ($q) => $q->whereRaw('0 = 1'))
+                ->with(['agence', 'campagne'])
+                ->orderByDesc('created_at')
+                ->get();
+            $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Adresse', 'Agence'];
+            $rows = $lignes->map(fn (EnrolementClient $e) => [
+                $e->created_at->format('d/m/Y H:i'),
+                $e->campagne?->nom ?? '—',
+                trim($e->prenom.' '.$e->nom),
+                $e->telephone ?? '',
+                $e->adresse ?? '',
+                $e->agence->nom ?? '—',
+            ])->all();
+        } else {
+            $lignes = Vente::query()
+                ->where('user_id', $user->id)
+                ->whereBetween('created_at', [$ctx['dateDebut'], $ctx['dateFin']])
+                ->when($campagneIdsFilter !== [], fn ($q) => $q->whereIn('campagne_id', $campagneIdsFilter), fn ($q) => $q->whereRaw('0 = 1'))
+                ->with(['client', 'typeCarte', 'agence', 'campagne'])
+                ->orderByDesc('created_at')
+                ->get();
+            $headers = ['Date', 'Campagne', 'Client', 'Type carte', 'Agence', 'Statut activation'];
+            $rows = $lignes->map(fn (Vente $v) => [
+                $v->created_at->format('d/m/Y H:i'),
+                $v->campagne?->nom ?? '—',
+                $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
+                $v->typeCarte?->code ?? '—',
+                $v->agence->nom ?? '—',
+                $v->statut_activation ?? '',
+            ])->all();
+        }
 
         $displayName = $user->prenom ? trim($user->prenom.' '.$user->name) : $user->name;
         $resumeRows = [
             ['Commercial', $displayName],
             ['Agence', $user->agence?->nom ?? '—'],
             ['Période', $ctx['libellePeriode']],
-            ['Nombre de ventes exportées', $ventes->count()],
+            ['Nombre d\''.mb_strtolower($libelleVolume).' exporté(e)s', $lignes->count()],
         ];
-
-        $headers = ['Date', 'Campagne', 'Client', 'Type carte', 'Agence', 'Statut activation'];
-        $rows = $ventes->map(fn (Vente $v) => [
-            $v->created_at->format('d/m/Y H:i'),
-            $v->campagne?->nom ?? '—',
-            $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '—',
-            $v->typeCarte?->code ?? '—',
-            $v->agence->nom ?? '—',
-            $v->statut_activation ?? '',
-        ])->all();
 
         $definitions = [
             ['title' => 'Résumé', 'headers' => ['Indicateur', 'Valeur'], 'rows' => $resumeRows],
-            ['title' => 'Ventes', 'headers' => $headers, 'rows' => $rows],
+            ['title' => $libelleVolume, 'headers' => $headers, 'rows' => $rows],
         ];
 
         $spreadsheet = $this->spreadsheetExportService->createMultiSheetSpreadsheet($definitions);

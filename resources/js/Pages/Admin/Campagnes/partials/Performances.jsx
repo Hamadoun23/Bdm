@@ -107,7 +107,7 @@ export default function Performances({ campagne, estEnrolement, preset, periode,
                         <thead><tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500"><th className="py-2">Rang</th><th className="py-2">Commercial</th><th className="py-2 text-right">{estEnrolement ? 'Enrôlements' : 'Ventes'}</th></tr></thead>
                         <tbody className="divide-y divide-gray-100">
                             {classement.length === 0 ? (
-                                <tr><td colSpan={3} className="py-3 text-center text-gray-500">Aucune vente sur la période</td></tr>
+                                <tr><td colSpan={3} className="py-3 text-center text-gray-500">{estEnrolement ? 'Aucun enrôlement' : 'Aucune vente'} sur la période</td></tr>
                             ) : (
                                 classement.map((c) => (
                                     <tr key={c.user_name}>
@@ -122,7 +122,8 @@ export default function Performances({ campagne, estEnrolement, preset, periode,
                 </CardBody>
             </Card>
 
-            {primes.length > 0 && (
+            {/* Prime « meilleur vendeur » : notion propre aux campagnes de vente. */}
+            {!estEnrolement && primes.length > 0 && (
                 <Card className="overflow-hidden">
                     <CardHeader><CardTitle>Primes versées</CardTitle></CardHeader>
                     <table className="w-full text-left text-sm">

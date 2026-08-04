@@ -13,6 +13,9 @@ function Row({ label, children }) {
 }
 
 export default function Pilotage({ campagne, isDirectionDetail, onOpenModal }) {
+    // Prime « meilleur vendeur » et remise sur cartes : notions propres aux campagnes de vente.
+    const estEnrolement = campagne.type === 'enrolement_app';
+
     function syncCommerciaux() {
         router.post(route('admin.campagnes.sync-commerciaux', campagne.id));
     }
@@ -36,9 +39,10 @@ export default function Pilotage({ campagne, isDirectionDetail, onOpenModal }) {
                             <Row label="Nom">{campagne.nom}</Row>
                             <Row label="Période">{campagne.date_debut} → {campagne.date_fin}</Row>
                             <Row label="Agences">{campagne.agences_libelle}</Row>
-                            <Row label="Prime 1ᵉʳ">{campagne.prime_meilleur_vendeur} FCFA</Row>
+                            <Row label="Type">{estEnrolement ? 'Enrôlement app mobile' : 'Vente de cartes'}</Row>
+                            {!estEnrolement && <Row label="Prime 1ᵉʳ">{campagne.prime_meilleur_vendeur} FCFA</Row>}
                             <Row label="Aide hebdo.">{campagne.aide_hebdo_active ? `${campagne.aide_hebdo_montant} F / semaine` : 'Non activée'}</Row>
-                            <Row label="Remise">{campagne.remise_libelle ?? 'Aucune'}</Row>
+                            {!estEnrolement && <Row label="Remise">{campagne.remise_libelle ?? 'Aucune'}</Row>}
                             <Row label="Créée le">{campagne.created_at}</Row>
                         </tbody>
                     </table>

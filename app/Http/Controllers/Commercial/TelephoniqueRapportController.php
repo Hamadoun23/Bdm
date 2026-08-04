@@ -38,7 +38,7 @@ class TelephoniqueRapportController extends Controller
             ->orderByDesc('date_rapport')
             ->paginate(20);
 
-        $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId);
+        $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId, Campagne::TYPE_VENTE_CARTE);
 
         return Inertia::render('Commercial/Telephonique/Index', [
             'libelleStatsCampagne' => $libelleStatsCampagne,

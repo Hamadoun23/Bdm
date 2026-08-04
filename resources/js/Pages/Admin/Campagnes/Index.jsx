@@ -149,9 +149,13 @@ export default function CampagnesIndex({ campagnes }) {
                         <tbody className="divide-y divide-gray-100">
                             {campagnes.data.map((c) => (
                                 <tr key={c.id} className="hover:bg-gray-50">
-                                    <td className="px-5 py-3 font-medium text-gray-900">{c.nom}</td>
+                                    <td className="px-5 py-3 font-medium text-gray-900">
+                                        {c.nom}
+                                        {c.estEnrolement && <Badge tone="blue" className="ml-2">Enrôlement</Badge>}
+                                    </td>
                                     <td className="px-5 py-3 text-gray-600">{c.date_debut} – {c.date_fin}</td>
-                                    <td className="px-5 py-3 text-gray-600">{c.prime_meilleur_vendeur} F</td>
+                                    {/* Prime « meilleur vendeur » : sans objet pour une campagne d'enrôlement. */}
+                                    <td className="px-5 py-3 text-gray-600">{c.estEnrolement ? '—' : `${c.prime_meilleur_vendeur} F`}</td>
                                     <td className="px-5 py-3">
                                         <Badge tone={statutTones[c.statut]}>{statutLabels[c.statut]}</Badge>
                                     </td>

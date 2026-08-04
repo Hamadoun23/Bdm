@@ -38,6 +38,7 @@ class CampagneController extends Controller
                     'date_fin' => $c->date_fin->format('d/m/Y'),
                     'date_fin_iso' => $c->date_fin->format('Y-m-d'),
                     'prime_meilleur_vendeur' => number_format($c->prime_meilleur_vendeur, 0, ',', ' '),
+                    'estEnrolement' => $c->type === Campagne::TYPE_ENROLEMENT_APP,
                     'statut' => $c->statut_effectif,
                     'peut_piloter' => in_array($c->statut_effectif, [Campagne::STATUT_PROGRAMMEE, Campagne::STATUT_EN_COURS]),
                 ])->values(),

@@ -73,10 +73,12 @@ export default function CampagneForm({ campagne, agences, commerciaux }) {
                     <div>
                         <Label>Type de campagne *</Label>
                         <div className="flex flex-wrap gap-2">
-                            <TypeChip selected={data.type === 'vente_carte'} disabled={isEdit} onClick={() => setData('type', 'vente_carte')}>
+                            <TypeChip selected={data.type === 'vente_carte'} disabled={isEdit} onClick={() => setData({ ...data, type: 'vente_carte', prime_meilleur_vendeur: data.prime_meilleur_vendeur || 25000 })}>
                                 Vente de cartes
                             </TypeChip>
-                            <TypeChip selected={data.type === 'enrolement_app'} disabled={isEdit} onClick={() => setData('type', 'enrolement_app')}>
+                            {/* Une campagne d'enrôlement n'a pas de prime « meilleur vendeur » : on la neutralise
+                                à la bascule pour ne pas enregistrer un montant jamais versé. */}
+                            <TypeChip selected={data.type === 'enrolement_app'} disabled={isEdit} onClick={() => setData({ ...data, type: 'enrolement_app', prime_meilleur_vendeur: 0 })}>
                                 Enrôlement app mobile
                             </TypeChip>
                         </div>
@@ -101,11 +103,13 @@ export default function CampagneForm({ campagne, agences, commerciaux }) {
                             <FieldError>{errors.date_fin}</FieldError>
                         </div>
                     </div>
-                    <div>
-                        <Label htmlFor="prime_meilleur_vendeur">Prime du meilleur vendeur (FCFA) *</Label>
-                        <Input id="prime_meilleur_vendeur" type="number" min={0} value={data.prime_meilleur_vendeur} onChange={(e) => setData('prime_meilleur_vendeur', e.target.value)} error={errors.prime_meilleur_vendeur} required />
-                        <p className="mt-1 text-xs text-gray-500">Attribuée au seul 1ᵉʳ du classement (ventes) sur la période.</p>
-                    </div>
+                    {data.type === 'vente_carte' && (
+                        <div>
+                            <Label htmlFor="prime_meilleur_vendeur">Prime du meilleur vendeur (FCFA) *</Label>
+                            <Input id="prime_meilleur_vendeur" type="number" min={0} value={data.prime_meilleur_vendeur} onChange={(e) => setData('prime_meilleur_vendeur', e.target.value)} error={errors.prime_meilleur_vendeur} required />
+                            <p className="mt-1 text-xs text-gray-500">Attribuée au seul 1ᵉʳ du classement (ventes) sur la période.</p>
+                        </div>
+                    )}
 
                     <div>
                         <Label>Agences concernées *</Label>

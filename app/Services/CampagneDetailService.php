@@ -140,24 +140,31 @@ class CampagneDetailService
             $periodes[] = $current->format('Y-m');
             $current->addMonth();
         }
-        $primes = Prime::whereIn('user_id', $userIds)
-            ->whereIn('periode', array_unique($periodes))
-            ->with('user')
-            ->orderBy('periode')
-            ->get();
+        // Primes « meilleur vendeur » et reporting téléphonique : notions propres aux campagnes de
+        // vente. Les Prime sont indexées par mois (pas par campagne) : sans ce garde-fou, celles
+        // d'une campagne de vente simultanée s'affichaient sur une campagne d'enrôlement.
+        $primes = $estEnrolement
+            ? collect()
+            : Prime::whereIn('user_id', $userIds)
+                ->whereIn('periode', array_unique($periodes))
+                ->with('user')
+                ->orderBy('periode')
+                ->get();
 
-        $typesCartes = TypeCarte::orderBy('code')->get();
+        $typesCartes = $estEnrolement ? collect() : TypeCarte::orderBy('code')->get();
 
         $periode_debut = $dateDebut;
         $periode_fin = $dateFin;
 
-        $telephoniqueCampagne = $this->campagneRapportService->agregatsTelephonique(
-            $campagne,
-            $dateDebut,
-            $dateFin,
-            null,
-            null
-        );
+        $telephoniqueCampagne = $estEnrolement
+            ? ['nb_fiches' => 0, 'appels_emis' => 0, 'appels_joignables' => 0, 'appels_non_joignables' => 0, 'clients_interesses' => 0, 'clients_deja_servis' => 0]
+            : $this->campagneRapportService->agregatsTelephonique(
+                $campagne,
+                $dateDebut,
+                $dateFin,
+                null,
+                null
+            );
 
         return compact(
             'campagne', 'stats', 'classement', 'primes', 'typesCartes',

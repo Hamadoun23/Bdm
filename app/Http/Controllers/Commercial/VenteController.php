@@ -44,7 +44,7 @@ class VenteController extends Controller
         CampagneStatsScope::appliquerSurVentes($query, $agenceId);
 
         $ventes = $query->with('typeCarte')->latest()->paginate(15);
-        $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId);
+        $libelleStatsCampagne = CampagneStatsScope::libelle($agenceId, Campagne::TYPE_VENTE_CARTE);
 
         $canManage = (bool) $user?->isCommercial();
         $canSeeCommercial = (bool) ($user?->isAdmin() || $user?->isDirection());

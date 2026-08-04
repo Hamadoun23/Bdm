@@ -32,9 +32,15 @@ export default function CampagneSynthese({
         ...(estEnrolement ? [] : [{ key: 'types', label: 'Types de carte' }]),
         { key: 'temps', label: 'Semaines / Mois' },
     ];
-    const sectionsExport = estEnrolement
-        ? ['ventes', 'commerciaux', 'agences', 'semaines', 'mois']
-        : ['ventes', 'commerciaux', 'agences', 'types', 'semaines', 'mois'];
+    // `key` = section attendue par la route d'export ; `label` = ce que lit l'utilisateur.
+    const sectionsExport = [
+        { key: 'ventes', label: libelleVentes },
+        { key: 'commerciaux', label: 'Commerciaux' },
+        { key: 'agences', label: 'Agences' },
+        ...(estEnrolement ? [] : [{ key: 'types', label: 'Types' }]),
+        { key: 'semaines', label: 'Semaines' },
+        { key: 'mois', label: 'Mois' },
+    ];
 
     function applyFilters(e) {
         e.preventDefault();
@@ -49,7 +55,7 @@ export default function CampagneSynthese({
             subtitle={`Période affichée : ${periode.debut} → ${periode.fin} (limitée aux dates de la campagne)`}
             actions={
                 <div className="flex items-center gap-2">
-                    <Button href={ventesUrl()} variant="outline" size="sm"><List size={14} /> Liste ventes</Button>
+                    <Button href={ventesUrl()} variant="outline" size="sm"><List size={14} /> Liste {libelleVentes.toLowerCase()}</Button>
                     <Button href={route('rapports.index')} variant="outline" size="sm"><ArrowLeft size={14} /> Rapports</Button>
                 </div>
             }
@@ -86,7 +92,7 @@ export default function CampagneSynthese({
                 <span className="text-xs text-gray-500">Excel (.xlsx) :</span>
                 <Button href={route('rapports.campagnes.export', { campagne: campagne.id, section: 'all', ...qExp, format: 'xlsx' })} target="_blank" size="sm">Classeur complet</Button>
                 {sectionsExport.map((s) => (
-                    <Button key={s} href={route('rapports.campagnes.export', { campagne: campagne.id, section: s, ...qExp, format: 'xlsx' })} target="_blank" variant="outline" size="sm" className="capitalize">{s}</Button>
+                    <Button key={s.key} href={route('rapports.campagnes.export', { campagne: campagne.id, section: s.key, ...qExp, format: 'xlsx' })} target="_blank" variant="outline" size="sm">{s.label}</Button>
                 ))}
             </div>
 

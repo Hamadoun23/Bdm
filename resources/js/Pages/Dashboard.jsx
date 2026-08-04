@@ -68,13 +68,16 @@ function DashboardAdmin(props) {
     const {
         readOnly, ventesTotal, ventesMois, venteTrend, pctCommerciauxActifs, classement,
         campagnesTotal, campagneActive, campagnesEnCours, campagnesProgrammees,
-        libelleStatsCampagne, user, agencesCount, commerciauxCount,
+        libelleStatsCampagne, user, agencesCount, commerciauxCount, estEnrolement,
     } = props;
 
     // Sans aucune vente, tous les commerciaux sont ex æquo au rang 1 : afficher la liste
     // telle quelle donnait « 1 » quatre fois de suite, ce qui passait pour un bug.
     const classementActif = classement.filter((c) => (c.total_ventes ?? 0) > 0);
     const meilleur = classementActif[0] ?? null;
+    // Périmètre de référence 100 % enrôlement : aucune vente n'existe, tout le vocabulaire suit.
+    const libelle = estEnrolement ? 'Enrôlements' : 'Ventes';
+    const aucunVolume = estEnrolement ? 'Aucun enrôlement' : 'Aucune vente';
 
     return (
         <>
@@ -87,12 +90,12 @@ function DashboardAdmin(props) {
 
             {/* Ligne 1 — indicateurs clés */}
             <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile label="Ventes (campagne)" value={ventesTotal} icon={CreditCard} trend={venteTrend} />
-                <StatTile label="Ventes sur la période" value={ventesMois} icon={TrendingUp} />
+                <StatTile label={`${libelle} (campagne)`} value={ventesTotal} icon={estEnrolement ? Smartphone : CreditCard} trend={venteTrend} />
+                <StatTile label={`${libelle} sur la période`} value={ventesMois} icon={TrendingUp} />
                 <StatTile label="Campagnes" value={campagnesTotal} icon={Megaphone} />
                 <StatTile
                     label="Meilleur commercial"
-                    value={meilleur ? meilleur.user_name : 'Aucune vente'}
+                    value={meilleur ? meilleur.user_name : aucunVolume}
                     icon={Trophy}
                     textValue
                     dark
@@ -103,12 +106,12 @@ function DashboardAdmin(props) {
             <div className="mb-4 grid gap-4 lg:grid-cols-5">
                 <Card className="lg:col-span-2">
                     <CardBody>
-                        <p className="text-sm font-semibold text-gray-900">Tendance des ventes</p>
+                        <p className="text-sm font-semibold text-gray-900">Tendance des {libelle.toLowerCase()}</p>
                         <p className="mb-4 text-xs text-gray-500">6 dernières semaines</p>
                         {hasData(venteTrend) ? (
                             <Sparkline values={venteTrend} height={64} />
                         ) : (
-                            <p className="flex h-16 items-center text-sm text-gray-400">Aucune vente sur la période.</p>
+                            <p className="flex h-16 items-center text-sm text-gray-400">{aucunVolume} sur la période.</p>
                         )}
                     </CardBody>
                 </Card>
@@ -188,7 +191,7 @@ function DashboardAdmin(props) {
                         </div>
                         {classementActif.length === 0 ? (
                             <p className="text-sm text-gray-500">
-                                Aucune vente enregistrée sur la campagne de référence.
+                                {aucunVolume} enregistré{estEnrolement ? '' : 'e'} sur la campagne de référence.
                             </p>
                         ) : (
                             <ul className="space-y-1">

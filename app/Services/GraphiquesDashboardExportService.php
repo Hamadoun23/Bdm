@@ -33,6 +33,12 @@ class GraphiquesDashboardExportService
         private SpreadsheetExportService $spreadsheetExportService
     ) {}
 
+    /** Libellé du volume selon le type de campagne (les campagnes d'enrôlement n'ont pas de ventes). */
+    private function libelleVolume(bool $estEnrolement): string
+    {
+        return $estEnrolement ? 'Enrôlements' : 'Ventes';
+    }
+
     /**
      * @param  array<string, mixed>  $synthese  Retour de {@see CampagneRapportService::synthese}.
      */
@@ -41,9 +47,10 @@ class GraphiquesDashboardExportService
         Carbon $dateDebut,
         Carbon $dateFin,
         array $synthese,
-        string $fileBase
+        string $fileBase,
+        bool $estEnrolement = false
     ): StreamedResponse {
-        $spreadsheet = $this->buildSyntheseCampagneSpreadsheet($campagneNom, $dateDebut, $dateFin, $synthese);
+        $spreadsheet = $this->buildSyntheseCampagneSpreadsheet($campagneNom, $dateDebut, $dateFin, $synthese, $estEnrolement);
 
         return $this->spreadsheetExportService->download($spreadsheet, $fileBase.'_graphiques.xlsx');
     }
@@ -56,9 +63,11 @@ class GraphiquesDashboardExportService
         Carbon $dateDebut,
         Carbon $dateFin,
         array $synthese,
-        string $fileBase
+        string $fileBase,
+        bool $estEnrolement = false
     ): StreamedResponse {
         [$parType, $commChart, $agChart] = $this->extractSyntheseChartData($synthese);
+        $libelle = $this->libelleVolume($estEnrolement);
 
         $phpWord = new PhpWord;
         $phpWord->getSettings()->setThemeFontLang(new Language('fr-FR'));
@@ -69,11 +78,14 @@ class GraphiquesDashboardExportService
         );
         $section->addTextBreak(1);
 
-        $this->addWordChart($section, 'Mix des ventes par type de carte', 'doughnut', $parType['labels'], $parType['values']);
+        // Pas de type de carte sur une campagne d'enrôlement : le graphique correspondant est simplement omis.
+        if (! $estEnrolement) {
+            $this->addWordChart($section, 'Mix des ventes par type de carte', 'doughnut', $parType['labels'], $parType['values']);
+            $section->addTextBreak(2);
+        }
+        $this->addWordChart($section, 'Top commerciaux — part du total (%)', 'bar', $commChart['labels'], $commChart['values']);
         $section->addTextBreak(2);
-        $this->addWordChart($section, 'Top vendeurs — part du total (%)', 'bar', $commChart['labels'], $commChart['values']);
-        $section->addTextBreak(2);
-        $this->addWordChart($section, 'Part des agences (ventes)', 'pie', $agChart['labels'], $agChart['values']);
+        $this->addWordChart($section, 'Part des agences ('.mb_strtolower($libelle).')', 'pie', $agChart['labels'], $agChart['values']);
 
         return new StreamedResponse(function () use ($phpWord): void {
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
@@ -97,39 +109,45 @@ class GraphiquesDashboardExportService
         Collection $topCommerciaux,
         Collection $ventesParAgence,
         Collection $typesCartes,
-        string $fileBase
+        string $fileBase,
+        bool $estEnrolement = false
     ): StreamedResponse {
+        $libelle = $this->libelleVolume($estEnrolement);
+
         $spreadsheet = new Spreadsheet;
         $info = $spreadsheet->getActiveSheet();
         $info->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Infos'));
         $info->setCellValue('A1', 'Performances — '.$titrePeriode);
-        $info->setCellValue('A2', 'Total ventes : '.(int) ($stats['total_ventes'] ?? 0));
+        $info->setCellValue('A2', 'Total '.mb_strtolower($libelle).' : '.(int) ($stats['total_ventes'] ?? 0));
 
         $sheet1 = $spreadsheet->createSheet();
         $sheet1->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Top commerciaux'));
         $labelsTop = $topCommerciaux->pluck('label')->all();
         $valsTop = $topCommerciaux->pluck('ventes')->map(fn ($v) => (int) $v)->all();
-        $this->fillTwoColumnData($sheet1, 'Commercial', 'Ventes', $labelsTop, $valsTop);
-        $this->addBarChartHorizontal($sheet1, 'Top commerciaux', 'Ventes', 'E2', 'P28');
+        $this->fillTwoColumnData($sheet1, 'Commercial', $libelle, $labelsTop, $valsTop);
+        $this->addBarChartHorizontal($sheet1, 'Top commerciaux', $libelle, 'E2', 'P28');
 
         $sheet2 = $spreadsheet->createSheet();
         $sheet2->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Agences'));
         $labelsAg = $ventesParAgence->pluck('label')->all();
         $valsAg = $ventesParAgence->pluck('ventes')->map(fn ($v) => (int) $v)->all();
-        $this->fillTwoColumnData($sheet2, 'Agence', 'Ventes', $labelsAg, $valsAg);
-        $this->addPieOrDoughnutChart($sheet2, DataSeries::TYPE_DOUGHNUTCHART, 'Répartition agences', 'Ventes', 'E2', 'P28');
+        $this->fillTwoColumnData($sheet2, 'Agence', $libelle, $labelsAg, $valsAg);
+        $this->addPieOrDoughnutChart($sheet2, DataSeries::TYPE_DOUGHNUTCHART, 'Répartition agences', $libelle, 'E2', 'P28');
 
-        $sheet3 = $spreadsheet->createSheet();
-        $sheet3->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Types carte'));
-        $parType = collect($stats['par_type'] ?? []);
-        $labelsT = [];
-        $valsT = [];
-        foreach ($typesCartes as $tc) {
-            $labelsT[] = $tc->code;
-            $valsT[] = (int) ($parType->get($tc->id) ?? 0);
+        // Onglet « Types carte » : sans objet pour une campagne d'enrôlement.
+        if (! $estEnrolement) {
+            $sheet3 = $spreadsheet->createSheet();
+            $sheet3->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Types carte'));
+            $parType = collect($stats['par_type'] ?? []);
+            $labelsT = [];
+            $valsT = [];
+            foreach ($typesCartes as $tc) {
+                $labelsT[] = $tc->code;
+                $valsT[] = (int) ($parType->get($tc->id) ?? 0);
+            }
+            $this->fillTwoColumnData($sheet3, 'Type', 'Ventes', $labelsT, $valsT);
+            $this->addColumnChart($sheet3, 'Ventes par type', 'Ventes', 'E2', 'P28');
         }
-        $this->fillTwoColumnData($sheet3, 'Type', 'Ventes', $labelsT, $valsT);
-        $this->addColumnChart($sheet3, 'Ventes par type', 'Ventes', 'E2', 'P28');
 
         $spreadsheet->setActiveSheetIndex(0);
 
@@ -148,8 +166,10 @@ class GraphiquesDashboardExportService
         Collection $topCommerciaux,
         Collection $ventesParAgence,
         Collection $typesCartes,
-        string $fileBase
+        string $fileBase,
+        bool $estEnrolement = false
     ): StreamedResponse {
+        $libelle = $this->libelleVolume($estEnrolement);
         $labelsTop = $topCommerciaux->pluck('label')->all();
         $valsTop = $topCommerciaux->pluck('ventes')->map(fn ($v) => (int) $v)->all();
         $labelsAg = $ventesParAgence->pluck('label')->all();
@@ -166,13 +186,15 @@ class GraphiquesDashboardExportService
         $phpWord->getSettings()->setThemeFontLang(new Language('fr-FR'));
         $section = $phpWord->addSection();
         $section->addText('Performances — '.$titrePeriode, ['bold' => true, 'size' => 16]);
-        $section->addText('Total ventes : '.(int) ($stats['total_ventes'] ?? 0));
+        $section->addText('Total '.mb_strtolower($libelle).' : '.(int) ($stats['total_ventes'] ?? 0));
         $section->addTextBreak(1);
         $this->addWordChart($section, 'Top commerciaux', 'bar', $labelsTop, $valsTop);
         $section->addTextBreak(2);
         $this->addWordChart($section, 'Répartition agences', 'doughnut', $labelsAg, $valsAg);
-        $section->addTextBreak(2);
-        $this->addWordChart($section, 'Ventes par type de carte', 'column', $labelsT, $valsT);
+        if (! $estEnrolement) {
+            $section->addTextBreak(2);
+            $this->addWordChart($section, 'Ventes par type de carte', 'column', $labelsT, $valsT);
+        }
 
         return new StreamedResponse(function () use ($phpWord): void {
             $writer = IOFactory::createWriter($phpWord, 'Word2007');
@@ -191,31 +213,35 @@ class GraphiquesDashboardExportService
         string $campagneNom,
         Carbon $dateDebut,
         Carbon $dateFin,
-        array $synthese
+        array $synthese,
+        bool $estEnrolement = false
     ): Spreadsheet {
         [$parType, $commChart, $agChart] = $this->extractSyntheseChartData($synthese);
+        $libelle = $this->libelleVolume($estEnrolement);
 
         $spreadsheet = new Spreadsheet;
         $info = $spreadsheet->getActiveSheet();
         $info->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Resume'));
         $info->setCellValue('A1', 'Synthèse — '.$campagneNom);
         $info->setCellValue('A2', $dateDebut->format('d/m/Y').' – '.$dateFin->format('d/m/Y'));
-        $info->setCellValue('A3', 'Total ventes : '.(int) ($synthese['resume']['total_ventes'] ?? 0));
+        $info->setCellValue('A3', 'Total '.mb_strtolower($libelle).' : '.(int) ($synthese['resume']['total_ventes'] ?? 0));
 
-        $sheet1 = $spreadsheet->createSheet();
-        $sheet1->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Types'));
-        $this->fillTwoColumnData($sheet1, 'Type', 'Ventes', $parType['labels'], $parType['values']);
-        $this->addPieOrDoughnutChart($sheet1, DataSeries::TYPE_DOUGHNUTCHART, 'Mix types', 'Ventes', 'E2', 'P30');
+        if (! $estEnrolement) {
+            $sheet1 = $spreadsheet->createSheet();
+            $sheet1->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Types'));
+            $this->fillTwoColumnData($sheet1, 'Type', 'Ventes', $parType['labels'], $parType['values']);
+            $this->addPieOrDoughnutChart($sheet1, DataSeries::TYPE_DOUGHNUTCHART, 'Mix types', 'Ventes', 'E2', 'P30');
+        }
 
         $sheet2 = $spreadsheet->createSheet();
         $sheet2->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Commerciaux'));
         $this->fillTwoColumnData($sheet2, 'Commercial', 'Part %', $commChart['labels'], $commChart['values']);
-        $this->addBarChartHorizontal($sheet2, 'Top vendeurs', 'Part %', 'E2', 'P32');
+        $this->addBarChartHorizontal($sheet2, 'Top commerciaux', 'Part %', 'E2', 'P32');
 
         $sheet3 = $spreadsheet->createSheet();
         $sheet3->setTitle($this->spreadsheetExportService->sanitizeSheetTitle('Agences'));
-        $this->fillTwoColumnData($sheet3, 'Agence', 'Ventes', $agChart['labels'], $agChart['values']);
-        $this->addPieOrDoughnutChart($sheet3, DataSeries::TYPE_PIECHART, 'Agences', 'Ventes', 'E2', 'P30');
+        $this->fillTwoColumnData($sheet3, 'Agence', $libelle, $agChart['labels'], $agChart['values']);
+        $this->addPieOrDoughnutChart($sheet3, DataSeries::TYPE_PIECHART, 'Agences', $libelle, 'E2', 'P30');
 
         $spreadsheet->setActiveSheetIndex(0);
 

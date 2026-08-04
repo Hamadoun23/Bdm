@@ -43,7 +43,7 @@ class TelephoniqueRapportController extends Controller
         $campagnes = Campagne::query()->orderByDesc('date_debut')->get(['id', 'nom', 'date_debut', 'date_fin']);
         $libelleStatsCampagne = $request->filled('campagne_id')
             ? null
-            : CampagneStatsScope::libelle(null);
+            : CampagneStatsScope::libelle(null, Campagne::TYPE_VENTE_CARTE);
 
         return Inertia::render('Admin/TelephoniqueRapports/Index', [
             'filters' => $request->only(['user_id', 'campagne_id', 'date_debut', 'date_fin']),

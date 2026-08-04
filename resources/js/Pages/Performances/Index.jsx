@@ -104,7 +104,7 @@ export default function PerformancesIndex(props) {
                             </li>
                         ) : (
                             <>
-                                <li><strong>Mes ventes :</strong> {nf.format(stats.mes_ventes ?? 0)}</li>
+                                <li><strong>Mes {libelle.toLowerCase()} :</strong> {nf.format(stats.mes_ventes ?? 0)}</li>
                                 {stats.mon_rang && <li><strong>Mon rang :</strong> {rangLabel(stats.mon_rang)}</li>}
                             </>
                         )}
@@ -155,7 +155,9 @@ export default function PerformancesIndex(props) {
             {vueCommerciale ? (
                 <>
                     <div className="mb-4">
-                        <Button href={monDetailUrl} variant="outline" size="sm"><Eye size={14} /> Voir mon détail (ventes, clients, cartes)</Button>
+                        <Button href={monDetailUrl} variant="outline" size="sm">
+                            <Eye size={14} /> {estEnrolement ? 'Voir mon détail (enrôlements, clients)' : 'Voir mon détail (ventes, clients, cartes)'}
+                        </Button>
                     </div>
                     <div className="mb-6 grid gap-4 sm:grid-cols-2">
                         <StatCard label={`Mes ${libelle.toLowerCase()}`} value={stats.mes_ventes ?? 0} tone="orange" />

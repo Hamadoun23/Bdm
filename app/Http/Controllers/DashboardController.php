@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Agence;
 use App\Models\Campagne;
+use App\Models\EnrolementClient;
 use App\Models\User;
 use App\Models\Vente;
 use App\Services\CampagneRapportService;
-use App\Services\CampagneStatsScope;
 use App\Services\PrimeService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -61,23 +61,47 @@ class DashboardController extends Controller
     private function dashboardAdmin($user, bool $directionReadOnly): Response
     {
         Campagne::syncStatuts();
-        $campagneIdsStats = CampagneStatsScope::idsPour(null);
-        $fenetreStats = CampagneStatsScope::fenetreDates(null);
-        $libelleStatsCampagne = CampagneStatsScope::libelle(null);
 
-        $baseVentesStats = Vente::query();
-        CampagneStatsScope::appliquerSurVentes($baseVentesStats, null);
+        // Le périmètre de référence peut ne contenir que des campagnes d'enrôlement : dans ce cas
+        // tout le tableau de bord doit parler d'enrôlements, pas de ventes (qui resteraient à zéro).
+        $campagnesStats = Campagne::getCampagnesPourStats(null);
+        $campagnesVente = $campagnesStats->where('type', Campagne::TYPE_VENTE_CARTE)->values();
+        $campagnesEnrolementStats = $campagnesStats->where('type', Campagne::TYPE_ENROLEMENT_APP)->values();
+        $estEnrolement = $campagnesVente->isEmpty() && $campagnesEnrolementStats->isNotEmpty();
+        $campagnesStatsDuType = $estEnrolement ? $campagnesEnrolementStats : $campagnesVente;
+
+        $campagneIdsStats = $campagnesStatsDuType->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $fenetreStats = $campagnesStatsDuType->isNotEmpty() ? [
+            'debut' => $campagnesStatsDuType->min(fn (Campagne $c) => $c->date_debut)->copy()->startOfDay(),
+            'fin' => $campagnesStatsDuType->max(fn (Campagne $c) => $c->date_fin)->copy()->endOfDay(),
+        ] : null;
+        $libelleStatsCampagne = $campagnesStatsDuType->isEmpty()
+            ? 'Aucune campagne'
+            : $campagnesStatsDuType->map(fn (Campagne $c) => '« '.$c->nom.' »')->join(', ', ' et ');
+
+        $baseVentesStats = $estEnrolement ? EnrolementClient::query() : Vente::query();
+        if ($campagneIdsStats === []) {
+            $baseVentesStats->whereRaw('0 = 1');
+        } else {
+            $baseVentesStats->whereIn('campagne_id', $campagneIdsStats);
+        }
 
         $ventesTotal = (clone $baseVentesStats)->count();
         $ventesMois = $fenetreStats
             ? (clone $baseVentesStats)->whereBetween('created_at', [$fenetreStats['debut'], $fenetreStats['fin']])->count()
             : 0;
         if ($fenetreStats) {
-            $classement = $this->primeService->getClassementPourCampagnesIds(
-                $campagneIdsStats,
-                $fenetreStats['debut'],
-                $fenetreStats['fin']
-            );
+            $classement = $estEnrolement
+                ? $this->primeService->getClassementEnrolementPourCampagnesIds(
+                    $campagneIdsStats,
+                    $fenetreStats['debut'],
+                    $fenetreStats['fin']
+                )
+                : $this->primeService->getClassementPourCampagnesIds(
+                    $campagneIdsStats,
+                    $fenetreStats['debut'],
+                    $fenetreStats['fin']
+                );
         } else {
             $classement = collect();
         }
@@ -88,8 +112,9 @@ class DashboardController extends Controller
         $campagnesEnCours = Campagne::where('statut', Campagne::STATUT_EN_COURS)->count();
         $campagnesProgrammees = Campagne::where('statut', Campagne::STATUT_PROGRAMMEE)->count();
 
-        $venteTrend = $this->campagneRapportService
-            ->agregerVentesParPeriode(clone $baseVentesStats, 'semaine')
+        $venteTrend = ($estEnrolement
+            ? $this->campagneRapportService->agregerEnrolementsParPeriode(clone $baseVentesStats, 'semaine')
+            : $this->campagneRapportService->agregerVentesParPeriode(clone $baseVentesStats, 'semaine'))
             ->pluck('total_ventes')
             ->slice(-6)
             ->values();
@@ -102,6 +127,7 @@ class DashboardController extends Controller
             'variant' => 'admin',
             'user' => $this->userContext($user),
             'readOnly' => $directionReadOnly,
+            'estEnrolement' => $estEnrolement,
             'ventesTotal' => $ventesTotal,
             'ventesMois' => $ventesMois,
             'venteTrend' => $venteTrend,
@@ -194,7 +220,7 @@ class DashboardController extends Controller
         $campagnesStatsEnrolement = Campagne::getCampagnesPourStats($agenceId)->where('type', Campagne::TYPE_ENROLEMENT_APP)->values();
         $campagneIdsStatsEnrolement = $campagnesStatsEnrolement->pluck('id')->map(fn ($id) => (int) $id)->all();
         $mesEnrolements = $campagneIdsStatsEnrolement !== []
-            ? \App\Models\EnrolementClient::query()
+            ? EnrolementClient::query()
                 ->where('user_id', $user->id)
                 ->whereIn('campagne_id', $campagneIdsStatsEnrolement)
                 ->count()

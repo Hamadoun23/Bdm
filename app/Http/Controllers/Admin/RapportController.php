@@ -974,7 +974,8 @@ class RapportController extends Controller
         Campagne::syncStatuts();
 
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
-        $synthese = $campagne->type === Campagne::TYPE_ENROLEMENT_APP
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
+        $synthese = $estEnrolement
             ? $this->campagneRapportService->syntheseEnrolement($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
             : $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
         $fileBase = 'synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d');
@@ -984,7 +985,8 @@ class RapportController extends Controller
             $dateDebut,
             $dateFin,
             $synthese,
-            $fileBase
+            $fileBase,
+            $estEnrolement
         );
     }
 
@@ -994,7 +996,8 @@ class RapportController extends Controller
         Campagne::syncStatuts();
 
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
-        $synthese = $campagne->type === Campagne::TYPE_ENROLEMENT_APP
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
+        $synthese = $estEnrolement
             ? $this->campagneRapportService->syntheseEnrolement($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
             : $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
         $fileBase = 'synthese-campagne-'.$campagne->id.'-'.$dateDebut->format('Y-m-d');
@@ -1004,7 +1007,8 @@ class RapportController extends Controller
             $dateDebut,
             $dateFin,
             $synthese,
-            $fileBase
+            $fileBase,
+            $estEnrolement
         );
     }
 
@@ -1169,10 +1173,15 @@ class RapportController extends Controller
     {
         $this->assertUserCanAccessCampagne($request->user(), $campagne);
 
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
+
         $format = strtolower((string) $request->query('format', 'csv'));
         $section = $request->query('section', 'ventes');
-        $allowedCsv = ['ventes', 'commerciaux', 'agences', 'types', 'semaines', 'mois'];
-        $allowedXlsx = ['ventes', 'commerciaux', 'agences', 'types', 'semaines', 'mois', 'all'];
+        // « types » = types de carte : section inexistante pour une campagne d'enrôlement.
+        $allowedCsv = $estEnrolement
+            ? ['ventes', 'commerciaux', 'agences', 'semaines', 'mois']
+            : ['ventes', 'commerciaux', 'agences', 'types', 'semaines', 'mois'];
+        $allowedXlsx = [...$allowedCsv, 'all'];
         if ($format === 'xlsx') {
             abort_unless(in_array($section, $allowedXlsx, true), 404);
         } else {
@@ -1180,7 +1189,7 @@ class RapportController extends Controller
         }
 
         [$dateDebut, $dateFin, $filtreAgenceId, $filtreUserId] = $this->parseFiltresSyntheseCampagne($request, $campagne);
-        $filtreTypeCarteId = $this->parseFiltreTypeCarteId($request);
+        $filtreTypeCarteId = $estEnrolement ? null : $this->parseFiltreTypeCarteId($request);
 
         if ($format === 'xlsx') {
             if ($section === 'all') {
@@ -1212,44 +1221,39 @@ class RapportController extends Controller
         ];
 
         if ($section === 'ventes') {
-            $ventes = $this->campagneRapportService
-                ->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId, $filtreTypeCarteId)
-                ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
-                ->orderBy('created_at')
-                ->get();
+            [$hdrDetail, $rowsDetail] = $this->detailLignesPourExport(
+                $campagne,
+                $dateDebut,
+                $dateFin,
+                $filtreAgenceId,
+                $filtreUserId,
+                $filtreTypeCarteId
+            );
 
-            return Response::stream(function () use ($ventes) {
+            return Response::stream(function () use ($hdrDetail, $rowsDetail) {
                 $file = fopen('php://output', 'w');
                 fwrite($file, "\xEF\xBB\xBF");
-                fputcsv($file, ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'], ';');
-                foreach ($ventes as $v) {
-                    fputcsv($file, [
-                        $v->created_at->format('d/m/Y H:i'),
-                        $v->campagne?->nom ?? '-',
-                        $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
-                        $v->client->telephone ?? '',
-                        $v->typeCarte?->code ?? '-',
-                        $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
-                        $v->agence->nom ?? '',
-                        $v->statut_activation ?? '',
-                    ], ';');
+                fputcsv($file, $hdrDetail, ';');
+                foreach ($rowsDetail as $row) {
+                    fputcsv($file, $row, ';');
                 }
                 fclose($file);
             }, 200, $headers);
         }
 
-        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $synthese = $this->syntheseSelonType($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $libelleVolume = $estEnrolement ? 'Enrôlements' : 'Ventes';
 
-        return Response::stream(function () use ($section, $synthese) {
+        return Response::stream(function () use ($section, $synthese, $libelleVolume) {
             $file = fopen('php://output', 'w');
             fwrite($file, "\xEF\xBB\xBF");
             if ($section === 'commerciaux') {
-                fputcsv($file, ['Rang', 'Commercial', 'Agence', 'Ventes'], ';');
+                fputcsv($file, ['Rang', 'Commercial', 'Agence', $libelleVolume], ';');
                 foreach ($synthese['commerciaux'] as $l) {
                     fputcsv($file, [$l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes']], ';');
                 }
             } elseif ($section === 'agences') {
-                fputcsv($file, ['Agence', 'Ventes', 'Part % volume', 'Nb commericaux ratt.'], ';');
+                fputcsv($file, ['Agence', $libelleVolume, 'Part % volume', 'Nb commericaux ratt.'], ';');
                 foreach ($synthese['agences'] as $l) {
                     fputcsv($file, [$l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux']], ';');
                 }
@@ -1259,18 +1263,88 @@ class RapportController extends Controller
                     fputcsv($file, [$l['code'], $l['total_ventes'], $l['pct_volume']], ';');
                 }
             } elseif ($section === 'semaines') {
-                fputcsv($file, ['Période', 'Ventes'], ';');
+                fputcsv($file, ['Période', $libelleVolume], ';');
                 foreach ($synthese['par_semaine'] as $l) {
                     fputcsv($file, [$l['libelle'], $l['total_ventes']], ';');
                 }
             } elseif ($section === 'mois') {
-                fputcsv($file, ['Mois', 'Ventes'], ';');
+                fputcsv($file, ['Mois', $libelleVolume], ';');
                 foreach ($synthese['par_mois'] as $l) {
                     fputcsv($file, [$l['libelle'], $l['total_ventes']], ';');
                 }
             }
             fclose($file);
         }, 200, $headers);
+    }
+
+    /** Synthèse de campagne du bon univers : enrôlements pour enrolement_app, ventes sinon. */
+    private function syntheseSelonType(
+        Campagne $campagne,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        ?int $filtreAgenceId,
+        ?int $filtreUserId
+    ): array {
+        return $campagne->type === Campagne::TYPE_ENROLEMENT_APP
+            ? $this->campagneRapportService->syntheseEnrolement($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+            : $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+    }
+
+    /**
+     * Lignes détaillées d'une campagne pour les exports : enrôlements ou ventes selon le type.
+     *
+     * @return array{0: list<string>, 1: list<list<string|int|null>>}
+     */
+    private function detailLignesPourExport(
+        Campagne $campagne,
+        Carbon $dateDebut,
+        Carbon $dateFin,
+        ?int $filtreAgenceId,
+        ?int $filtreUserId,
+        ?int $filtreTypeCarteId
+    ): array {
+        $nomUser = fn (?User $u) => $u ? ($u->prenom ? trim($u->prenom.' '.$u->name) : $u->name) : '';
+
+        if ($campagne->type === Campagne::TYPE_ENROLEMENT_APP) {
+            $enrolements = $this->campagneRapportService
+                ->enrolementsFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+                ->with(['user', 'agence', 'campagne'])
+                ->orderBy('created_at')
+                ->get();
+
+            return [
+                ['Date', 'Campagne', 'Client', 'Téléphone', 'Adresse', 'Commercial', 'Agence'],
+                $enrolements->map(fn (EnrolementClient $e) => [
+                    $e->created_at->format('d/m/Y H:i'),
+                    $e->campagne?->nom ?? '-',
+                    trim($e->prenom.' '.$e->nom),
+                    $e->telephone ?? '',
+                    $e->adresse ?? '',
+                    $nomUser($e->user),
+                    $e->agence->nom ?? '',
+                ])->all(),
+            ];
+        }
+
+        $ventes = $this->campagneRapportService
+            ->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId, $filtreTypeCarteId)
+            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
+            ->orderBy('created_at')
+            ->get();
+
+        return [
+            ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'],
+            $ventes->map(fn (Vente $v) => [
+                $v->created_at->format('d/m/Y H:i'),
+                $v->campagne?->nom ?? '-',
+                $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
+                $v->client->telephone ?? '',
+                $v->typeCarte?->code ?? '-',
+                $nomUser($v->user),
+                $v->agence->nom ?? '',
+                $v->statut_activation ?? '',
+            ])->all(),
+        ];
     }
 
     private function exportCampagneSectionXlsx(
@@ -1282,32 +1356,31 @@ class RapportController extends Controller
         ?int $filtreUserId,
         ?int $filtreTypeCarteId
     ): StreamedResponse {
-        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $synthese = $this->syntheseSelonType($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
+        $libelleVolume = $estEnrolement ? 'Enrôlements' : 'Ventes';
         $baseName = 'rapport_campagne_'.$campagne->id.'_'.$section.'_'.$dateDebut->format('Y-m-d');
 
         if ($section === 'ventes') {
-            $ventes = $this->campagneRapportService
-                ->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId, $filtreTypeCarteId)
-                ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
-                ->orderBy('created_at')
-                ->get();
-            $headers = ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'];
-            $rows = $ventes->map(fn ($v) => [
-                $v->created_at->format('d/m/Y H:i'),
-                $v->campagne?->nom ?? '-',
-                $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
-                $v->client->telephone ?? '',
-                $v->typeCarte?->code ?? '-',
-                $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
-                $v->agence->nom ?? '',
-                $v->statut_activation ?? '',
-            ])->all();
+            [$headers, $rows] = $this->detailLignesPourExport(
+                $campagne,
+                $dateDebut,
+                $dateFin,
+                $filtreAgenceId,
+                $filtreUserId,
+                $filtreTypeCarteId
+            );
 
-            return $this->spreadsheetSingleSheet('Ventes détaillées', $headers, $rows, $baseName);
+            return $this->spreadsheetSingleSheet(
+                $estEnrolement ? 'Enrôlements détaillés' : 'Ventes détaillées',
+                $headers,
+                $rows,
+                $baseName
+            );
         }
 
         if ($section === 'commerciaux') {
-            $headers = ['Rang', 'Commercial', 'Agence', 'Ventes'];
+            $headers = ['Rang', 'Commercial', 'Agence', $libelleVolume];
             $rows = $synthese['commerciaux']->map(fn ($l) => [
                 $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'],
             ])->all();
@@ -1316,7 +1389,7 @@ class RapportController extends Controller
         }
 
         if ($section === 'agences') {
-            $headers = ['Agence', 'Ventes', 'Part % volume', 'Nb commerciaux rattachés'];
+            $headers = ['Agence', $libelleVolume, 'Part % volume', 'Nb commerciaux rattachés'];
             $rows = $synthese['agences']->map(fn ($l) => [
                 $l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux'],
             ])->all();
@@ -1334,7 +1407,7 @@ class RapportController extends Controller
         }
 
         if ($section === 'semaines') {
-            $headers = ['Période', 'Ventes'];
+            $headers = ['Période', $libelleVolume];
             $rows = $synthese['par_semaine']->map(fn ($l) => [
                 $l['libelle'], $l['total_ventes'],
             ])->all();
@@ -1342,7 +1415,7 @@ class RapportController extends Controller
             return $this->spreadsheetSingleSheet('Par semaine', $headers, $rows, $baseName);
         }
 
-        $headers = ['Mois', 'Ventes'];
+        $headers = ['Mois', $libelleVolume];
         $rows = $synthese['par_mois']->map(fn ($l) => [
             $l['libelle'], $l['total_ventes'],
         ])->all();
@@ -1358,29 +1431,75 @@ class RapportController extends Controller
         ?int $filtreUserId,
         ?int $filtreTypeCarteId
     ): StreamedResponse {
-        $synthese = $this->campagneRapportService->synthese($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
-        $telepho = $this->campagneRapportService->agregatsTelephonique($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
-        $ventes = $this->campagneRapportService
-            ->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId, $filtreTypeCarteId)
-            ->with(['client', 'user', 'agence', 'typeCarte', 'campagne'])
-            ->orderBy('created_at')
-            ->get();
+        $estEnrolement = $campagne->type === Campagne::TYPE_ENROLEMENT_APP;
+        $libelleVolume = $estEnrolement ? 'Enrôlements' : 'Ventes';
 
-        $clientsParVente = $ventes
-            ->filter(fn ($v) => $v->client !== null)
-            ->groupBy('client_id')
-            ->map(fn ($group) => [
-                'client' => $group->first()->client,
-                'nb_ventes' => $group->count(),
-            ])
-            ->sortBy(fn (array $x) => Str::lower($x['client']->nom.' '.$x['client']->prenom))
-            ->values();
+        $synthese = $this->syntheseSelonType($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        [$hdrDetail, $rowsDetail] = $this->detailLignesPourExport(
+            $campagne,
+            $dateDebut,
+            $dateFin,
+            $filtreAgenceId,
+            $filtreUserId,
+            $filtreTypeCarteId
+        );
+        $nbLignesDetail = count($rowsDetail);
 
-        $rapportsTel = $this->campagneRapportService
-            ->telephoniqueRapportsPourCampagneQuery($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
-            ->with(['user.agence', 'campagne'])
-            ->orderByDesc('date_rapport')
-            ->get();
+        // Reporting téléphonique et types de carte : notions propres aux campagnes de vente.
+        $telepho = $estEnrolement
+            ? null
+            : $this->campagneRapportService->agregatsTelephonique($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId);
+        $rapportsTel = $estEnrolement
+            ? collect()
+            : $this->campagneRapportService
+                ->telephoniqueRapportsPourCampagneQuery($campagne, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+                ->with(['user.agence', 'campagne'])
+                ->orderByDesc('date_rapport')
+                ->get();
+
+        if ($estEnrolement) {
+            $enrolements = $this->campagneRapportService
+                ->enrolementsFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId)
+                ->orderBy('nom')
+                ->orderBy('prenom')
+                ->get();
+            $hdrClients = ['Client', 'Téléphone', 'Adresse', 'Nb enrôlements'];
+            $rowsClients = $enrolements
+                ->groupBy(fn (EnrolementClient $e) => Str::lower(trim($e->nom.' '.$e->prenom.' '.$e->telephone)))
+                ->map(fn ($group) => [
+                    trim($group->first()->prenom.' '.$group->first()->nom),
+                    $group->first()->telephone ?? '',
+                    $group->first()->adresse ?? '',
+                    $group->count(),
+                ])
+                ->values()
+                ->all();
+            $titreClients = 'Rapport campagne — Clients enrôlés';
+        } else {
+            $ventes = $this->campagneRapportService
+                ->ventesFiltreesQuery($campagne->id, $dateDebut, $dateFin, $filtreAgenceId, $filtreUserId, $filtreTypeCarteId)
+                ->with(['client'])
+                ->orderBy('created_at')
+                ->get();
+            $clientsParVente = $ventes
+                ->filter(fn ($v) => $v->client !== null)
+                ->groupBy('client_id')
+                ->map(fn ($group) => [
+                    'client' => $group->first()->client,
+                    'nb_ventes' => $group->count(),
+                ])
+                ->sortBy(fn (array $x) => Str::lower($x['client']->nom.' '.$x['client']->prenom))
+                ->values();
+            $hdrClients = ['Client', 'Téléphone', 'Ville', 'Quartier', 'Nb ventes'];
+            $rowsClients = $clientsParVente->map(fn (array $x) => [
+                trim($x['client']->prenom.' '.$x['client']->nom),
+                $x['client']->telephone ?? '',
+                $x['client']->ville ?? '',
+                $x['client']->quartier ?? '',
+                $x['nb_ventes'],
+            ])->all();
+            $titreClients = 'Rapport campagne — Clients (au moins une vente dans le périmètre)';
+        }
 
         $hdrFichesTel = [
             'Date', 'Campagne', 'Collaborateur', 'Agence', 'Appels émis', 'Joignables', 'Non joignables',
@@ -1433,45 +1552,33 @@ class RapportController extends Controller
 
         $definitions = [
             [
-                'title' => 'Ventes détaillées',
-                'document_title' => 'Rapport campagne — Ventes détaillées',
+                'title' => $estEnrolement ? 'Enrôlements détaillés' : 'Ventes détaillées',
+                'document_title' => 'Rapport campagne — '.($estEnrolement ? 'Enrôlements détaillés' : 'Ventes détaillées'),
                 'meta_lines' => $metaExport,
-                'headers' => ['Date', 'Campagne', 'Client', 'Téléphone', 'Type carte', 'Commercial', 'Agence', 'Statut'],
-                'rows' => $ventes->map(fn ($v) => [
-                    $v->created_at->format('d/m/Y H:i'),
-                    $v->campagne?->nom ?? '-',
-                    $v->client ? trim($v->client->prenom.' '.$v->client->nom) : '-',
-                    $v->client->telephone ?? '',
-                    $v->typeCarte?->code ?? '-',
-                    $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '',
-                    $v->agence->nom ?? '',
-                    $v->statut_activation ?? '',
-                ])->all(),
-                'totals_row' => [
-                    'TOTAUX ('.$ventes->count().' ligne(s))', '', '', '', '', '', '', '',
-                ],
+                'headers' => $hdrDetail,
+                'rows' => $rowsDetail,
+                'totals_row' => array_merge(
+                    ['TOTAUX ('.$nbLignesDetail.' ligne(s))'],
+                    array_fill(0, max(0, count($hdrDetail) - 1), '')
+                ),
             ],
             [
                 'title' => 'Clients',
-                'document_title' => 'Rapport campagne — Clients (au moins une vente dans le périmètre)',
+                'document_title' => $titreClients,
                 'meta_lines' => $metaExport,
-                'headers' => ['Client', 'Téléphone', 'Ville', 'Quartier', 'Nb ventes'],
-                'rows' => $clientsParVente->map(fn (array $x) => [
-                    trim($x['client']->prenom.' '.$x['client']->nom),
-                    $x['client']->telephone ?? '',
-                    $x['client']->ville ?? '',
-                    $x['client']->quartier ?? '',
-                    $x['nb_ventes'],
-                ])->all(),
-                'totals_row' => [
-                    'TOTAUX ('.$clientsParVente->count().' client(s))', '', '', '', $ventes->count(),
-                ],
+                'headers' => $hdrClients,
+                'rows' => $rowsClients,
+                'totals_row' => array_merge(
+                    ['TOTAUX ('.count($rowsClients).' client(s))'],
+                    array_fill(0, max(0, count($hdrClients) - 2), ''),
+                    [$nbLignesDetail]
+                ),
             ],
             [
                 'title' => 'Commerciaux',
                 'document_title' => 'Rapport campagne — Synthèse commerciaux',
                 'meta_lines' => $metaExport,
-                'headers' => ['Rang', 'Commercial', 'Agence', 'Ventes'],
+                'headers' => ['Rang', 'Commercial', 'Agence', $libelleVolume],
                 'rows' => $synthese['commerciaux']->map(fn ($l) => [
                     $l['rang'], $l['user_name'], $l['agence_nom'] ?? '', $l['total_ventes'],
                 ])->all(),
@@ -1481,13 +1588,13 @@ class RapportController extends Controller
                 'title' => 'Agences',
                 'document_title' => 'Rapport campagne — Synthèse agences',
                 'meta_lines' => $metaExport,
-                'headers' => ['Agence', 'Ventes', 'Part % volume', 'Nb commerciaux'],
+                'headers' => ['Agence', $libelleVolume, 'Part % volume', 'Nb commerciaux'],
                 'rows' => $synthese['agences']->map(fn ($l) => [
                     $l['agence_nom'], $l['total_ventes'], $l['pct_volume'], $l['nb_commerciaux'],
                 ])->all(),
                 'totals_row' => ['TOTAUX', $synthese['agences']->sum('total_ventes'), '', ''],
             ],
-            [
+            ...($estEnrolement ? [] : [[
                 'title' => 'Types de carte',
                 'document_title' => 'Rapport campagne — Types de carte',
                 'meta_lines' => $metaExport,
@@ -1496,12 +1603,12 @@ class RapportController extends Controller
                     $l['code'], $l['total_ventes'], $l['pct_volume'],
                 ])->all(),
                 'totals_row' => ['TOTAUX', $synthese['par_type_carte']->sum('total_ventes'), ''],
-            ],
+            ]]),
             [
                 'title' => 'Par semaine',
                 'document_title' => 'Rapport campagne — Volume par semaine',
                 'meta_lines' => $metaExport,
-                'headers' => ['Période', 'Ventes'],
+                'headers' => ['Période', $libelleVolume],
                 'rows' => $synthese['par_semaine']->map(fn ($l) => [
                     $l['libelle'], $l['total_ventes'],
                 ])->all(),
@@ -1511,34 +1618,36 @@ class RapportController extends Controller
                 'title' => 'Par mois',
                 'document_title' => 'Rapport campagne — Volume par mois',
                 'meta_lines' => $metaExport,
-                'headers' => ['Mois', 'Ventes'],
+                'headers' => ['Mois', $libelleVolume],
                 'rows' => $synthese['par_mois']->map(fn ($l) => [
                     $l['libelle'], $l['total_ventes'],
                 ])->all(),
                 'totals_row' => ['TOTAUX', $synthese['par_mois']->sum('total_ventes')],
             ],
-            [
-                'title' => 'Synthèse téléphonique',
-                'document_title' => 'Rapport campagne — Synthèse téléphonique (indicateurs agrégés)',
-                'meta_lines' => $metaExport,
-                'headers' => ['Indicateur', 'Valeur'],
-                'rows' => [
-                    ['Nombre de fiches', $telepho['nb_fiches']],
-                    ['Appels émis (cumul)', $telepho['appels_emis']],
-                    ['Joignables (cumul)', $telepho['appels_joignables']],
-                    ['Non joignables (cumul)', $telepho['appels_non_joignables']],
-                    ['Clients intéressés (cumul)', $telepho['clients_interesses']],
-                    ['Clients déjà servis (cumul)', $telepho['clients_deja_servis']],
+            ...($estEnrolement ? [] : [
+                [
+                    'title' => 'Synthèse téléphonique',
+                    'document_title' => 'Rapport campagne — Synthèse téléphonique (indicateurs agrégés)',
+                    'meta_lines' => $metaExport,
+                    'headers' => ['Indicateur', 'Valeur'],
+                    'rows' => [
+                        ['Nombre de fiches', $telepho['nb_fiches']],
+                        ['Appels émis (cumul)', $telepho['appels_emis']],
+                        ['Joignables (cumul)', $telepho['appels_joignables']],
+                        ['Non joignables (cumul)', $telepho['appels_non_joignables']],
+                        ['Clients intéressés (cumul)', $telepho['clients_interesses']],
+                        ['Clients déjà servis (cumul)', $telepho['clients_deja_servis']],
+                    ],
                 ],
-            ],
-            [
-                'title' => 'Fiches téléphonique',
-                'document_title' => 'Rapport campagne — Fiches reporting téléphonique (détail)',
-                'meta_lines' => $metaExport,
-                'headers' => $hdrFichesTel,
-                'rows' => $rowsFichesTel,
-                'totals_row' => $totauxFichesTel,
-            ],
+                [
+                    'title' => 'Fiches téléphonique',
+                    'document_title' => 'Rapport campagne — Fiches reporting téléphonique (détail)',
+                    'meta_lines' => $metaExport,
+                    'headers' => $hdrFichesTel,
+                    'rows' => $rowsFichesTel,
+                    'totals_row' => $totauxFichesTel,
+                ],
+            ]),
         ];
 
         $spreadsheet = $this->spreadsheetExportService->createMultiSheetSpreadsheet($definitions);
