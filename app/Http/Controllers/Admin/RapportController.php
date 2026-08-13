@@ -797,16 +797,24 @@ class RapportController extends Controller
             'ventes' => [
                 'data' => $estEnrolement
                     ? $lignes->getCollection()->map(fn (EnrolementClient $e) => [
+                        'id' => $e->id,
+                        'client_id' => null,
                         'date' => $e->created_at->format('d/m/Y H:i'),
                         'client_nom' => trim($e->prenom.' '.$e->nom),
+                        'telephone' => $e->telephone,
+                        'adresse' => $e->adresse,
                         'type_carte' => null,
                         'commercial' => $e->user ? ($e->user->prenom ? trim($e->user->prenom.' '.$e->user->name) : $e->user->name) : '—',
                         'agence_nom' => $e->agence->nom ?? '—',
                         'statut_activation' => null,
                     ])->values()
                     : $lignes->getCollection()->map(fn (Vente $v) => [
+                        'id' => $v->id,
+                        'client_id' => $v->client_id,
                         'date' => $v->created_at->format('d/m/Y H:i'),
                         'client_nom' => trim($v->client->prenom.' '.$v->client->nom),
+                        'telephone' => $v->client->telephone,
+                        'adresse' => $v->client->ville,
                         'type_carte' => $v->typeCarte?->code ?? '?',
                         'commercial' => $v->user ? ($v->user->prenom ? trim($v->user->prenom.' '.$v->user->name) : $v->user->name) : '—',
                         'agence_nom' => $v->agence->nom ?? '—',

@@ -8,6 +8,7 @@ import Button from '@/Components/ui/Button';
 import { Input, Label } from '@/Components/ui/Input';
 import { Select } from '@/Components/ui/Select';
 import Pagination from '@/Components/ui/Pagination';
+import Modal from '@/Components/ui/Modal';
 
 const nf = new Intl.NumberFormat('fr-FR');
 
@@ -17,6 +18,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
     const [agenceId, setAgenceId] = useState(filtres.agence_id ?? '');
     const [userId, setUserId] = useState(filtres.user_id ?? '');
     const [typeCarteId, setTypeCarteId] = useState(filtres.type_carte_id ?? '');
+    const [detailLigne, setDetailLigne] = useState(null);
     const libelle = estEnrolement ? 'Enrôlements' : 'Ventes';
 
     function applyFilters(e) {
@@ -106,7 +108,15 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                                 ventes.data.map((v, i) => (
                                     <tr key={i} className="hover:bg-gray-50">
                                         <td className="px-4 py-3 text-gray-600">{v.date}</td>
-                                        <td className="px-4 py-3 font-medium text-gray-900">{v.client_nom}</td>
+                                        <td className="px-4 py-3 font-medium text-gray-900">
+                                            <button
+                                                type="button"
+                                                onClick={() => setDetailLigne(v)}
+                                                className="text-left font-medium text-gda-orange underline-offset-2 hover:underline"
+                                            >
+                                                {v.client_nom}
+                                            </button>
+                                        </td>
                                         {!estEnrolement && <td className="px-4 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>}
                                         <td className="px-4 py-3 text-gray-600">{v.commercial}</td>
                                         <td className="px-4 py-3 text-gray-600">{v.agence_nom}</td>
@@ -119,6 +129,43 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                 </div>
                 <Pagination links={ventes.links} from={ventes.from} to={ventes.to} total={ventes.total} />
             </Card>
+
+            <Modal
+                open={!!detailLigne}
+                onClose={() => setDetailLigne(null)}
+                title={detailLigne ? detailLigne.client_nom : ''}
+                description={`${estEnrolement ? 'Enrôlement' : 'Vente'} — ${campagne.nom}`}
+            >
+                {detailLigne && (
+                    <div className="flex flex-col gap-3">
+                        <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
+                            <dt className="text-gray-500">Date</dt>
+                            <dd className="col-span-2 text-gray-900">{detailLigne.date}</dd>
+                            <dt className="text-gray-500">Téléphone</dt>
+                            <dd className="col-span-2 text-gray-900">{detailLigne.telephone || '—'}</dd>
+                            <dt className="text-gray-500">{estEnrolement ? 'Adresse' : 'Ville'}</dt>
+                            <dd className="col-span-2 text-gray-900">{detailLigne.adresse || '—'}</dd>
+                            {!estEnrolement && (
+                                <>
+                                    <dt className="text-gray-500">Type carte</dt>
+                                    <dd className="col-span-2"><Badge tone="blue">{detailLigne.type_carte}</Badge></dd>
+                                    <dt className="text-gray-500">Activation</dt>
+                                    <dd className="col-span-2"><Badge>{detailLigne.statut_activation}</Badge></dd>
+                                </>
+                            )}
+                            <dt className="text-gray-500">Commercial</dt>
+                            <dd className="col-span-2 text-gray-900">{detailLigne.commercial}</dd>
+                            <dt className="text-gray-500">Agence</dt>
+                            <dd className="col-span-2 text-gray-900">{detailLigne.agence_nom}</dd>
+                        </dl>
+                        {detailLigne.client_id && (
+                            <Button href={route('clients.show', detailLigne.client_id)} variant="outline" size="sm">
+                                <Users size={14} /> Fiche client complète
+                            </Button>
+                        )}
+                    </div>
+                )}
+            </Modal>
         </AppLayout>
     );
 }
