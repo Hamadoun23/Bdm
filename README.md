@@ -45,8 +45,11 @@ Détails et cas particuliers : [docs/DEMARRAGE_MIGRATION.md](docs/DEMARRAGE_MIGR
 docker compose -f docker-compose.django.yml --env-file backend/.env.production up -d --build
 ```
 
-Procédure complète, bascule et retour arrière :
-[docs/BASCULE_PRODUCTION.md](docs/BASCULE_PRODUCTION.md).
+L'application tourne en production sur <https://bdm.gdamali.net> depuis le
+15/08/2026. Laravel reste installé et arrêté sur le serveur : le retour
+arrière prend moins d'une minute, voir [docs/RETOUR_ARRIERE.md](docs/RETOUR_ARRIERE.md).
+
+Procédure de déploiement détaillée : [docs/BASCULE_PRODUCTION.md](docs/BASCULE_PRODUCTION.md).
 
 ## Rôles
 
