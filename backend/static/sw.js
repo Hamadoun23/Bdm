@@ -1,6 +1,10 @@
 /**
  * Service Worker — Gda Money PWA
- * Pré-cache les assets statiques (chemins relatifs au répertoire de l’app).
+ *
+ * Met en cache les ressources immuables : le logo et les assets compilés par
+ * Vite, dont le nom porte un hachage de contenu. Les pages et les appels
+ * Inertia ne sont jamais servis depuis le cache : ils doivent toujours
+ * refléter l'état réel des campagnes.
  */
 const SW_PATH = self.location.pathname;
 const BASE = SW_PATH.replace(/\/?sw\.js$/i, '');
@@ -10,12 +14,24 @@ function appPath(path) {
     return (BASE || '') + p;
 }
 
-const CACHE_NAME = 'gda-money-static-v1';
+// Version incrémentée à chaque changement de stratégie : l'ancien cache est
+// supprimé à l'activation. Le passage de Laravel à Django change les chemins
+// d'assets, d'où la v2.
+const CACHE_NAME = 'gda-money-static-v2';
+
+// Uniquement des ressources dont l'existence est certaine : `cache.addAll()`
+// échoue en bloc si une seule répond 404, et le service worker ne s'installe
+// alors jamais.
 const PRECACHE_URLS = [
-    appPath('/css/gda-theme.css'),
     appPath('/logo/iconesgda.png'),
     appPath('/logo/gdamoney.png'),
+    appPath('/logo/gdamoney-mark.png'),
 ];
+
+// Django sert les assets compilés sous /static/ ; Laravel les servait sous
+// /build/. Le préfixe historique est conservé le temps que les anciens caches
+// des navigateurs expirent.
+const PREFIXES_CACHABLES = ['/logo/', '/static/assets/', '/build/assets/'];
 
 function pathRelativeToApp(urlPath) {
     if (!BASE) return urlPath;
@@ -28,7 +44,18 @@ function pathRelativeToApp(urlPath) {
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
+        caches
+            .open(CACHE_NAME)
+            // Chaque ressource est ajoutée séparément : une absence ne doit pas
+            // empêcher l'installation du service worker.
+            .then((cache) =>
+                Promise.all(
+                    PRECACHE_URLS.map((url) =>
+                        cache.add(url).catch(() => undefined)
+                    )
+                )
+            )
+            .then(() => self.skipWaiting())
     );
 });
 
@@ -52,26 +79,22 @@ self.addEventListener('fetch', (event) => {
     }
 
     const rel = pathRelativeToApp(url.pathname);
-    const isStaticAsset =
-        PRECACHE_URLS.includes(url.pathname) ||
-        rel.startsWith('/css/') ||
-        rel.startsWith('/logo/') ||
-        rel.startsWith('/build/assets/');
-
-    if (isStaticAsset) {
-        event.respondWith(
-            caches.match(request).then((cached) => {
-                if (cached) {
-                    return cached;
-                }
-                return fetch(request).then((response) => {
-                    const copy = response.clone();
-                    if (response.ok && (rel.startsWith('/css/') || rel.startsWith('/logo/'))) {
-                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-                    }
-                    return response;
-                });
-            })
-        );
+    if (!PREFIXES_CACHABLES.some((prefixe) => rel.startsWith(prefixe))) {
+        return;
     }
+
+    event.respondWith(
+        caches.match(request).then((cached) => {
+            if (cached) {
+                return cached;
+            }
+            return fetch(request).then((response) => {
+                if (response.ok) {
+                    const copie = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(request, copie));
+                }
+                return response;
+            });
+        })
+    );
 });

@@ -8,6 +8,8 @@ reporting téléphonique, contrats de prestation et rapports de performance.
 Le serveur porte toute la donnée et la logique ; React ne fait qu'afficher les
 props qu'il reçoit.
 
+Architecture détaillée : [docs/STACK.md](docs/STACK.md).
+
 ```
 backend/     Django 6.0 — modèles, vues, services, exports
 frontend/    React 18 + Vite — 57 pages, aucune règle métier
