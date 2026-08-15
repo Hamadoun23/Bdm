@@ -57,10 +57,20 @@ def table_de_routes():
 
 
 def objet_ziggy(request):
-    """Objet injecté dans le gabarit sous `window.Ziggy`."""
+    """
+    Objet injecté dans le gabarit sous `window.Ziggy`.
+
+    Le port est déduit de l'en-tête `Host`, et non de `request.get_port()` :
+    derrière un proxy, ce dernier renvoie le port d'écoute interne de gunicorn
+    (8000). Ziggy construirait alors des URL absolues du type
+    `https://domaine:8000/...`, injoignables depuis le navigateur.
+    """
+    hote = request.get_host()
+    port = hote.split(":", 1)[1] if ":" in hote else None
+
     return {
-        "url": f"{request.scheme}://{request.get_host()}",
-        "port": request.get_port() if request.get_port() not in ("80", "443") else None,
+        "url": f"{request.scheme}://{hote}",
+        "port": port,
         "defaults": {},
         "routes": table_de_routes(),
     }
