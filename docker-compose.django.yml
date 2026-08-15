@@ -1,0 +1,63 @@
+# Stack de production Django — destinée à tourner À CÔTÉ de la stack Laravel
+# pendant la phase de bascule, sur la même base de données.
+#
+# Le service écoute sur 127.0.0.1:8091 ; Laravel reste sur 8090. Le nginx de
+# l'hôte pointe sur l'un ou l'autre : c'est ce basculement, et lui seul, qui
+# met Django en production. Le retour arrière consiste à repointer sur 8090.
+#
+# Aucune base n'est déclarée ici : Django se connecte à la base MySQL existante,
+# celle que Laravel utilise déjà. Le schéma métier est identique.
+#
+# Usage :
+#   docker compose -f docker-compose.django.yml --env-file backend/.env.production up -d --build
+
+services:
+  django:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - backend/.env.production
+    volumes:
+      # Les pièces d'identité téléversées sont partagées avec la stack Laravel :
+      # les deux pointent sur le même dossier tant que la bascule n'est pas figée.
+      - storage_app:/app/media
+      - django_static:/app/staticfiles
+    ports:
+      - "127.0.0.1:8091:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks: [bdm_prod]
+
+  # nginx dédié : sert les fichiers statiques et les médias sans réveiller
+  # Python, et transmet le reste à gunicorn.
+  web_django:
+    image: nginx:alpine
+    volumes:
+      - ./docker/nginx/django.conf:/etc/nginx/conf.d/default.conf:ro
+      - django_static:/var/www/static:ro
+      - storage_app:/var/www/media:ro
+    ports:
+      - "127.0.0.1:8092:80"
+    depends_on:
+      django:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [bdm_prod]
+
+networks:
+  bdm_prod:
+    external: true
+    name: bdm_bdm_prod
+
+volumes:
+  # Volume déjà créé par la stack Laravel : on s'y raccroche, on ne le recrée pas.
+  storage_app:
+    external: true
+    name: bdm_storage_app
+  django_static:

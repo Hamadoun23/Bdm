@@ -1,26 +1,35 @@
+# Secrets
+.env
+.env.*
+!.env.*.example
+
+# Dumps de base — ils contiennent les données personnelles des clients
+# (noms, téléphones) et les hachages de mots de passe. Ils ne doivent jamais
+# être versionnés, a fortiori sur un dépôt public.
+*.sql
+
+# Backend
+/backend/.venv
+/backend/staticfiles
+/backend/media
+__pycache__/
+*.py[cod]
+
+# Frontend
+/frontend/node_modules
+/frontend/dist
+
+# Divers
 *.log
 .DS_Store
-.env
-.env.backup
-.env.docker
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/app/commerciaux_gda_credentials.json
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
 Thumbs.db
+/.idea
+/.vscode
+/.fleet
+/.zed
+
+# Documents métier (accès, listes nominatives) : jamais sur un dépôt public.
+docs/*.docx
+docs/*.xlsx
+docs/*.bak
+docs/~$*

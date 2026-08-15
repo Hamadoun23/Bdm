@@ -1,0 +1,37 @@
+# Stack de DÉVELOPPEMENT de la migration Django.
+#
+# MySQL 8.0 — même moteur que la production (8.0.45), volontairement pas le
+# MariaDB 10.4 de XAMPP : les rapports contiennent 51 requêtes SQL brutes dont
+# le comportement diffère entre les deux moteurs (fonctions de fenêtrage,
+# ONLY_FULL_GROUP_BY, tri des NULL). On teste sur ce qui tourne en prod.
+#
+# Port 3307 pour ne pas entrer en conflit avec le MariaDB de XAMPP (3306).
+#
+# Usage :
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down        (garde les données)
+#   docker compose -f docker-compose.dev.yml down -v     (remet à zéro)
+
+services:
+  db_dev:
+    image: mysql:8.0
+    container_name: bdm_db_dev
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: bdm_dev
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - db_dev_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  db_dev_data:
