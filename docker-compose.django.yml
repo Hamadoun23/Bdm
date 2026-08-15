@@ -29,9 +29,7 @@ services:
       # La sonde présente le nom d'hôte public : Django rejette toute requête
       # dont l'en-tête `Host` n'est pas dans ALLOWED_HOSTS, et il ne faut pas
       # relâcher ce contrôle juste pour un test de vie.
-      test:
-        - CMD-SHELL
-        - curl -fsS -H "Host: $${DJANGO_ALLOWED_HOSTS%%,*}" http://127.0.0.1:8000/login
+      test: ["CMD-SHELL", "curl -fsS -H \"Host: $${DJANGO_ALLOWED_HOSTS%%,*}\" http://127.0.0.1:8000/login"]
       interval: 15s
       timeout: 5s
       retries: 5
