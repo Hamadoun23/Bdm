@@ -30,11 +30,14 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 COPY backend/ .
 COPY --from=frontend /build/dist /app/../frontend/dist
 
-# Les assets compilés et les fichiers du socle sont regroupés pour être servis
-# par nginx sans passer par Django.
-RUN python manage.py collectstatic --noinput --clear
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
+
+# `collectstatic` est exécuté au démarrage, pas au build : le volume partagé
+# avec nginx survit aux reconstructions et doit être resynchronisé à chaque
+# lancement (cf. entrypoint.sh).
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # 3 workers : suffisant pour la charge actuelle (une soixantaine de comptes),
 # et compatible avec la mémoire du VPS mutualisé.
