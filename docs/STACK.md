@@ -105,11 +105,13 @@ point conditionnent **tous** les formulaires de l'application.
 ## Le schéma de base
 
 Les modèles sont en `managed = False` et pointent sur les tables existantes :
-Django ne crée, ne modifie et ne supprime jamais leur structure.
+Django ne génère aucun DDL pour eux. Les évolutions de schéma passent donc par
+des migrations en SQL explicite (`migrations.RunSQL`), toujours additives.
 
 | | |
 |---|---|
-| Tables métier | 28, **inchangées** depuis Laravel |
+| Tables métier | 28, aucune création ni suppression depuis Laravel |
+| Colonnes ajoutées depuis la bascule | `enrolement_clients.numero_compte` (août 2026) |
 | Tables ajoutées par Django | 7, techniques (`django_session`, `django_cache`…) |
 | Mots de passe | bcrypt `$2y$`, vérifiés tels quels — aucune réinitialisation |
 

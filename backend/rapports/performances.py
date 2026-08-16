@@ -651,6 +651,7 @@ def show(request, user):
                 "clients": [
                     {
                         "nom_complet": f"{e.prenom} {e.nom}".strip(),
+                        "numero_compte": e.numero_compte,
                         "telephone": e.telephone,
                         "ville": e.adresse,
                         "type_carte": None,
@@ -663,6 +664,7 @@ def show(request, user):
                         if e.created_at
                         else None,
                         "client_nom": f"{e.prenom} {e.nom}".strip(),
+                        "numero_compte": e.numero_compte,
                         "type_carte": None,
                         "agence_nom": e.agence.nom if e.agence_id else None,
                     }

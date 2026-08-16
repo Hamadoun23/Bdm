@@ -271,6 +271,7 @@ def enrolements_index(request):
             "id": e.id,
             "date": e.created_at.strftime("%d/%m/%Y %H:%M"),
             "client_nom": f"{e.prenom} {e.nom}".strip(),
+            "numero_compte": e.numero_compte,
             "telephone": e.telephone,
             "adresse": e.adresse,
             "commercial": e.user.name if e.user_id else "-",
@@ -361,6 +362,7 @@ def api_enrolement_store(request):
     validateur = Validateur(request.POST)
     validateur.champ("nom", "required|max:255")
     validateur.champ("prenom", "required|max:255")
+    validateur.champ("numero_compte", "required|max:50")
     validateur.champ("telephone", "nullable|max:20")
     validateur.champ("adresse", "nullable|max:255")
     validateur.champ("campagne_id", "nullable|integer")

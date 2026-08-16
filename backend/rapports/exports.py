@@ -136,12 +136,22 @@ def _lignes_detail_campagne(campagne, debut, fin, agence_id, user_id, type_carte
             lignes = lignes.filter(user_id=user_id)
 
         return (
-            ["Date", "Campagne", "Client", "Téléphone", "Adresse", "Commercial", "Agence"],
+            [
+                "Date",
+                "Campagne",
+                "Client",
+                "N° de compte",
+                "Téléphone",
+                "Adresse",
+                "Commercial",
+                "Agence",
+            ],
             [
                 [
                     e.created_at.strftime("%d/%m/%Y %H:%M"),
                     e.campagne.nom if e.campagne_id else "-",
                     f"{e.prenom} {e.nom}".strip(),
+                    e.numero_compte or "",
                     e.telephone or "",
                     e.adresse or "",
                     _nom(e.user),
@@ -418,10 +428,11 @@ def _clients_campagne(campagne, debut, fin, agence_id, user_id, type_carte_id):
             groupes.setdefault(cle, []).append(e)
 
         return (
-            ["Client", "Téléphone", "Adresse", "Nb enrôlements"],
+            ["Client", "N° de compte", "Téléphone", "Adresse", "Nb enrôlements"],
             [
                 [
                     f"{groupe[0].prenom} {groupe[0].nom}".strip(),
+                    groupe[0].numero_compte or "",
                     groupe[0].telephone or "",
                     groupe[0].adresse or "",
                     len(groupe),
@@ -1109,11 +1120,12 @@ def performances_commercial_export_excel(request, user):
         lignes_source = performances._base_periode(
             EnrolementClient, contexte["dateDebut"], contexte["dateFin"], None, ids
         ).filter(user_id=commercial.id).select_related("agence").order_by("-created_at", "-id")
-        entetes = ["Date", "Client", "Téléphone", "Adresse", "Agence"]
+        entetes = ["Date", "Client", "N° de compte", "Téléphone", "Adresse", "Agence"]
         lignes = [
             [
                 e.created_at.strftime("%d/%m/%Y %H:%M"),
                 f"{e.prenom} {e.nom}".strip(),
+                e.numero_compte or "",
                 e.telephone or "",
                 e.adresse or "",
                 e.agence.nom if e.agence_id else "",

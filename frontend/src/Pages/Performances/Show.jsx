@@ -65,6 +65,7 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-2.5 font-medium">Nom</th>
+                                {estEnrolement && <th className="px-5 py-2.5 font-medium">N° de compte</th>}
                                 <th className="px-5 py-2.5 font-medium">Téléphone</th>
                                 <th className="px-5 py-2.5 font-medium">{estEnrolement ? 'Adresse' : 'Ville'}</th>
                                 {!estEnrolement && <th className="px-5 py-2.5 font-medium">Carte</th>}
@@ -74,6 +75,7 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                             {clients.map((c, i) => (
                                 <tr key={i} className="hover:bg-gray-50">
                                     <td className="px-5 py-2.5 font-medium text-gray-900">{c.nom_complet}</td>
+                                    {estEnrolement && <td className="px-5 py-2.5 font-mono text-gray-600">{c.numero_compte ?? '—'}</td>}
                                     <td className="px-5 py-2.5 text-gray-600">{c.telephone}</td>
                                     <td className="px-5 py-2.5 text-gray-600">{c.ville ?? '—'}</td>
                                     {!estEnrolement && <td className="px-5 py-2.5 text-gray-600">{c.type_carte ?? '—'}</td>}
@@ -94,6 +96,7 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-2.5 font-medium">Date</th>
                                 <th className="px-5 py-2.5 font-medium">Client</th>
+                                {estEnrolement && <th className="px-5 py-2.5 font-medium">N° de compte</th>}
                                 {!estEnrolement && <th className="px-5 py-2.5 font-medium">Carte vendue</th>}
                                 <th className="px-5 py-2.5 font-medium">Agence</th>
                             </tr>
@@ -103,6 +106,7 @@ export default function PerformanceShow({ displayName, agenceNom, libellePeriode
                                 <tr key={i} className="hover:bg-gray-50">
                                     <td className="px-5 py-2.5 text-gray-600">{v.date}</td>
                                     <td className="px-5 py-2.5 font-medium text-gray-900">{v.client_nom}</td>
+                                    {estEnrolement && <td className="px-5 py-2.5 font-mono text-gray-600">{v.numero_compte ?? '—'}</td>}
                                     {!estEnrolement && <td className="px-5 py-2.5 text-gray-600">{v.type_carte ?? '—'}</td>}
                                     <td className="px-5 py-2.5 text-gray-600">{v.agence_nom ?? '—'}</td>
                                 </tr>

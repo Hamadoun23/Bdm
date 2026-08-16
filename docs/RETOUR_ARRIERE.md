@@ -33,7 +33,7 @@ docker compose -f docker-compose.django.yml down
 
 | Élément | État |
 |---|---|
-| Schéma de base | **Inchangé** — les 28 tables métier n'ont pas été touchées |
+| Schéma de base | Les 28 tables métier sont intactes. Seul ajout depuis la bascule : la colonne nullable `enrolement_clients.numero_compte`, que Laravel ignore |
 | Mots de passe | **Inchangés** — bcrypt `$2y$`, relisible par les deux stacks |
 | Fichiers téléversés | Volume `bdm_storage_app` **partagé** entre les deux stacks |
 | Code Laravel | `/opt/bdm` intact, conteneurs arrêtés |
@@ -88,7 +88,11 @@ stacks écrivent dans la même base, avec le même schéma.
 cd /opt/bdm-django
 git pull origin main
 docker compose -f docker-compose.django.yml --env-file backend/.env.production up -d --build
+docker compose -f docker-compose.django.yml exec django python manage.py migrate
 ```
+
+`migrate` n'est pas lancé au démarrage du conteneur : il reste une opération
+volontaire, à faire après chaque mise à jour qui apporte une migration.
 
 ---
 

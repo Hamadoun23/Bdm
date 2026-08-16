@@ -95,6 +95,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-3 font-medium">Date</th>
                                 <th className="px-4 py-3 font-medium">Client</th>
+                                {estEnrolement && <th className="px-4 py-3 font-medium">N° de compte</th>}
                                 {!estEnrolement && <th className="px-4 py-3 font-medium">Type carte</th>}
                                 <th className="px-4 py-3 font-medium">Commercial</th>
                                 <th className="px-4 py-3 font-medium">Agence</th>
@@ -103,7 +104,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {ventes.data.length === 0 ? (
-                                <tr><td colSpan={estEnrolement ? 4 : 6} className="px-4 py-8 text-center text-gray-500">Aucun{estEnrolement ? ' enrôlement' : 'e vente'} ne correspond aux critères.</td></tr>
+                                <tr><td colSpan={estEnrolement ? 5 : 6} className="px-4 py-8 text-center text-gray-500">Aucun{estEnrolement ? ' enrôlement' : 'e vente'} ne correspond aux critères.</td></tr>
                             ) : (
                                 ventes.data.map((v, i) => (
                                     <tr key={i} className="hover:bg-gray-50">
@@ -117,6 +118,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                                                 {v.client_nom}
                                             </button>
                                         </td>
+                                        {estEnrolement && <td className="px-4 py-3 font-mono text-gray-600">{v.numero_compte || '—'}</td>}
                                         {!estEnrolement && <td className="px-4 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>}
                                         <td className="px-4 py-3 text-gray-600">{v.commercial}</td>
                                         <td className="px-4 py-3 text-gray-600">{v.agence_nom}</td>
@@ -141,6 +143,12 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                         <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
                             <dt className="text-gray-500">Date</dt>
                             <dd className="col-span-2 text-gray-900">{detailLigne.date}</dd>
+                            {estEnrolement && (
+                                <>
+                                    <dt className="text-gray-500">N° de compte</dt>
+                                    <dd className="col-span-2 font-mono text-gray-900">{detailLigne.numero_compte || '—'}</dd>
+                                </>
+                            )}
                             <dt className="text-gray-500">Téléphone</dt>
                             <dd className="col-span-2 text-gray-900">{detailLigne.telephone || '—'}</dd>
                             <dt className="text-gray-500">{estEnrolement ? 'Adresse' : 'Ville'}</dt>

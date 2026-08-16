@@ -113,6 +113,9 @@ class EnrolementClient(LaravelModel):
     )
     nom = models.CharField(max_length=255)
     prenom = models.CharField(max_length=255)
+    #: Obligatoire à la saisie depuis août 2026 ; la colonne reste nullable pour
+    #: les enrôlements enregistrés avant l'ajout du champ.
+    numero_compte = models.CharField(max_length=50, null=True, blank=True)
     telephone = models.CharField(max_length=20, null=True, blank=True)
     adresse = models.CharField(max_length=255, null=True, blank=True)
 

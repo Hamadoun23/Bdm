@@ -195,6 +195,7 @@ def enregistrer_enrolement(donnees, user):
         agence_id=agence_id,
         nom=donnees["nom"],
         prenom=donnees["prenom"],
+        numero_compte=donnees["numero_compte"],
         telephone=donnees.get("telephone") or None,
         adresse=donnees.get("adresse") or None,
     )

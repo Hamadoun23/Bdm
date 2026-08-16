@@ -44,6 +44,7 @@ export default function EnrolementsCreate({ campagnesOuvertes, peutEnroler, cont
         campagne_id: campagnesOuvertes.length === 1 ? campagnesOuvertes[0].id : '',
         prenom: '',
         nom: '',
+        numero_compte: '',
         telephone: '',
         adresse: '',
     });
@@ -128,6 +129,12 @@ export default function EnrolementsCreate({ campagnesOuvertes, peutEnroler, cont
                                     <Input id="nom" value={form.nom} onChange={(e) => set('nom', e.target.value)} error={errors.nom} required />
                                     <FieldError>{errors.nom}</FieldError>
                                 </div>
+                            </div>
+
+                            <div>
+                                <Label htmlFor="numero_compte">Numéro de compte *</Label>
+                                <Input id="numero_compte" value={form.numero_compte} onChange={(e) => set('numero_compte', e.target.value)} error={errors.numero_compte} required />
+                                <FieldError>{errors.numero_compte}</FieldError>
                             </div>
 
                             <div>

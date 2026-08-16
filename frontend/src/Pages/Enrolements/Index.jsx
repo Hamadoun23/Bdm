@@ -33,6 +33,7 @@ export default function EnrolementsIndex({ enrolements, canManage, canSeeCommerc
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-3 font-medium">Date</th>
                                 <th className="px-5 py-3 font-medium">Client</th>
+                                <th className="px-5 py-3 font-medium">N° de compte</th>
                                 <th className="px-5 py-3 font-medium">Téléphone</th>
                                 {canSeeCommercial && (
                                     <>
@@ -48,6 +49,7 @@ export default function EnrolementsIndex({ enrolements, canManage, canSeeCommerc
                                 <tr key={e.id} className="hover:bg-gray-50">
                                     <td className="px-5 py-3 text-gray-600">{e.date}</td>
                                     <td className="px-5 py-3 font-medium text-gray-900">{e.client_nom}</td>
+                                    <td className="px-5 py-3 font-mono text-gray-600">{e.numero_compte ?? '—'}</td>
                                     <td className="px-5 py-3 text-gray-600">{e.telephone ?? '—'}</td>
                                     {canSeeCommercial && (
                                         <>
@@ -74,7 +76,7 @@ export default function EnrolementsIndex({ enrolements, canManage, canSeeCommerc
                             ))}
                             {enrolements.data.length === 0 && (
                                 <tr>
-                                    <td colSpan={canSeeCommercial ? 5 : canManage ? 4 : 3} className="px-5 py-8 text-center text-gray-500">
+                                    <td colSpan={canSeeCommercial ? 6 : canManage ? 5 : 4} className="px-5 py-8 text-center text-gray-500">
                                         Aucun enrôlement.
                                     </td>
                                 </tr>

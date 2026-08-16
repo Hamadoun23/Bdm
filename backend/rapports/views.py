@@ -378,6 +378,7 @@ def campagne_ventes(request, campagne):
                 "client_id": None,
                 "date": e.created_at.strftime("%d/%m/%Y %H:%M"),
                 "client_nom": f"{e.prenom} {e.nom}".strip(),
+                "numero_compte": e.numero_compte,
                 "telephone": e.telephone,
                 "adresse": e.adresse,
                 "type_carte": None,
@@ -394,6 +395,7 @@ def campagne_ventes(request, campagne):
                 "client_id": v.client_id,
                 "date": v.created_at.strftime("%d/%m/%Y %H:%M"),
                 "client_nom": f"{v.client.prenom} {v.client.nom}".strip(),
+                "numero_compte": None,
                 "telephone": v.client.telephone,
                 "adresse": v.client.ville,
                 "type_carte": v.type_carte.code if v.type_carte_id else "?",
@@ -473,6 +475,7 @@ def campagne_clients(request, campagne):
             {
                 "id": e.id,
                 "nom_complet": f"{e.prenom} {e.nom}".strip(),
+                "numero_compte": e.numero_compte,
                 "telephone": e.telephone,
                 "ville": e.adresse,
                 "type_carte": None,

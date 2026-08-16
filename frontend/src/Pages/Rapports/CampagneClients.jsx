@@ -33,6 +33,7 @@ export default function CampagneClients({ campagne, clients, estEnrolement }) {
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-3 font-medium">Nom</th>
+                                {estEnrolement && <th className="px-4 py-3 font-medium">N° de compte</th>}
                                 <th className="px-4 py-3 font-medium">Téléphone</th>
                                 <th className="px-4 py-3 font-medium">{estEnrolement ? 'Adresse' : 'Ville'}</th>
                                 {!estEnrolement && <th className="px-4 py-3 font-medium">Type carte</th>}
@@ -42,11 +43,12 @@ export default function CampagneClients({ campagne, clients, estEnrolement }) {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {clients.length === 0 ? (
-                                <tr><td colSpan={estEnrolement ? 4 : 6} className="px-4 py-8 text-center text-gray-500">Aucun client.</td></tr>
+                                <tr><td colSpan={estEnrolement ? 5 : 6} className="px-4 py-8 text-center text-gray-500">Aucun client.</td></tr>
                             ) : (
                                 clients.map((c) => (
                                     <tr key={c.id} className="hover:bg-gray-50">
                                         <td className="px-4 py-3 font-medium text-gray-900">{c.nom_complet}</td>
+                                        {estEnrolement && <td className="px-4 py-3 font-mono text-gray-600">{c.numero_compte ?? '—'}</td>}
                                         <td className="px-4 py-3 text-gray-600">{c.telephone ?? '—'}</td>
                                         <td className="px-4 py-3 text-gray-600">{c.ville ?? '—'}</td>
                                         {!estEnrolement && <td className="px-4 py-3"><Badge tone="blue">{c.type_carte}</Badge></td>}

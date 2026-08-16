@@ -191,6 +191,7 @@ def main():
             {
                 "nom": "TEST",
                 "prenom": "Enrolement",
+                "numero_compte": "TEST0000000",
                 "telephone": "00000000",
                 "adresse": "Test migration",
             },
