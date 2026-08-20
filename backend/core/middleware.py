@@ -157,6 +157,11 @@ class ChoixClientRequisMiddleware:
 
     #: Chemins accessibles sans avoir choisi : authentification, écran de choix
     #: lui-même, profil et ressources techniques.
+    #:
+    #: Les fichiers servis à la racine (cf. `public.racine` dans config/urls.py)
+    #: en font partie : rediriger `/sw.js` vers une page HTML fait échouer
+    #: l'enregistrement du service worker, précisément sur l'écran de choix où
+    #: le navigateur le tente.
     PREFIXES_LIBRES = (
         "/login",
         "/logout",
@@ -171,6 +176,10 @@ class ChoixClientRequisMiddleware:
         "/static/",
         "/storage/",
         "/site.webmanifest",
+        "/sw.js",
+        "/logo/",
+        "/favicon.ico",
+        "/robots.txt",
     )
 
     def __init__(self, get_response):

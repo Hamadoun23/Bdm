@@ -114,6 +114,18 @@ def main():
         f"HTTP {reponse.status}",
     )
 
+    # Les fichiers servis à la racine ne doivent pas tomber dans la garde :
+    # une redirection sur `/sw.js` fait échouer l'enregistrement du service
+    # worker, justement sur l'écran de choix où le navigateur le tente.
+    for chemin in ("/sw.js", "/favicon.ico", "/site.webmanifest"):
+        reponse = admin.requete(chemin, inertia=False)
+        reponse.read()
+        echecs += resultat(
+            reponse.status == 200,
+            f"{chemin} reste servi sans client choisi",
+            f"HTTP {reponse.status} {reponse.headers.get('Location') or ''}",
+        )
+
     props = admin.props("/choix-client")
     codes = sorted(p.get("code") for p in props.get("partenaires", []))
     echecs += resultat(codes == ["bdm", "uba"], "les deux clients sont proposés", str(codes))
