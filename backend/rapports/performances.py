@@ -16,6 +16,7 @@ from inertia import render
 
 from campagnes.models import Campagne, StatutCampagne, TypeCampagne
 from core.decorators import http_methods
+from core.partenaires import filtrer_campagnes, filtrer_users, partenaire_courant
 from core.models import ROLES_COMMERCIAUX, Agence, TypeCarte, User
 from core.php import nombre_format, tableau
 from terrain.models import EnrolementClient, Vente
@@ -64,20 +65,34 @@ def _agences_perimetre(campagne_ids):
 # ---------------------------------------------------------------------------
 
 
+def _partenaire_id(request):
+    """
+    Le client de GDA du contexte.
+
+    Pour un administrateur, c'est celui qu'il consulte ; pour un commercial,
+    celui de son compte. Dans les deux cas, aucune performance d'un autre
+    client ne doit apparaître.
+    """
+    partenaire = partenaire_courant(request)
+    if partenaire is not None:
+        return partenaire.id
+    return getattr(request.user, "partenaire_id", None)
+
+
 def _resoudre_campagne_filtre(request, user):
     """Campagne explicitement choisie, si l'utilisateur y a accès."""
     valeur = request.GET.get("campagne_id")
     if not valeur:
         return None
-    campagne = Campagne.objects.filter(pk=valeur).first()
+    campagne = filtrer_campagnes(
+        Campagne.objects.filter(pk=valeur), partenaire_courant(request)
+    ).first()
     if campagne is None:
         return None
     if user.is_admin or user.is_direction:
         return campagne
-    if (
-        user.is_commercial_ou_telephonique
-        and user.agence_id
-        and campagne.concerne_agence(int(user.agence_id))
+    if user.is_commercial_ou_telephonique and campagne.concerne_agence(
+        int(user.agence_id) if user.agence_id else None
     ):
         return campagne
     return None
@@ -86,6 +101,7 @@ def _resoudre_campagne_filtre(request, user):
 def _contexte_performance(request):
     """Portage de PerformanceController::performanceContext()."""
     user = request.user
+    partenaire_id = _partenaire_id(request)
 
     if user.is_admin or user.is_direction:
         agence_id = int(request.GET["agence"]) if request.GET.get("agence") else None
@@ -107,7 +123,7 @@ def _contexte_performance(request):
         type_campagne = campagne_filtre.type
         campagnes_du_type = [campagne_filtre]
     else:
-        stats = Campagne.campagnes_pour_stats(agence_id)
+        stats = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
         vente = [c for c in stats if c.type == TypeCampagne.VENTE_CARTE]
         enrolement = [c for c in stats if c.type == TypeCampagne.ENROLEMENT_APP]
         if vente:
@@ -171,6 +187,7 @@ def _contexte_performance(request):
         "dateFin": fin,
         "libellePeriode": libelle,
         "agenceId": agence_id,
+        "partenaireId": partenaire_id,
         "filtreIntervalle": filtre_intervalle,
         "du": du if filtre_intervalle else None,
         "au": au if filtre_intervalle else None,
@@ -455,7 +472,9 @@ def index(request):
         if est_enrolement
         else (
             contexte["campagneRef"]
-            or Campagne.campagne_pour_performances(contexte["agenceId"])
+            or Campagne.campagne_pour_performances(
+                contexte["agenceId"], contexte.get("partenaireId")
+            )
         )
     )
 
@@ -488,11 +507,18 @@ def index(request):
                 "campagne_id": contexte["campagneIdSelected"],
                 "compare": contexte["compareEnabled"],
             },
-            "canFilterAgence": bool(user.is_admin or user.is_direction),
+            # Filtrer par agence n'a de sens que chez un client qui en a un
+            # réseau : `_agences_perimetre` renvoie une liste vide sinon.
+            "canFilterAgence": bool(
+                (user.is_admin or user.is_direction) and ids_agences_perimetre
+            ),
+            "aDesAgences": bool(ids_agences_perimetre),
             "agencesSelect": [
                 {"id": a.id, "nom": a.nom} for a in _agences_perimetre(ids)
             ],
-            "campagnesSelect": _campagnes_select(contexte["agenceId"], user),
+            "campagnesSelect": _campagnes_select(
+                contexte["agenceId"], user, partenaire_courant(request)
+            ),
             "libellePeriode": contexte["libellePeriode"],
             "estEnrolement": est_enrolement,
             "vueCommerciale": vue_commerciale,
@@ -557,7 +583,7 @@ def index(request):
     )
 
 
-def _campagnes_select(agence_id, user):
+def _campagnes_select(agence_id, user, partenaire=None):
     """
     Campagnes proposées au filtre.
 
@@ -565,7 +591,10 @@ def _campagnes_select(agence_id, user):
     « — Enrôlement » de son libellé teste `$c->type`, absent de la sélection,
     donc toujours nul : il ne s'affiche jamais. Comportement reproduit tel quel.
     """
-    qs = Campagne.objects.exclude(statut=StatutCampagne.ANNULEE).order_by("-date_debut")
+    qs = filtrer_campagnes(
+        Campagne.objects.exclude(statut=StatutCampagne.ANNULEE).order_by("-date_debut"),
+        partenaire,
+    )
 
     if user.is_admin or user.is_direction:
         campagnes = qs
@@ -596,7 +625,12 @@ def show(request, user):
 
     Campagne.sync_statuts()
     viewer = request.user
-    commercial = get_object_or_404(User.objects.select_related("agence"), pk=user)
+    commercial = get_object_or_404(
+        filtrer_users(
+            User.objects.select_related("agence"), partenaire_courant(request)
+        ),
+        pk=user,
+    )
     contexte = _contexte_performance(request)
 
     if not _peut_voir_detail(viewer, commercial, contexte["agenceId"]):

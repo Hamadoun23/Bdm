@@ -1,4 +1,4 @@
-# La stack technique de BDM
+# La stack technique des campagnes GDA
 
 Django porte la donnée et la logique. React affiche. Inertia relie les deux.
 Il n'y a ni API REST à maintenir, ni routeur côté client, ni gestionnaire
@@ -54,7 +54,7 @@ migration depuis Laravel : Inertia parle le même protocole des deux côtés.
 ```
 backend/
 ├── config/          settings, urls, wsgi
-├── core/            socle : User, Agence, TypeCarte, auth, exports, pagination
+├── core/            socle : Partenaire, User, Agence, TypeCarte, auth, exports
 ├── campagnes/       campagnes, contrats, aides, import de commerciaux
 ├── terrain/         ventes, clients, enrôlements, reporting téléphonique
 ├── rapports/        rapports de campagne, performances (aucun modèle)
@@ -70,6 +70,26 @@ frontend/src/
 
 Les apps Django suivent le métier, pas la technique : `campagnes` contient ses
 modèles, ses vues et ses services, plutôt qu'un dossier `models/` global.
+
+---
+
+## Le cloisonnement par client
+
+L'application sert plusieurs banques. Un administrateur choisit laquelle il
+consulte, et **tout ce qu'il voit ensuite en dépend**.
+
+```python
+from core.partenaires import filtrer_campagnes, partenaire_courant
+
+campagnes = filtrer_campagnes(Campagne.objects.all(), partenaire_courant(request))
+```
+
+Les fonctions `filtrer_*` de [core/partenaires.py](../backend/core/partenaires.py)
+sont le point de passage obligé : une requête qui ne les traverse pas mélange
+les données des deux clients. Le partenaire courant est aussi partagé à toutes
+les pages Inertia sous la prop `client`.
+
+Détail du modèle et de ses conséquences : [CLIENTS_GDA.md](CLIENTS_GDA.md).
 
 ---
 
@@ -110,8 +130,9 @@ des migrations en SQL explicite (`migrations.RunSQL`), toujours additives.
 
 | | |
 |---|---|
-| Tables métier | 28, aucune création ni suppression depuis Laravel |
-| Colonnes ajoutées depuis la bascule | `enrolement_clients.numero_compte` (août 2026) |
+| Tables métier | 30 — `partenaires` et `adhesions_cartes` ajoutées en août 2026 |
+| Colonnes ajoutées depuis la bascule | `enrolement_clients.numero_compte`, puis `partenaire_id` sur `agences`, `users`, `campagnes` et `types_cartes` |
+| Colonnes assouplies | `ventes.agence_id` et `enrolement_clients.agence_id` deviennent nullables — un client sans agences n'en renseigne aucune |
 | Tables ajoutées par Django | 7, techniques (`django_session`, `django_cache`…) |
 | Mots de passe | bcrypt `$2y$`, vérifiés tels quels — aucune réinitialisation |
 
@@ -150,6 +171,18 @@ tomber au franc près.
 
 ## Développer
 
+Tout dans Docker — la même forme qu'en production, en un seul commande :
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build   # base + Django + nginx
+```
+
+`backend/` est monté dans le conteneur et gunicorn tourne en `--reload` : le
+code Python est rechargé à chaud. Les assets viennent de `frontend/dist`, monté
+lui aussi, qu'un `npm run build` suffit à rafraîchir.
+
+Ou en natif, pour bénéficier du rechargement à chaud de Vite :
+
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # MySQL 8 sur :3307
 scripts/charger_dump_prod.sh bdm_prod_AAAA-MM-JJ.sql    # données réelles
@@ -165,12 +198,16 @@ Django rend les pages, Vite sert les assets avec rechargement à chaud.
 ## Vérifier
 
 ```bash
+# Le cloisonnement entre clients de GDA, et la vente UBA de bout en bout.
+backend/.venv/Scripts/python.exe scripts/tester_multi_client.py \
+    --admin <votre nom> --mot-de-passe-admin '<votre mot de passe>'
+
 # Les écritures, exactement comme le fait le navigateur :
 # corps JSON, jeton CSRF lu dans le cookie, contrôle en base.
 backend/.venv/Scripts/python.exe scripts/tester_ecritures.py
 
 # Les exports produisent-ils des fichiers valides ?
-backend/.venv/Scripts/python.exe scripts/verifier_exports.py
+backend/.venv/Scripts/python.exe scripts/verifier_exports.py \n    --admin <votre nom> --mot-de-passe-admin '<votre mot de passe>'
 ```
 
 > **La leçon de la migration :** le banc de comparaison ne rejouait que des
@@ -205,11 +242,14 @@ cela, il continuerait de servir ceux de la version précédente.
 | Base Vite laissée à `/` | Polices et chunks en 404 | `frontend/vite.config.js` |
 | `collectstatic` au build | nginx sert les assets d'avant | `backend/entrypoint.sh` |
 | Tri SQL sans départage | Ordre instable, pagination non reproductible | tris secondaires sur `id` |
+| Requête d'écran sans `filtrer_*` | Les deux clients se mélangent, sans erreur visible | `core/partenaires.py` |
+| Prop de page nommée `client` | Elle écrase la prop partagée du même nom | `core/middleware.py` |
 
 ---
 
 ## Documents liés
 
+- [CLIENTS_GDA.md](CLIENTS_GDA.md) — les clients de GDA, le cloisonnement, les spécificités UBA
 - [PLAN_MIGRATION_DJANGO.md](PLAN_MIGRATION_DJANGO.md) — l'architecture retenue et les écarts assumés
 - [DEMARRAGE_MIGRATION.md](DEMARRAGE_MIGRATION.md) — monter l'environnement de développement
 - [BASCULE_PRODUCTION.md](BASCULE_PRODUCTION.md) — déployer

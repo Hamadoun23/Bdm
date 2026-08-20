@@ -16,6 +16,9 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
     const [du, setDu] = useState(filtres.du);
     const [au, setAu] = useState(filtres.au);
     const [agenceId, setAgenceId] = useState(filtres.agence_id ?? '');
+    // Liste vide = client sans réseau d'agences : la colonne et le filtre
+    // n'auraient rien à montrer.
+    const aDesAgences = agencesChoix.length > 0;
     const [userId, setUserId] = useState(filtres.user_id ?? '');
     const [typeCarteId, setTypeCarteId] = useState(filtres.type_carte_id ?? '');
     const [detailLigne, setDetailLigne] = useState(null);
@@ -49,13 +52,15 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                     <Label htmlFor="au">Au</Label>
                     <Input id="au" type="date" value={au} onChange={(e) => setAu(e.target.value)} min={campagne.date_debut_iso} max={campagne.date_fin_iso} />
                 </div>
-                <div className="w-48">
-                    <Label htmlFor="agence_id">Agence</Label>
-                    <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
-                        <option value="">— Toutes —</option>
-                        {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
-                    </Select>
-                </div>
+                {aDesAgences && (
+                    <div className="w-48">
+                        <Label htmlFor="agence_id">Agence</Label>
+                        <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
+                            <option value="">— Toutes —</option>
+                            {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+                        </Select>
+                    </div>
+                )}
                 <div className="w-56">
                     <Label htmlFor="user_id">Commercial</Label>
                     <Select id="user_id" value={userId} onChange={(e) => setUserId(e.target.value)}>
@@ -98,7 +103,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                                 {estEnrolement && <th className="px-4 py-3 font-medium">N° de compte</th>}
                                 {!estEnrolement && <th className="px-4 py-3 font-medium">Type carte</th>}
                                 <th className="px-4 py-3 font-medium">Commercial</th>
-                                <th className="px-4 py-3 font-medium">Agence</th>
+                                {aDesAgences && <th className="px-4 py-3 font-medium">Agence</th>}
                                 {!estEnrolement && <th className="px-4 py-3 font-medium">Activation</th>}
                             </tr>
                         </thead>
@@ -121,7 +126,7 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                                         {estEnrolement && <td className="px-4 py-3 font-mono text-gray-600">{v.numero_compte || '—'}</td>}
                                         {!estEnrolement && <td className="px-4 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>}
                                         <td className="px-4 py-3 text-gray-600">{v.commercial}</td>
-                                        <td className="px-4 py-3 text-gray-600">{v.agence_nom}</td>
+                                        {aDesAgences && <td className="px-4 py-3 text-gray-600">{v.agence_nom}</td>}
                                         {!estEnrolement && <td className="px-4 py-3"><Badge>{v.statut_activation}</Badge></td>}
                                     </tr>
                                 ))
@@ -163,8 +168,10 @@ export default function CampagneVentes({ campagne, periode, filtres, agencesChoi
                             )}
                             <dt className="text-gray-500">Commercial</dt>
                             <dd className="col-span-2 text-gray-900">{detailLigne.commercial}</dd>
-                            <dt className="text-gray-500">Agence</dt>
-                            <dd className="col-span-2 text-gray-900">{detailLigne.agence_nom}</dd>
+                            {aDesAgences && <>
+                                <dt className="text-gray-500">Agence</dt>
+                                <dd className="col-span-2 text-gray-900">{detailLigne.agence_nom}</dd>
+                            </>}
                         </dl>
                         {detailLigne.client_id && (
                             <Button href={route('clients.show', detailLigne.client_id)} variant="outline" size="sm">

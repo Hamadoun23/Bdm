@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 from django.db import models
 
-from core.models import ROLES_COMMERCIAUX, Agence, TypeCarte, User
+from core.models import ROLES_COMMERCIAUX, Agence, Partenaire, TypeCarte, User
 from core.models_base import LaravelModel, LaravelModelSansTimestamps
 
 
@@ -33,6 +33,16 @@ STATUTS_MANUELS = [StatutCampagne.ARRETEE, StatutCampagne.ANNULEE]
 
 class Campagne(LaravelModel):
     id = models.BigAutoField(primary_key=True)
+    #: Client de GDA pour lequel la campagne est menée. Nul sur les campagnes
+    #: antérieures à l'ouverture multi-clients : elles sont toutes BDM.
+    partenaire = models.ForeignKey(
+        Partenaire,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="partenaire_id",
+        related_name="campagnes",
+    )
     nom = models.CharField(max_length=255)
     type = models.CharField(
         max_length=30, choices=TypeCampagne.choices, default=TypeCampagne.VENTE_CARTE
@@ -101,14 +111,33 @@ class Campagne(LaravelModel):
 
     # -- Périmètre -----------------------------------------------------------
 
+    @property
+    def sans_agences(self) -> bool:
+        """
+        Le partenaire de cette campagne travaille-t-il sans réseau d'agences ?
+
+        UBA n'en a pas : ses commerciaux dépendent directement du partenaire.
+        Tout le découpage par agence — périmètre, ouverture, signature du
+        contrat — est alors sans objet et court-circuité.
+        """
+        return bool(self.partenaire_id) and not self.partenaire.a_des_agences
+
     def concerne_agence(self, agence_id: int) -> bool:
+        if self.sans_agences:
+            return True
         if self.toutes_agences:
             return True
         return self.agences.filter(pk=agence_id).exists()
 
     def agences_perimetre(self):
         """
-        Agences rattachées, ou toutes si la campagne est « toutes agences ».
+        Agences rattachées, ou toutes celles du partenaire si la campagne est
+        « toutes agences ». Vide chez un partenaire qui n'a pas d'agences.
+
+        C'est le point d'entrée de tous les découpages par agence — filtres,
+        classements, onglets de rapport, feuilles d'export. Sans le bornage au
+        partenaire, une campagne UBA marquée « toutes agences » remonterait ici
+        les cinquante-quatre agences de la BDM.
 
         Renvoie une liste, et non un queryset : dans le cas « toutes agences »
         Laravel trie en SQL (collation insensible à la casse), mais dans le cas
@@ -117,8 +146,13 @@ class Campagne(LaravelModel):
         majuscules passent alors avant les autres. Sans cette distinction,
         l'ordre des listes d'agences diverge.
         """
+        if self.sans_agences:
+            return []
         if self.toutes_agences:
-            return list(Agence.objects.order_by("nom"))
+            qs = Agence.objects.all()
+            if self.partenaire_id:
+                qs = qs.filter(partenaire_id=self.partenaire_id)
+            return list(qs.order_by("nom"))
         return sorted(self.agences.all(), key=lambda agence: agence.nom)
 
     def ids_agences_perimetre(self) -> list[int]:
@@ -128,6 +162,10 @@ class Campagne(LaravelModel):
         """
         Commerciaux engagés : les signataires du contrat, sauf si la campagne
         vaut pour « tous les commerciaux » des agences concernées.
+
+        Le périmètre est d'abord borné au partenaire : les commerciaux BDM
+        n'ont rien à faire dans une campagne UBA, même quand celle-ci vaut
+        pour « tous les commerciaux ».
         """
         if not self.contrat_tous_commerciaux:
             ids = list(self.signataires_contrat.values_list("id", flat=True))
@@ -136,6 +174,10 @@ class Campagne(LaravelModel):
             return User.objects.filter(pk__in=ids, role__in=ROLES_COMMERCIAUX)
 
         qs = User.objects.filter(role__in=ROLES_COMMERCIAUX)
+        if self.partenaire_id:
+            qs = qs.filter(partenaire_id=self.partenaire_id)
+        if self.sans_agences:
+            return qs
         if not self.toutes_agences:
             ids_agences = list(self.agences.values_list("id", flat=True))
             if not ids_agences:
@@ -147,7 +189,9 @@ class Campagne(LaravelModel):
         return self.query_commerciaux_perimetre().filter(pk=user_id).exists()
 
     def user_est_signataire_contrat(self, user) -> bool:
-        if not user.is_commercial_ou_telephonique or not user.agence_id:
+        if not user.is_commercial_ou_telephonique:
+            return False
+        if not self.sans_agences and not user.agence_id:
             return False
         return self.signataires_contrat.filter(pk=user.pk).exists()
 
@@ -209,12 +253,22 @@ class Campagne(LaravelModel):
         return max(0, round(prix_catalogue * (1 - min(pourcentage, 100) / 100)))
 
     def types_cartes_pour_reporting_telephonique(self):
-        """Types proposés au reporting : ceux de la campagne, à défaut tous les actifs."""
+        """
+        Types proposés au reporting : ceux de la campagne, à défaut le catalogue
+        actif de son partenaire.
+        """
+        catalogue = TypeCarte.objects.filter(actif=True)
+        if self.partenaire_id:
+            catalogue = catalogue.filter(
+                models.Q(partenaire_id=self.partenaire_id)
+                | models.Q(partenaire_id__isnull=True)
+            )
+
         if self.remise_tous_types_cartes:
-            return TypeCarte.objects.filter(actif=True).order_by("code")
+            return catalogue.order_by("code")
         types = self.types_cartes_remise.order_by("code")
         if not types.exists():
-            return TypeCarte.objects.filter(actif=True).order_by("code")
+            return catalogue.order_by("code")
         return types
 
     def commercial_recoit_aide_hebdo(self, user) -> bool:
@@ -293,10 +347,17 @@ class Campagne(LaravelModel):
     # -- Sélections de référence --------------------------------------------
 
     @staticmethod
-    def actives_pour_agence(agence_id: int | None = None):
-        """Campagnes ouvertes couvrant l'agence, la plus récente en tête."""
-        Campagne.sync_statuts()
-        qs = Campagne.objects.filter(actif=True).order_by("-date_debut")
+    def _borner(qs, agence_id, partenaire_id):
+        """
+        Restreint une sélection de campagnes au partenaire, puis à l'agence.
+
+        L'ordre compte : le partenaire cloisonne, l'agence affine à l'intérieur
+        de ce cloisonnement. Sans le premier filtre, un commercial UBA — qui
+        n'a pas d'agence et ne déclenche donc pas le second — verrait les
+        campagnes de la BDM.
+        """
+        if partenaire_id is not None:
+            qs = qs.filter(partenaire_id=partenaire_id)
         if agence_id is not None:
             qs = qs.filter(
                 models.Q(toutes_agences=True) | models.Q(agences__id=agence_id)
@@ -304,35 +365,63 @@ class Campagne(LaravelModel):
         return qs
 
     @staticmethod
-    def campagnes_pour_stats(agence_id: int | None = None):
+    def actives_pour_agence(agence_id: int | None = None, partenaire_id: int | None = None):
+        """Campagnes ouvertes couvrant l'agence, la plus récente en tête."""
+        Campagne.sync_statuts()
+        qs = Campagne.objects.filter(actif=True).order_by("-date_debut")
+        return Campagne._borner(qs, agence_id, partenaire_id)
+
+    @staticmethod
+    def actives_pour_commercial(user):
+        """
+        Campagnes ouvertes où ce commercial peut travailler.
+
+        Chez un partenaire à réseau d'agences, l'appartenance à une agence est
+        la condition d'entrée. Chez un partenaire sans agences, c'est le
+        rattachement au partenaire lui-même.
+        """
+        if user.agence_id:
+            return Campagne.actives_pour_agence(
+                int(user.agence_id), user.partenaire_id
+            )
+        if user.partenaire_id:
+            return Campagne.actives_pour_agence(None, user.partenaire_id)
+        return Campagne.objects.none()
+
+    @staticmethod
+    def campagnes_pour_stats(agence_id: int | None = None, partenaire_id: int | None = None):
         """
         Campagnes servant de référence aux statistiques : les campagnes en cours
         du périmètre, à défaut la dernière campagne non annulée.
         """
-        actives = list(Campagne.actives_pour_agence(agence_id))
+        actives = list(Campagne.actives_pour_agence(agence_id, partenaire_id))
         if actives:
             return actives
 
         qs = Campagne.objects.exclude(statut=StatutCampagne.ANNULEE)
-        if agence_id is not None:
-            qs = qs.filter(
-                models.Q(toutes_agences=True) | models.Q(agences__id=agence_id)
-            ).distinct()
-        derniere = qs.order_by("-date_debut", "-id").first()
+        derniere = Campagne._borner(qs, agence_id, partenaire_id).order_by(
+            "-date_debut", "-id"
+        ).first()
         return [derniere] if derniere else []
 
     @staticmethod
-    def ids_campagnes_pour_stats(agence_id: int | None = None) -> list[int]:
-        return [c.id for c in Campagne.campagnes_pour_stats(agence_id)]
+    def ids_campagnes_pour_stats(
+        agence_id: int | None = None, partenaire_id: int | None = None
+    ) -> list[int]:
+        return [c.id for c in Campagne.campagnes_pour_stats(agence_id, partenaire_id)]
 
     @staticmethod
-    def campagne_pour_performances(agence_id: int | None = None):
-        campagnes = Campagne.campagnes_pour_stats(agence_id)
+    def campagne_pour_performances(
+        agence_id: int | None = None, partenaire_id: int | None = None
+    ):
+        campagnes = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
         return campagnes[0] if campagnes else None
 
     @staticmethod
-    def libelle_campagnes_pour_stats(agence_id: int | None = None) -> str:
-        campagnes = Campagne.campagnes_pour_stats(agence_id)
+    def libelle_campagnes_pour_stats(
+        agence_id: int | None = None, partenaire_id: int | None = None
+    ) -> str:
+        campagnes = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
         if not campagnes:
             return "Aucune campagne"
         noms = [f"« {c.nom} »" for c in campagnes]
@@ -341,16 +430,14 @@ class Campagne(LaravelModel):
         return ", ".join(noms[:-1]) + " et " + noms[-1]
 
     @staticmethod
-    def pour_fiche_telephonique(agence_id: int | None, jour):
+    def pour_fiche_telephonique(agence_id: int | None, jour, partenaire_id: int | None = None):
         """Campagne couvrant une date pour une agence, la plus récente d'abord."""
         qs = Campagne.objects.filter(
             date_debut__lte=jour, date_fin__gte=jour
         ).exclude(statut=StatutCampagne.ANNULEE)
-        if agence_id is not None:
-            qs = qs.filter(
-                models.Q(toutes_agences=True) | models.Q(agences__id=agence_id)
-            ).distinct()
-        return qs.order_by("-date_debut").first()
+        return Campagne._borner(qs, agence_id, partenaire_id).order_by(
+            "-date_debut"
+        ).first()
 
 
 class CampagneAgence(LaravelModelSansTimestamps):

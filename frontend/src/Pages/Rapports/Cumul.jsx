@@ -5,6 +5,7 @@ import { Download, ArrowLeft, List } from 'lucide-react';
 import AppLayout from '@/Layouts/AppLayout';
 import { Card, CardHeader, CardTitle, CardBody } from '@/Components/ui/Card';
 import StatCard from '@/Components/ui/StatCard';
+import { cn } from '@/lib/cn';
 import Badge from '@/Components/ui/Badge';
 import Button from '@/Components/ui/Button';
 import Pagination from '@/Components/ui/Pagination';
@@ -17,6 +18,7 @@ const nf = new Intl.NumberFormat('fr-FR');
 export default function RapportsCumul({
     campagnes, periode, totalVentes, nbClientsDistincts, nbCommerciauxAvecVentes, nbAgencesAvecVentes,
     typesCarteKpi, chartTypes, chartCommerciaux, chartAgences, parCommercial, parAgence, clients, ventes, exportQuery,
+    aDesAgences = true,
 }) {
     const exportUrl = (section, format = 'xlsx') => route('rapports.cumul.export', { ...exportQuery, section, format });
 
@@ -49,7 +51,7 @@ export default function RapportsCumul({
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-card">
                 <span className="text-xs text-gray-500">Exports (.xlsx) :</span>
                 <Button href={exportUrl('all')} target="_blank" size="sm">Classeur complet</Button>
-                {['ventes', 'clients', 'commerciaux', 'agences', 'types', 'semaines', 'mois'].map((s) => (
+                {['ventes', 'clients', 'commerciaux', ...(aDesAgences ? ['agences'] : []), 'types', 'semaines', 'mois'].map((s) => (
                     <Button key={s} href={exportUrl(s)} target="_blank" variant="outline" size="sm" className="capitalize">{s}</Button>
                 ))}
                 <span className="text-gray-300">|</span>
@@ -57,10 +59,12 @@ export default function RapportsCumul({
                 <Button href={route('rapports.cumul.export', { ...exportQuery, section: 'graphiques-word' })} target="_blank" variant="outline" size="sm">Word — graphiques</Button>
             </div>
 
-            <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={cn('mb-4 grid gap-3 sm:grid-cols-2', aDesAgences ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
                 <StatCard label="Ventes (lignes)" value={nf.format(totalVentes)} tone="orange" />
                 <StatCard label="Commerciaux (avec ventes)" value={nf.format(nbCommerciauxAvecVentes)} tone="green" />
-                <StatCard label="Agences (avec ventes)" value={nf.format(nbAgencesAvecVentes)} tone="blue" />
+                {aDesAgences && (
+                    <StatCard label="Agences (avec ventes)" value={nf.format(nbAgencesAvecVentes)} tone="blue" />
+                )}
                 <StatCard label="Clients distincts" value={nf.format(nbClientsDistincts)} tone="gray" />
             </div>
 
@@ -101,18 +105,20 @@ export default function RapportsCumul({
                             />
                         </CardBody>
                     </Card>
-                    <Card>
-                        <CardHeader><CardTitle>Part des agences</CardTitle></CardHeader>
-                        <CardBody style={{ height: 240 }}>
-                            <Pie
-                                data={{
-                                    labels: chartAgences.map((r) => r.label),
-                                    datasets: [{ data: chartAgences.map((r) => r.total_ventes), backgroundColor: chartAgences.map((_, i) => PALETTE[i % PALETTE.length]) }],
-                                }}
-                                options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
-                            />
-                        </CardBody>
-                    </Card>
+                    {aDesAgences && (
+                        <Card>
+                            <CardHeader><CardTitle>Part des agences</CardTitle></CardHeader>
+                            <CardBody style={{ height: 240 }}>
+                                <Pie
+                                    data={{
+                                        labels: chartAgences.map((r) => r.label),
+                                        datasets: [{ data: chartAgences.map((r) => r.total_ventes), backgroundColor: chartAgences.map((_, i) => PALETTE[i % PALETTE.length]) }],
+                                    }}
+                                    options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
+                                />
+                            </CardBody>
+                        </Card>
+                    )}
                 </div>
             )}
 
@@ -123,18 +129,18 @@ export default function RapportsCumul({
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-2.5 font-medium">Commercial</th>
-                                <th className="px-4 py-2.5 font-medium">Agence</th>
+                                {aDesAgences && <th className="px-4 py-2.5 font-medium">Agence</th>}
                                 <th className="px-4 py-2.5 text-right font-medium">Ventes</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {parCommercial.length === 0 ? (
-                                <tr><td colSpan={3} className="px-4 py-6 text-center text-gray-500">Aucune vente.</td></tr>
+                                <tr><td colSpan={aDesAgences ? 3 : 2} className="px-4 py-6 text-center text-gray-500">Aucune vente.</td></tr>
                             ) : (
                                 parCommercial.map((r, i) => (
                                     <tr key={i} className="hover:bg-gray-50">
                                         <td className="px-4 py-2.5 font-medium text-gray-900">{r.nom}</td>
-                                        <td className="px-4 py-2.5 text-gray-600">{r.agence_nom}</td>
+                                        {aDesAgences && <td className="px-4 py-2.5 text-gray-600">{r.agence_nom}</td>}
                                         <td className="px-4 py-2.5 text-right">{nf.format(r.total)}</td>
                                     </tr>
                                 ))
@@ -142,12 +148,13 @@ export default function RapportsCumul({
                         </tbody>
                     </table>
                 </Card>
+                {aDesAgences && (
                 <Card className="overflow-hidden">
                     <CardHeader><CardTitle>Agences (volume cumulé)</CardTitle></CardHeader>
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
-                                <th className="px-4 py-2.5 font-medium">Agence</th>
+                                {aDesAgences && <th className="px-4 py-2.5 font-medium">Agence</th>}
                                 <th className="px-4 py-2.5 text-right font-medium">Ventes</th>
                             </tr>
                         </thead>
@@ -165,6 +172,7 @@ export default function RapportsCumul({
                         </tbody>
                     </table>
                 </Card>
+                )}
             </div>
 
             <Card className="mb-4 overflow-hidden">
@@ -234,7 +242,7 @@ export default function RapportsCumul({
                                         <td className="px-4 py-2.5 font-medium text-gray-900">{v.client_nom}</td>
                                         <td className="px-4 py-2.5"><Badge tone="blue">{v.type_carte}</Badge></td>
                                         <td className="px-4 py-2.5 text-gray-600">{v.commercial}</td>
-                                        <td className="px-4 py-2.5 text-gray-600">{v.agence_nom}</td>
+                                        {aDesAgences && <td className="px-4 py-2.5 text-gray-600">{v.agence_nom}</td>}
                                         <td className="px-4 py-2.5"><Badge>{v.statut_activation}</Badge></td>
                                     </tr>
                                 ))

@@ -79,8 +79,15 @@ class Vente(LaravelModel):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, db_column="user_id", related_name="ventes"
     )
+    #: Nulle chez un partenaire sans réseau d'agences (UBA) : le commercial
+    #: est rattaché au partenaire, pas à une agence.
     agence = models.ForeignKey(
-        Agence, on_delete=models.CASCADE, db_column="agence_id", related_name="ventes"
+        Agence,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_column="agence_id",
+        related_name="ventes",
     )
     campagne = models.ForeignKey(
         Campagne, on_delete=models.SET_NULL, null=True, blank=True,
@@ -108,7 +115,11 @@ class EnrolementClient(LaravelModel):
         User, on_delete=models.CASCADE, db_column="user_id", related_name="enrolements"
     )
     agence = models.ForeignKey(
-        Agence, on_delete=models.CASCADE, db_column="agence_id",
+        Agence,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_column="agence_id",
         related_name="enrolements",
     )
     nom = models.CharField(max_length=255)
@@ -129,6 +140,83 @@ class EnrolementClient(LaravelModel):
 
     def peut_etre_modifie_ou_supprime_par_commercial(self) -> bool:
         return _dans_le_delai(self.created_at)
+
+
+class TypePieceIdentite(models.TextChoices):
+    CNI = "cni", "Carte nationale d'identité"
+    PASSEPORT = "passeport", "Passeport"
+    NINA = "nina", "Carte NINA"
+
+
+class AdhesionCarte(LaravelModel):
+    """
+    Demande d'adhésion carte VISA prépayée, exigée par UBA à chaque vente.
+
+    Elle complète la vente, elle ne s'y substitue pas : rapports, performances
+    et primes continuent de compter des `ventes`. Les champs reprennent la page
+    « À REMPLIR PAR LE CLIENT » du formulaire d'adhésion UBA
+    (docs/UBA/Convention (CARTES VISA PREPAYEES AFRICARDS PERSONNE PHYSIQUE).pdf).
+
+    Le volet FATCA, la personne à prévenir et le volet mineur ne sont pas
+    saisis : ils restent renseignés à la main sur l'imprimé.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    vente = models.OneToOneField(
+        "terrain.Vente", on_delete=models.CASCADE, db_column="vente_id",
+        related_name="adhesion",
+    )
+    client = models.ForeignKey(
+        Client, on_delete=models.CASCADE, db_column="client_id",
+        related_name="adhesions",
+    )
+    campagne = models.ForeignKey(
+        Campagne, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="campagne_id", related_name="adhesions",
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, db_column="user_id", related_name="adhesions"
+    )
+
+    # Titulaire de la carte
+    nom = models.CharField(max_length=255)
+    prenoms = models.CharField(max_length=255)
+    date_naissance = models.DateField(null=True, blank=True)
+    lieu_naissance = models.CharField(max_length=191, null=True, blank=True)
+    nationalite = models.CharField(max_length=100, null=True, blank=True)
+    telephone = models.CharField(max_length=20, null=True, blank=True)
+    email = models.CharField(max_length=191, null=True, blank=True)
+    adresse = models.CharField(max_length=255, null=True, blank=True)
+    pays_residence = models.CharField(max_length=100, null=True, blank=True)
+    ville = models.CharField(max_length=100, null=True, blank=True)
+    quartier = models.CharField(max_length=100, null=True, blank=True)
+    #: Le nom gravé sur la carte, que le titulaire choisit lui-même.
+    nom_sur_carte = models.CharField(max_length=100, null=True, blank=True)
+
+    # Pièce d'identité présentée
+    piece_type = models.CharField(
+        max_length=20, choices=TypePieceIdentite.choices, null=True, blank=True
+    )
+    piece_numero = models.CharField(max_length=100, null=True, blank=True)
+    piece_delivree_le = models.DateField(null=True, blank=True)
+    piece_expire_le = models.DateField(null=True, blank=True)
+    piece_autorite = models.CharField(max_length=191, null=True, blank=True)
+
+    # Complément demandé par la banque
+    numero_compte_uba = models.CharField(max_length=50, null=True, blank=True)
+    profession = models.CharField(max_length=191, null=True, blank=True)
+    employeur = models.CharField(max_length=191, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "adhesions_cartes"
+
+    def __str__(self):
+        return f"Adhésion {self.prenoms} {self.nom}".strip()
+
+    @property
+    def nom_complet(self):
+        return f"{self.prenoms} {self.nom}".strip()
 
 
 class TelephoniqueRapport(LaravelModel):

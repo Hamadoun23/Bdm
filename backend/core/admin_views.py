@@ -21,6 +21,13 @@ from .decorators import http_methods, role_required
 from .middleware import deposer_flash, retour_avec_erreurs
 from .models import ROLES_COMMERCIAUX, Agence, Role, TypeCarte, User, UserLoginLog
 from .pagination import paginer
+from .partenaires import (
+    filtrer_agences,
+    filtrer_types_cartes,
+    filtrer_saisies,
+    filtrer_users,
+    partenaire_courant,
+)
 from .php import tableau
 from .validation import ErreursValidation, Validateur, booleen, valider
 
@@ -39,10 +46,26 @@ def _nom_complet(user):
 # ---------------------------------------------------------------------------
 
 
+def _agence_du_perimetre(request, agence_id):
+    """Une agence du client courant, 404 sinon — l'URL ne doit pas franchir la cloison."""
+    return get_object_or_404(
+        filtrer_agences(Agence.objects.all(), partenaire_courant(request)),
+        pk=agence_id,
+    )
+
+
+def _user_du_perimetre(request, user_id):
+    return get_object_or_404(
+        filtrer_users(User.objects.all(), partenaire_courant(request)), pk=user_id
+    )
+
+
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def agences_index(request):
-    agences = Agence.objects.order_by("ordre", "nom")
+    agences = filtrer_agences(
+        Agence.objects.order_by("ordre", "nom"), partenaire_courant(request)
+    )
     return render(
         request,
         "Admin/Agences/Index",
@@ -57,7 +80,12 @@ def agences_index(request):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def agences_create(request):
-    maximum = Agence.objects.order_by("-ordre").values_list("ordre", flat=True).first()
+    maximum = (
+        filtrer_agences(Agence.objects.all(), partenaire_courant(request))
+        .order_by("-ordre")
+        .values_list("ordre", flat=True)
+        .first()
+    )
     return render(
         request, "Admin/Agences/Create", {"ordreSuggest": int(maximum or 0) + 1}
     )
@@ -73,8 +101,13 @@ def agences_store(request):
     except ErreursValidation as erreur:
         return retour_avec_erreurs(request, erreur.erreurs)
 
+    partenaire = partenaire_courant(request)
     Agence.objects.create(
-        ordre=donnees["ordre"], nom=donnees["nom"], adresse=None, chef=None
+        ordre=donnees["ordre"],
+        nom=donnees["nom"],
+        adresse=None,
+        chef=None,
+        partenaire_id=partenaire.id if partenaire else None,
     )
     deposer_flash(request, success="Agence créée.")
     return redirect("/admin/agences")
@@ -83,7 +116,7 @@ def agences_store(request):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def agences_edit(request, agence):
-    agence = get_object_or_404(Agence, pk=agence)
+    agence = _agence_du_perimetre(request, agence)
     return render(
         request,
         "Admin/Agences/Edit",
@@ -94,7 +127,7 @@ def agences_edit(request, agence):
 @role_required(Role.ADMIN)
 @http_methods("POST", "PUT", "PATCH")
 def agences_update(request, agence):
-    agence = get_object_or_404(Agence, pk=agence)
+    agence = _agence_du_perimetre(request, agence)
     try:
         donnees = valider(
             _corps(request), {"ordre": "required|integer|min:0", "nom": "required|max:255"}
@@ -113,7 +146,7 @@ def agences_update(request, agence):
 @role_required(Role.ADMIN)
 @http_methods("POST", "DELETE")
 def agences_destroy(request, agence):
-    agence = get_object_or_404(Agence, pk=agence)
+    agence = _agence_du_perimetre(request, agence)
     with transaction.atomic():
         if agence.chef_id:
             agence.chef = None
@@ -141,10 +174,20 @@ def _slug_code(valeur):
     return slug.upper()
 
 
+def _type_carte_du_perimetre(request, type_carte_id):
+    """Un type de carte du catalogue du client courant, 404 sinon."""
+    return get_object_or_404(
+        filtrer_types_cartes(TypeCarte.objects.all(), partenaire_courant(request)),
+        pk=type_carte_id,
+    )
+
+
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def types_cartes_index(request):
-    types = TypeCarte.objects.order_by("code")
+    types = filtrer_types_cartes(
+        TypeCarte.objects.order_by("code"), partenaire_courant(request)
+    )
     return render(
         request,
         "Admin/TypesCartes/Index",
@@ -176,7 +219,13 @@ def types_cartes_store(request):
     if TypeCarte.objects.filter(code=code).exists():
         return retour_avec_erreurs(request, {"code": "Ce code existe déjà."})
 
-    TypeCarte.objects.create(code=code, actif=booleen(request.POST, "actif"))
+    # La carte est créée au catalogue du client que l'administrateur consulte.
+    partenaire = partenaire_courant(request)
+    TypeCarte.objects.create(
+        code=code,
+        actif=booleen(request.POST, "actif"),
+        partenaire_id=partenaire.id if partenaire else None,
+    )
     deposer_flash(request, success="Type de carte créé.")
     return redirect("/admin/types-cartes")
 
@@ -184,7 +233,7 @@ def types_cartes_store(request):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def types_cartes_edit(request, types_carte):
-    type_carte = get_object_or_404(TypeCarte, pk=types_carte)
+    type_carte = _type_carte_du_perimetre(request, types_carte)
     return render(
         request,
         "Admin/TypesCartes/Edit",
@@ -201,7 +250,7 @@ def types_cartes_edit(request, types_carte):
 @role_required(Role.ADMIN)
 @http_methods("POST", "PUT", "PATCH")
 def types_cartes_update(request, types_carte):
-    type_carte = get_object_or_404(TypeCarte, pk=types_carte)
+    type_carte = _type_carte_du_perimetre(request, types_carte)
     # Le code n'est pas modifiable : il est référencé par les ventes et les clients.
     type_carte.actif = booleen(_corps(request), "actif", defaut=True)
     type_carte.save()
@@ -212,7 +261,7 @@ def types_cartes_update(request, types_carte):
 @role_required(Role.ADMIN)
 @http_methods("POST", "DELETE")
 def types_cartes_destroy(request, types_carte):
-    type_carte = get_object_or_404(TypeCarte, pk=types_carte)
+    type_carte = _type_carte_du_perimetre(request, types_carte)
     if type_carte.ventes.exists() or type_carte.clients.exists():
         deposer_flash(
             request,
@@ -231,12 +280,17 @@ def types_cartes_destroy(request, types_carte):
 
 
 def _statut_contrat_campagne_active(user):
-    """Statut du contrat de prestation pour la campagne active de l'agence."""
-    if not user.is_commercial_ou_telephonique or not user.agence_id:
+    """
+    Statut du contrat de prestation pour la campagne active du commercial.
+
+    Le périmètre est celui de son rattachement : son agence chez un partenaire
+    qui en a, son partenaire sinon.
+    """
+    if not user.is_commercial_ou_telephonique:
         return None
 
     Campagne.sync_statuts()
-    campagnes = list(Campagne.actives_pour_agence(int(user.agence_id))[:1])
+    campagnes = list(Campagne.actives_pour_commercial(user)[:1])
     campagne = campagnes[0] if campagnes else None
 
     if not campagne or not campagne.user_est_signataire_contrat(user):
@@ -263,7 +317,11 @@ def _filtre_recherche(terme):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def users_index(request):
-    qs = User.objects.select_related("agence").filter(role__in=ROLES_ADMINISTRABLES)
+    partenaire = partenaire_courant(request)
+    qs = filtrer_users(
+        User.objects.select_related("agence").filter(role__in=ROLES_ADMINISTRABLES),
+        partenaire,
+    )
 
     role = request.GET.get("role")
     if role:
@@ -277,9 +335,11 @@ def users_index(request):
     if filtre_contrat in ("accepte", "rejete", "en_attente", "non_signataire"):
         # Le statut se calcule utilisateur par utilisateur : on résout d'abord
         # les identifiants correspondants, puis on restreint la requête.
-        candidats = User.objects.filter(
-            role__in=ROLES_COMMERCIAUX, agence_id__isnull=False
+        candidats = filtrer_users(
+            User.objects.filter(role__in=ROLES_COMMERCIAUX), partenaire
         )
+        if partenaire is None or partenaire.a_des_agences:
+            candidats = candidats.filter(agence_id__isnull=False)
         if role in ROLES_COMMERCIAUX:
             candidats = candidats.filter(role=role)
         if recherche:
@@ -319,18 +379,35 @@ def users_index(request):
                 }
             ),
             "users": paginer(request, qs, 15, formater),
+            # Le client courant n'a peut-être pas d'agences : la colonne
+            # correspondante disparaît alors de la liste.
+            "aDesAgences": partenaire is None or partenaire.a_des_agences,
         },
     )
 
 
-def _liste_agences():
-    return [{"id": a.id, "nom": a.nom} for a in Agence.objects.order_by("nom")]
+def _liste_agences(request):
+    return [
+        {"id": a.id, "nom": a.nom}
+        for a in filtrer_agences(
+            Agence.objects.order_by("nom"), partenaire_courant(request)
+        )
+    ]
+
+
+def _props_referentiel(request):
+    partenaire = partenaire_courant(request)
+    return {
+        "agences": _liste_agences(request),
+        "aDesAgences": partenaire is None or partenaire.a_des_agences,
+        "clientNom": partenaire.nom if partenaire else None,
+    }
 
 
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def users_create(request):
-    return render(request, "Admin/Users/Create", {"agences": _liste_agences()})
+    return render(request, "Admin/Users/Create", _props_referentiel(request))
 
 
 def _corps(request):
@@ -367,8 +444,17 @@ def _valider_user(request, user=None):
     if validateur.valeurs.get("agence_id"):
         validateur.existe("agence_id", Agence.objects.all())
 
+    # L'agence n'est exigée que chez un partenaire qui en a un réseau : chez
+    # UBA, un commercial dépend directement du client.
+    partenaire = partenaire_courant(request)
+    exige_agence = partenaire is None or partenaire.a_des_agences
+
     role = validateur.valeurs.get("role")
-    if role in ROLES_COMMERCIAUX and not validateur.valeurs.get("agence_id"):
+    if (
+        exige_agence
+        and role in ROLES_COMMERCIAUX
+        and not validateur.valeurs.get("agence_id")
+    ):
         validateur.erreur(
             "agence_id", "L’agence est obligatoire pour ce type de profil."
         )
@@ -376,7 +462,7 @@ def _valider_user(request, user=None):
     return validateur.resultat(), source
 
 
-def _appliquer_user(user, donnees, source):
+def _appliquer_user(user, donnees, source, partenaire=None):
     """Champs communs création / mise à jour, avec les remises à null de Laravel."""
     role = donnees["role"]
     terrain_ou_tel = role in ROLES_COMMERCIAUX
@@ -388,6 +474,9 @@ def _appliquer_user(user, donnees, source):
     user.telephone = donnees["telephone"] or None
     user.role = role
     user.agence_id = None if role == Role.DIRECTION else donnees["agence_id"]
+    # Le compte est créé chez le client que l'administrateur consulte.
+    if partenaire is not None:
+        user.partenaire_id = partenaire.id
     user.actif = booleen(source, "actif")
     user.adresse_contrat = donnees["adresse_contrat"] or None if terrain_ou_tel else None
     user.piece_identite_ref = (
@@ -419,7 +508,7 @@ def users_store(request):
             {"password": "Le texte de password doit contenir au moins 8 caractères."},
         )
 
-    user = _appliquer_user(User(), donnees, source)
+    user = _appliquer_user(User(), donnees, source, partenaire_courant(request))
     user.password = hacher_mot_de_passe(mot_de_passe)
     user.save()
 
@@ -430,7 +519,7 @@ def users_store(request):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def users_edit(request, user):
-    user = get_object_or_404(User, pk=user)
+    user = _user_du_perimetre(request, user)
     return render(
         request,
         "Admin/Users/Edit",
@@ -448,7 +537,7 @@ def users_edit(request, user):
                 "piece_identite_ref": user.piece_identite_ref,
                 "is_commercial_ou_telephonique": user.is_commercial_ou_telephonique,
             },
-            "agences": _liste_agences(),
+            **_props_referentiel(request),
         },
     )
 
@@ -456,13 +545,13 @@ def users_edit(request, user):
 @role_required(Role.ADMIN)
 @http_methods("POST", "PUT", "PATCH")
 def users_update(request, user):
-    user = get_object_or_404(User, pk=user)
+    user = _user_du_perimetre(request, user)
     try:
         donnees, source = _valider_user(request, user)
     except ErreursValidation as erreur:
         return retour_avec_erreurs(request, erreur.erreurs)
 
-    _appliquer_user(user, donnees, source)
+    _appliquer_user(user, donnees, source, partenaire_courant(request))
 
     mot_de_passe = source.get("password") or ""
     if mot_de_passe:
@@ -486,7 +575,7 @@ def users_update(request, user):
 @role_required(Role.ADMIN)
 @http_methods("POST", "DELETE")
 def users_destroy(request, user):
-    user = get_object_or_404(User, pk=user)
+    user = _user_du_perimetre(request, user)
     user.agence_id = None
     user.save(update_fields=["agence_id"])
     user.delete()
@@ -502,7 +591,12 @@ def users_destroy(request, user):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def users_transfert_form(request, user):
-    user = get_object_or_404(User.objects.select_related("agence"), pk=user)
+    user = get_object_or_404(
+        filtrer_users(
+            User.objects.select_related("agence"), partenaire_courant(request)
+        ),
+        pk=user,
+    )
     if not user.is_commercial_ou_telephonique:
         raise Http404
 
@@ -748,7 +842,11 @@ def users_transfert_apply(request, user):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def login_logs_index(request):
-    logs = UserLoginLog.objects.select_related("user").order_by("-logged_in_at", "-id")
+    partenaire = partenaire_courant(request)
+    logs = filtrer_saisies(
+        UserLoginLog.objects.select_related("user").order_by("-logged_in_at", "-id"),
+        partenaire,
+    )
 
     if request.GET.get("user_id"):
         logs = logs.filter(user_id=int(request.GET["user_id"]))
@@ -785,7 +883,9 @@ def login_logs_index(request):
             ),
             "utilisateurs": [
                 {"id": u.id, "label": etiquette(u)}
-                for u in User.objects.order_by("name", "prenom")
+                for u in filtrer_users(User.objects.all(), partenaire).order_by(
+                    "name", "prenom"
+                )
             ],
             "logs": paginer(request, logs, 40, formater),
         },

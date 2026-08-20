@@ -72,16 +72,37 @@ class Navigateur:
         except urllib.error.HTTPError as erreur:
             return erreur
 
-    def connexion(self, identifiant, mot_de_passe):
+    def connexion(self, identifiant, mot_de_passe, client="bdm"):
+        """
+        Ouvre une session, et choisit le client de GDA si le compte en pilote
+        plusieurs — un administrateur est renvoyé sur `/choix-client` tant
+        qu'il n'a rien choisi, et tous les écrans suivants y sont subordonnés.
+        """
         self.requete("/login", inertia=False).read()
         reponse = self.requete(
             "/login", {"email": identifiant, "password": mot_de_passe, "remember": False}
         )
         emplacement = reponse.headers.get("Location", "")
-        if reponse.status != 302 or "/dashboard" not in emplacement:
+        attendu = ("/dashboard", "/choix-client")
+        if reponse.status != 302 or not any(c in emplacement for c in attendu):
             raise SystemExit(
                 f"Connexion refusée pour {identifiant} (HTTP {reponse.status} → {emplacement})"
             )
+
+        if "/choix-client" in emplacement and client:
+            self.choisir_client(client)
+        return self
+
+    def choisir_client(self, code):
+        props = self.props("/choix-client")
+        partenaires = props.get("partenaires") or []
+        choisi = next((p for p in partenaires if p.get("code") == code), None)
+        if choisi is None:
+            raise SystemExit(
+                f"Client « {code} » indisponible "
+                f"(proposés : {[p.get('code') for p in partenaires]})"
+            )
+        self.requete("/choix-client", {"partenaire_id": choisi["id"]})
         return self
 
     def props(self, chemin):

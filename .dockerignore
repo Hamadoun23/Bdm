@@ -1,0 +1,35 @@
+# Ce qui n'a rien à faire dans le contexte de build.
+#
+# Le contexte est la racine du dépôt : sans ce fichier, Docker y envoie le
+# `node_modules` du frontend, l'environnement virtuel Python et les dumps de
+# base — plusieurs centaines de mégaoctets, à chaque build.
+
+.git
+.gitignore
+
+# Dumps de base : volumineux, et ils n'ont rien à faire dans une image.
+*.sql
+*.sql.gz
+
+# Dépendances reconstruites dans l'image
+frontend/node_modules
+frontend/dist
+backend/.venv
+**/__pycache__
+*.py[cod]
+
+# Sorties locales
+backend/staticfiles
+backend/media
+*.log
+
+# Secrets — l'image reçoit sa configuration par variables d'environnement.
+backend/.env
+backend/.env.*
+!backend/.env.*.example
+
+# Documents métier et outillage hors exécution
+docs
+scripts
+.vscode
+.idea

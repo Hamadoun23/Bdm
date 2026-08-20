@@ -16,6 +16,7 @@ export default function CampagneReportingTelephonique({ campagne, periode, filtr
     const [dateFin, setDateFin] = useState(filtres.date_fin);
     const [userId, setUserId] = useState(filtres.user_id ?? '');
     const [agenceId, setAgenceId] = useState(filtres.agence_id ?? '');
+    const aDesAgences = agencesChoix.length > 0;
 
     function applyFilters(e) {
         e.preventDefault();
@@ -45,7 +46,8 @@ export default function CampagneReportingTelephonique({ campagne, periode, filtr
             </div>
 
             <p className="mb-4 text-xs text-gray-400">
-                Les fiches sans campagne rattachée sont incluses si la date tombe dans la fenêtre ci-dessus et que la téléopératrice est rattachée à une agence du périmètre de la campagne.
+                Les fiches sans campagne rattachée sont incluses si la date tombe dans la fenêtre ci-dessus
+                et que la téléopératrice appartient au périmètre de la campagne{aDesAgences ? ' (agence concernée)' : ''}.
             </p>
 
             <form onSubmit={applyFilters} className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-card">
@@ -64,13 +66,15 @@ export default function CampagneReportingTelephonique({ campagne, periode, filtr
                         {telephoniques.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                     </Select>
                 </div>
-                <div className="w-48">
-                    <Label htmlFor="agence_id">Agence</Label>
-                    <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
-                        <option value="">— Toutes —</option>
-                        {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
-                    </Select>
-                </div>
+                {aDesAgences && (
+                    <div className="w-48">
+                        <Label htmlFor="agence_id">Agence</Label>
+                        <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
+                            <option value="">— Toutes —</option>
+                            {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+                        </Select>
+                    </div>
+                )}
                 <Button type="submit" size="sm">Filtrer</Button>
             </form>
 
@@ -93,7 +97,7 @@ export default function CampagneReportingTelephonique({ campagne, periode, filtr
                                 <th className="px-4 py-3 font-medium">Date</th>
                                 <th className="px-4 py-3 font-medium">Campagne</th>
                                 <th className="px-4 py-3 font-medium">Collaborateur</th>
-                                <th className="px-4 py-3 font-medium">Agence</th>
+                                {aDesAgences && <th className="px-4 py-3 font-medium">Agence</th>}
                                 <th className="px-4 py-3 text-right font-medium">Émis</th>
                                 <th className="px-4 py-3 text-right font-medium">Joign.</th>
                                 <th className="px-4 py-3 text-right font-medium">Non j.</th>
@@ -112,7 +116,7 @@ export default function CampagneReportingTelephonique({ campagne, periode, filtr
                                         <td className="px-4 py-3 text-gray-600">{r.date}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500">{r.campagne_nom ?? '—'}</td>
                                         <td className="px-4 py-3 font-medium text-gray-900">{r.user_nom}</td>
-                                        <td className="px-4 py-3 text-xs text-gray-500">{r.agence_nom ?? '—'}</td>
+                                        {aDesAgences && <td className="px-4 py-3 text-xs text-gray-500">{r.agence_nom ?? '—'}</td>}
                                         <td className="px-4 py-3 text-right text-gray-600">{r.appels_emis}</td>
                                         <td className="px-4 py-3 text-right text-gray-600">{r.appels_joignables}</td>
                                         <td className="px-4 py-3 text-right text-gray-600">{r.appels_non_joignables}</td>

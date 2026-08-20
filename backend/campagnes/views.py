@@ -18,6 +18,12 @@ from core.decorators import http_methods, role_required
 from core.middleware import deposer_flash, retour_avec_erreurs
 from core.models import ROLES_COMMERCIAUX, Agence, Role, TypeCarte, User
 from core.pagination import paginer
+from core.partenaires import (
+    filtrer_agences,
+    filtrer_campagnes,
+    filtrer_users,
+    partenaire_courant,
+)
 from core.php import nombre_format
 from core.validation import ErreursValidation, Validateur, booleen
 
@@ -61,6 +67,19 @@ def _nom(user):
     return f"{user.prenom} {user.name}".strip() if user.prenom else user.name
 
 
+def _campagne_du_perimetre(request, campagne_id):
+    """
+    Charge une campagne en refusant celles d'un autre client de GDA.
+
+    Un identifiant tapé dans la barre d'adresse ne doit pas suffire à sortir du
+    périmètre choisi : on renvoie un 404, comme si la campagne n'existait pas.
+    """
+    return get_object_or_404(
+        filtrer_campagnes(Campagne.objects.all(), partenaire_courant(request)),
+        pk=campagne_id,
+    )
+
+
 def _url_show(campagne_id, onglet):
     return f"/admin/campagnes/{campagne_id}?tab={onglet}"
 
@@ -74,7 +93,9 @@ def _url_show(campagne_id, onglet):
 @http_methods("GET", "HEAD")
 def index(request):
     Campagne.sync_statuts()
-    campagnes = Campagne.objects.order_by("-date_debut")
+    campagnes = filtrer_campagnes(
+        Campagne.objects.order_by("-date_debut"), partenaire_courant(request)
+    )
 
     def formater(c):
         statut = c.statut_effectif
@@ -98,41 +119,67 @@ def index(request):
     )
 
 
-def _agences_et_commerciaux():
+def _agences_et_commerciaux(request):
+    """
+    Le référentiel proposé aux formulaires de campagne, borné au client courant.
+
+    Chez un partenaire sans réseau d'agences, la liste d'agences est vide et
+    les commerciaux sont retenus sur leur seul rattachement au partenaire —
+    exiger une agence les écarterait tous.
+    """
+    partenaire = partenaire_courant(request)
+    a_des_agences = partenaire is None or partenaire.a_des_agences
+
+    commerciaux = filtrer_users(
+        User.objects.select_related("agence").filter(role__in=ROLES_COMMERCIAUX),
+        partenaire,
+    )
+    if a_des_agences:
+        commerciaux = commerciaux.filter(agence_id__isnull=False)
+
     return (
         [
             {"id": a.id, "nom": a.nom}
-            for a in Agence.objects.order_by("ordre", "nom")
+            for a in filtrer_agences(
+                Agence.objects.order_by("ordre", "nom"), partenaire
+            )
         ],
         [
             {
                 "id": c.id,
                 "nom": _nom(c),
-                "agence_nom": c.agence.nom if c.agence_id else "?",
+                "agence_nom": c.agence.nom if c.agence_id else "—",
             }
-            for c in User.objects.select_related("agence")
-            .filter(role__in=ROLES_COMMERCIAUX, agence_id__isnull=False)
-            .order_by("name")
+            for c in commerciaux.order_by("name")
         ],
     )
+
+
+def _props_client(request):
+    """Ce que le formulaire doit savoir du client courant pour s'adapter."""
+    partenaire = partenaire_courant(request)
+    return {
+        "aDesAgences": partenaire is None or partenaire.a_des_agences,
+        "clientNom": partenaire.nom if partenaire else None,
+    }
 
 
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def create(request):
-    agences, commerciaux = _agences_et_commerciaux()
+    agences, commerciaux = _agences_et_commerciaux(request)
     return render(
         request,
         "Admin/Campagnes/Create",
-        {"agences": agences, "commerciaux": commerciaux},
+        {"agences": agences, "commerciaux": commerciaux, **_props_client(request)},
     )
 
 
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def edit(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
-    agences, commerciaux = _agences_et_commerciaux()
+    campagne = _campagne_du_perimetre(request, campagne)
+    agences, commerciaux = _agences_et_commerciaux(request)
 
     return render(
         request,
@@ -173,6 +220,7 @@ def edit(request, campagne):
             },
             "agences": agences,
             "commerciaux": commerciaux,
+            **_props_client(request),
         },
     )
 
@@ -180,7 +228,7 @@ def edit(request, campagne):
 @role_required(Role.ADMIN)
 @http_methods("GET", "HEAD")
 def show(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
     detail = services.construire_detail(campagne, request)
     return render(
         request, "Admin/Campagnes/Show", services.vers_props_inertia(request, detail, False)
@@ -263,29 +311,42 @@ def _remise_active(source):
         return False
 
 
-def _valider_chevauchement(campagne, debut, fin, toutes_agences, agence_ids, type_campagne):
+def _valider_chevauchement(
+    campagne, debut, fin, toutes_agences, agence_ids, type_campagne, partenaire=None
+):
     """
     Interdit qu'une même agence soit couverte par deux campagnes actives dont
     les périodes se chevauchent. Deux campagnes de types différents (vente /
     enrôlement) sont des activités indépendantes et peuvent coexister.
+
+    Le contrôle ne vaut qu'à l'intérieur d'un client de GDA : une campagne UBA
+    et une campagne BDM se chevauchent sans conflit, leurs réseaux étant
+    disjoints. Chez un partenaire sans agences, il n'y a rien à croiser.
     """
     Campagne.sync_statuts()
 
+    if partenaire is not None and not partenaire.a_des_agences:
+        return None
+
+    agences_perimetre = filtrer_agences(Agence.objects.all(), partenaire)
     ids = (
-        set(Agence.objects.values_list("id", flat=True))
+        set(agences_perimetre.values_list("id", flat=True))
         if toutes_agences
         else {int(i) for i in agence_ids}
     )
 
-    autres = Campagne.objects.filter(
-        type=type_campagne, actif=True, date_debut__lte=fin, date_fin__gte=debut
+    autres = filtrer_campagnes(
+        Campagne.objects.filter(
+            type=type_campagne, actif=True, date_debut__lte=fin, date_fin__gte=debut
+        ),
+        partenaire,
     ).exclude(statut__in=[*STATUTS_MANUELS, StatutCampagne.TERMINEE])
     if campagne is not None:
         autres = autres.exclude(pk=campagne.pk)
 
     for autre in autres:
         autres_ids = (
-            set(Agence.objects.values_list("id", flat=True))
+            set(agences_perimetre.values_list("id", flat=True))
             if autre.toutes_agences
             else set(autre.agences.values_list("id", flat=True))
         )
@@ -325,9 +386,18 @@ def _sync_beneficiaires_aide(campagne, source):
 
 def _sync_signataires(campagne, source):
     if booleen(source, "aide_hebdo_tous_commerciaux"):
-        qs = User.objects.filter(role__in=ROLES_COMMERCIAUX, agence_id__isnull=False)
-        if not campagne.toutes_agences:
-            qs = qs.filter(agence_id__in=campagne.agences.values_list("id", flat=True))
+        qs = User.objects.filter(role__in=ROLES_COMMERCIAUX)
+        if campagne.partenaire_id:
+            qs = qs.filter(partenaire_id=campagne.partenaire_id)
+        # « Tous les commerciaux » se lit sur l'agence chez un partenaire qui en
+        # a un réseau ; ailleurs, le rattachement au client suffit et exiger une
+        # agence écarterait tout le monde.
+        if not campagne.sans_agences:
+            qs = qs.filter(agence_id__isnull=False)
+            if not campagne.toutes_agences:
+                qs = qs.filter(
+                    agence_id__in=campagne.agences.values_list("id", flat=True)
+                )
         ids = qs.values_list("id", flat=True)
     else:
         ids = User.objects.filter(
@@ -417,6 +487,7 @@ def _champs_vente(source):
 @http_methods("POST")
 def store(request):
     source = request.POST
+    partenaire = partenaire_courant(request)
     type_campagne = source.get("type") or TypeCampagne.VENTE_CARTE
     est_vente = type_campagne == TypeCampagne.VENTE_CARTE
 
@@ -428,13 +499,9 @@ def store(request):
     except ErreursValidation as erreur:
         return retour_avec_erreurs(request, erreur.erreurs)
 
-    toutes_agences = booleen(source, "toutes_agences")
-    agence_ids = [] if toutes_agences else _liste(source, "agences")
-    if not toutes_agences and not agence_ids:
-        return retour_avec_erreurs(
-            request,
-            {"agences": 'Sélectionnez au moins une agence ou cochez "Toutes les agences".'},
-        )
+    toutes_agences, agence_ids, erreur = _perimetre_agences(source, partenaire)
+    if erreur:
+        return retour_avec_erreurs(request, erreur)
 
     erreur = _valider_chevauchement(
         None,
@@ -443,12 +510,14 @@ def store(request):
         toutes_agences,
         agence_ids,
         type_campagne,
+        partenaire,
     )
     if erreur:
         return retour_avec_erreurs(request, erreur)
 
     attributs = {
         "nom": donnees["nom"],
+        "partenaire_id": partenaire.id if partenaire else None,
         "type": type_campagne,
         "date_debut": donnees["date_debut"],
         "date_fin": donnees["date_fin"],
@@ -489,6 +558,33 @@ def store(request):
     return redirect("/admin/campagnes")
 
 
+def _perimetre_agences(source, partenaire):
+    """
+    Lit le périmètre d'agences du formulaire, ou le neutralise.
+
+    Chez un partenaire sans réseau d'agences, la question ne se pose pas : la
+    campagne vaut pour tous ses commerciaux, et exiger une sélection d'agences
+    rendrait le formulaire impossible à valider.
+
+    Renvoie `(toutes_agences, agence_ids, erreur)`.
+    """
+    if partenaire is not None and not partenaire.a_des_agences:
+        return True, [], None
+
+    toutes_agences = booleen(source, "toutes_agences")
+    agence_ids = [] if toutes_agences else _liste(source, "agences")
+    if not toutes_agences and not agence_ids:
+        return (
+            toutes_agences,
+            agence_ids,
+            {
+                "agences": "Sélectionnez au moins une agence ou cochez "
+                '"Toutes les agences".'
+            },
+        )
+    return toutes_agences, agence_ids, None
+
+
 def _perimetre_ou_dates_modifies(campagne, donnees, toutes_agences, agence_ids):
     if toutes_agences != campagne.toutes_agences:
         return True
@@ -506,7 +602,8 @@ def _perimetre_ou_dates_modifies(campagne, donnees, toutes_agences, agence_ids):
 @role_required(Role.ADMIN)
 @http_methods("POST", "PUT", "PATCH")
 def update(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
+    partenaire = partenaire_courant(request)
     source = _corps(request)
 
     # Le type est figé à la création : le changer laisserait des données
@@ -522,13 +619,9 @@ def update(request, campagne):
     except ErreursValidation as erreur:
         return retour_avec_erreurs(request, erreur.erreurs)
 
-    toutes_agences = booleen(source, "toutes_agences")
-    agence_ids = [] if toutes_agences else _liste(source, "agences")
-    if not toutes_agences and not agence_ids:
-        return retour_avec_erreurs(
-            request,
-            {"agences": 'Sélectionnez au moins une agence ou cochez "Toutes les agences".'},
-        )
+    toutes_agences, agence_ids, erreur = _perimetre_agences(source, partenaire)
+    if erreur:
+        return retour_avec_erreurs(request, erreur)
 
     if _perimetre_ou_dates_modifies(campagne, donnees, toutes_agences, agence_ids):
         erreur = _valider_chevauchement(
@@ -538,6 +631,7 @@ def update(request, campagne):
             toutes_agences,
             agence_ids,
             type_campagne,
+            partenaire,
         )
         if erreur:
             return retour_avec_erreurs(request, erreur)
@@ -575,7 +669,7 @@ def update(request, campagne):
 @role_required(Role.ADMIN)
 @http_methods("POST", "DELETE")
 def destroy(request, campagne):
-    get_object_or_404(Campagne, pk=campagne).delete()
+    _campagne_du_perimetre(request, campagne).delete()
     deposer_flash(request, success="Campagne supprimée.")
     return redirect("/admin/campagnes")
 
@@ -996,7 +1090,9 @@ def versement_destroy(request, campagne, versement):
 @http_methods("GET", "HEAD")
 def direction_index(request):
     Campagne.sync_statuts()
-    campagnes = Campagne.objects.order_by("-date_debut")
+    campagnes = filtrer_campagnes(
+        Campagne.objects.order_by("-date_debut"), partenaire_courant(request)
+    )
 
     def formater(c):
         if c.toutes_agences:
@@ -1023,7 +1119,7 @@ def direction_index(request):
 @role_required(Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def direction_show(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
     detail = services.construire_detail(campagne, request)
     return render(
         request, "Admin/Campagnes/Show", services.vers_props_inertia(request, detail, True)

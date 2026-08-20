@@ -25,7 +25,7 @@ function TypeChip({ selected, disabled, onClick, children }) {
     );
 }
 
-export default function CampagneForm({ campagne, agences, commerciaux }) {
+export default function CampagneForm({ campagne, agences, commerciaux, aDesAgences = true, clientNom }) {
     const isEdit = !!campagne;
     const { data, setData, post, put, processing, errors } = useForm({
         nom: campagne?.nom ?? '',
@@ -111,29 +111,41 @@ export default function CampagneForm({ campagne, agences, commerciaux }) {
                         </div>
                     )}
 
-                    <div>
-                        <Label>Agences concernées *</Label>
-                        <Checkbox
-                            id="toutes_agences"
-                            label="Toutes les agences"
-                            checked={data.toutes_agences}
-                            onChange={(e) => setData('toutes_agences', e.target.checked)}
-                        />
-                        {!data.toutes_agences && (
-                            <div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-3">
-                                {agences.map((a) => (
-                                    <Checkbox
-                                        key={a.id}
-                                        id={`ag${a.id}`}
-                                        label={a.nom}
-                                        checked={data.agences.includes(a.id)}
-                                        onChange={() => toggleIn('agences', a.id)}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                        <FieldError>{errors.agences}</FieldError>
-                    </div>
+                    {/* Chez un client sans réseau d'agences, la campagne couvre d'office
+                        tous ses commerciaux : il n'y a pas de périmètre à découper. */}
+                    {aDesAgences ? (
+                        <div>
+                            <Label>Agences concernées *</Label>
+                            <Checkbox
+                                id="toutes_agences"
+                                label="Toutes les agences"
+                                checked={data.toutes_agences}
+                                onChange={(e) => setData('toutes_agences', e.target.checked)}
+                            />
+                            {!data.toutes_agences && (
+                                <div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-3">
+                                    {agences.map((a) => (
+                                        <Checkbox
+                                            key={a.id}
+                                            id={`ag${a.id}`}
+                                            label={a.nom}
+                                            checked={data.agences.includes(a.id)}
+                                            onChange={() => toggleIn('agences', a.id)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            <FieldError>{errors.agences}</FieldError>
+                        </div>
+                    ) : (
+                        <div>
+                            <Label>Périmètre</Label>
+                            <p className="rounded-lg bg-gray-50 px-3.5 py-2.5 text-xs text-gray-500">
+                                {clientNom || 'Ce client'} n'a pas d'agences : la campagne couvre
+                                l'ensemble de ses commerciaux. Les engagés se désignent ci-dessous.
+                            </p>
+                        </div>
+                    )}
                 </CardBody>
             </Card>
 
@@ -153,10 +165,14 @@ export default function CampagneForm({ campagne, agences, commerciaux }) {
             <Card>
                 <CardHeader><CardTitle>Commerciaux engagés (contrat de prestation)</CardTitle></CardHeader>
                 <CardBody className="space-y-3">
-                    <p className="text-sm text-gray-500">Obligatoire : tous les commerciaux des agences concernées, ou une sélection.</p>
+                    <p className="text-sm text-gray-500">
+                        {aDesAgences
+                            ? 'Obligatoire : tous les commerciaux des agences concernées, ou une sélection.'
+                            : `Obligatoire : tous les commerciaux de ${clientNom || 'ce client'}, ou une sélection.`}
+                    </p>
                     <Checkbox
                         id="aide_hebdo_tous_commerciaux"
-                        label="Tous les commerciaux des agences concernées"
+                        label={aDesAgences ? 'Tous les commerciaux des agences concernées' : 'Tous les commerciaux du client'}
                         checked={data.aide_hebdo_tous_commerciaux}
                         onChange={(e) => setData('aide_hebdo_tous_commerciaux', e.target.checked)}
                     />
@@ -166,7 +182,7 @@ export default function CampagneForm({ campagne, agences, commerciaux }) {
                                 <Checkbox
                                     key={c.id}
                                     id={`cb${c.id}`}
-                                    label={`${c.nom} — ${c.agence_nom}`}
+                                    label={aDesAgences ? `${c.nom} — ${c.agence_nom}` : c.nom}
                                     checked={data.aide_beneficiaires.includes(c.id)}
                                     onChange={() => toggleIn('aide_beneficiaires', c.id)}
                                 />

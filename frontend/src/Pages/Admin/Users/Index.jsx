@@ -22,7 +22,7 @@ const contratBadge = {
     non_signataire: { label: 'Non concerné', tone: 'neutral' },
 };
 
-export default function UsersIndex({ users, filters }) {
+export default function UsersIndex({ users, filters, aDesAgences = true }) {
     const [q, setQ] = useState(filters.q ?? '');
     const [role, setRole] = useState(filters.role ?? '');
     const [contrat, setContrat] = useState(filters.contrat ?? '');
@@ -91,7 +91,7 @@ export default function UsersIndex({ users, filters }) {
                                 <th className="px-5 py-3 font-medium">Rôle</th>
                                 <th className="px-5 py-3 font-medium">Contrat</th>
                                 <th className="px-5 py-3 font-medium">Statut</th>
-                                <th className="px-5 py-3 font-medium">Agence</th>
+                                {aDesAgences && <th className="px-5 py-3 font-medium">Agence</th>}
                                 <th className="px-5 py-3 text-right font-medium">Actions</th>
                             </tr>
                         </thead>
@@ -110,7 +110,7 @@ export default function UsersIndex({ users, filters }) {
                                         <td className="px-5 py-3"><Badge tone={rb.tone}>{rb.label}</Badge></td>
                                         <td className="px-5 py-3">{cb ? <Badge tone={cb.tone}>{cb.label}</Badge> : <span className="text-gray-300">—</span>}</td>
                                         <td className="px-5 py-3"><Badge tone={u.actif ? 'green' : 'neutral'}>{u.actif ? 'Actif' : 'Désactivé'}</Badge></td>
-                                        <td className="px-5 py-3 text-gray-600">{u.agence_nom ?? '—'}</td>
+                                        {aDesAgences && <td className="px-5 py-3 text-gray-600">{u.agence_nom ?? '—'}</td>}
                                         <td className="px-5 py-3">
                                             <div className="flex justify-end gap-1.5">
                                                 <Button href={route('admin.users.edit', u.id)} variant="ghost" size="sm" title="Modifier">

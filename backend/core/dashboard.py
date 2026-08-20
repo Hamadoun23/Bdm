@@ -19,6 +19,13 @@ from terrain.models import EnrolementClient, Vente
 
 from .decorators import http_methods
 from .models import Agence, Role, User
+from .partenaires import (
+    filtrer_agences,
+    filtrer_campagnes,
+    filtrer_saisies,
+    filtrer_users,
+    partenaire_courant,
+)
 
 
 def _fenetre(campagnes):
@@ -69,11 +76,14 @@ def dashboard(request):
 
 def _dashboard_admin(request, user, lecture_seule):
     Campagne.sync_statuts()
+    # Tout le tableau de bord est celui d'un seul client de GDA.
+    partenaire = partenaire_courant(request)
+    partenaire_id = partenaire.id if partenaire else None
 
     # Si le périmètre de référence ne contient que des campagnes d'enrôlement,
     # tout le tableau de bord doit parler d'enrôlements : les compteurs de
     # ventes resteraient sinon à zéro.
-    campagnes_stats = Campagne.campagnes_pour_stats(None)
+    campagnes_stats = Campagne.campagnes_pour_stats(None, partenaire_id)
     campagnes_vente = [c for c in campagnes_stats if c.type == TypeCampagne.VENTE_CARTE]
     campagnes_enrolement = [
         c for c in campagnes_stats if c.type == TypeCampagne.ENROLEMENT_APP
@@ -86,7 +96,7 @@ def _dashboard_admin(request, user, lecture_seule):
 
     modele = EnrolementClient if est_enrolement else Vente
     base = (
-        modele.objects.filter(campagne_id__in=ids_stats)
+        filtrer_saisies(modele.objects.filter(campagne_id__in=ids_stats), partenaire)
         if ids_stats
         else modele.objects.none()
     )
@@ -114,7 +124,11 @@ def _dashboard_admin(request, user, lecture_seule):
         else 0
     )
 
-    campagnes_actives = list(Campagne.objects.filter(actif=True).order_by("-date_debut"))
+    campagnes_actives = list(
+        filtrer_campagnes(
+            Campagne.objects.filter(actif=True).order_by("-date_debut"), partenaire
+        )
+    )
     campagne_active = campagnes_actives[0] if campagnes_actives else None
 
     return render(
@@ -130,7 +144,9 @@ def _dashboard_admin(request, user, lecture_seule):
             "venteTrend": tendance,
             "pctCommerciauxActifs": pct_actifs,
             "classement": classement[:5],
-            "campagnesTotal": Campagne.objects.count(),
+            "campagnesTotal": filtrer_campagnes(
+                Campagne.objects.all(), partenaire
+            ).count(),
             "campagneActive": {
                 "nom": campagne_active.nom,
                 "date_debut": _jj_mm_aaaa(campagne_active.date_debut),
@@ -146,23 +162,28 @@ def _dashboard_admin(request, user, lecture_seule):
                 }
                 for c in campagnes_actives
             ],
-            "campagnesEnCours": Campagne.objects.filter(
-                statut=StatutCampagne.EN_COURS
+            "campagnesEnCours": filtrer_campagnes(
+                Campagne.objects.filter(statut=StatutCampagne.EN_COURS), partenaire
             ).count(),
-            "campagnesProgrammees": Campagne.objects.filter(
-                statut=StatutCampagne.PROGRAMMEE
+            "campagnesProgrammees": filtrer_campagnes(
+                Campagne.objects.filter(statut=StatutCampagne.PROGRAMMEE), partenaire
             ).count(),
             "libelleStatsCampagne": _libelle(campagnes_du_type),
-            "agencesCount": Agence.objects.count(),
-            "commerciauxCount": User.objects.filter(role=Role.COMMERCIAL).count(),
+            "agencesCount": filtrer_agences(Agence.objects.all(), partenaire).count(),
+            "commerciauxCount": filtrer_users(
+                User.objects.filter(role=Role.COMMERCIAL), partenaire
+            ).count(),
+            # Pas de prop « client » ici : elle est déjà partagée par
+            # `InertiaSharedDataMiddleware`, et une prop de page du même nom
+            # l'écraserait — la barre latérale perdrait son sélecteur.
+            "aDesAgences": partenaire is None or partenaire.a_des_agences,
         },
     )
 
 
 def _dashboard_telephonique(request, user):
     Campagne.sync_statuts()
-    agence_id = int(user.agence_id) if user.agence_id else None
-    actives = list(Campagne.actives_pour_agence(agence_id)) if agence_id else []
+    actives = list(Campagne.actives_pour_commercial(user))
     campagne = actives[0] if actives else None
 
     return render(
@@ -186,23 +207,20 @@ def _dashboard_telephonique(request, user):
 def _dashboard_commercial(request, user):
     Campagne.sync_statuts()
     agence_id = int(user.agence_id) if user.agence_id else None
+    partenaire_id = user.partenaire_id
 
     # Campagnes réellement ouvertes ET où ce commercial est engagé — « agence
     # couverte » ne suffit pas. Les deux univers vente et enrôlement restent
     # strictement séparés, y compris dans les statistiques affichées.
-    engagees = (
-        [
-            c
-            for c in Campagne.actives_pour_agence(agence_id)
-            if c.est_engage_commercial(user.id)
-        ]
-        if agence_id
-        else []
-    )
+    engagees = [
+        c
+        for c in Campagne.actives_pour_commercial(user)
+        if c.est_engage_commercial(user.id)
+    ]
     vente_ouvertes = [c for c in engagees if c.type == TypeCampagne.VENTE_CARTE]
     enrolement_ouvertes = [c for c in engagees if c.type == TypeCampagne.ENROLEMENT_APP]
 
-    stats = Campagne.campagnes_pour_stats(agence_id)
+    stats = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
 
     campagnes_vente = [c for c in stats if c.type == TypeCampagne.VENTE_CARTE]
     ids_vente = [c.id for c in campagnes_vente]

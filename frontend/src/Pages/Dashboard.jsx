@@ -68,7 +68,7 @@ function DashboardAdmin(props) {
     const {
         readOnly, ventesTotal, ventesMois, venteTrend, pctCommerciauxActifs, classement,
         campagnesTotal, campagneActive, campagnesEnCours, campagnesProgrammees,
-        libelleStatsCampagne, user, agencesCount, commerciauxCount, estEnrolement,
+        libelleStatsCampagne, user, agencesCount, commerciauxCount, estEnrolement, aDesAgences = true,
     } = props;
 
     // Sans aucune vente, tous les commerciaux sont ex æquo au rang 1 : afficher la liste
@@ -133,11 +133,16 @@ function DashboardAdmin(props) {
                                 <p className="text-xs text-gray-500">{user.agence_nom || 'Administration globale'}</p>
                             </div>
                         </div>
-                        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 text-center">
-                            <div>
-                                <p className="text-lg font-semibold text-gray-900">{agencesCount}</p>
-                                <p className="text-xs text-gray-500">Agences</p>
-                            </div>
+                        <div className={cn(
+                            'mt-4 grid gap-3 border-t border-gray-100 pt-3 text-center',
+                            aDesAgences ? 'grid-cols-2' : 'grid-cols-1',
+                        )}>
+                            {aDesAgences && (
+                                <div>
+                                    <p className="text-lg font-semibold text-gray-900">{agencesCount}</p>
+                                    <p className="text-xs text-gray-500">Agences</p>
+                                </div>
+                            )}
                             <div>
                                 <p className="text-lg font-semibold text-gray-900">{commerciauxCount}</p>
                                 <p className="text-xs text-gray-500">Commerciaux</p>

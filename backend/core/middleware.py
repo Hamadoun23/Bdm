@@ -145,6 +145,52 @@ class EnsureCompteActifMiddleware:
         return self.get_response(request)
 
 
+class ChoixClientRequisMiddleware:
+    """
+    Impose le choix d'un client de GDA aux comptes qui en pilotent plusieurs.
+
+    Sans partenaire courant, les écrans d'administration filtreraient sur
+    `None` et n'afficheraient rien, sans que l'utilisateur comprenne pourquoi.
+    La garde est posée ici plutôt que vue par vue : une vue ajoutée demain est
+    couverte sans qu'on ait à y penser.
+    """
+
+    #: Chemins accessibles sans avoir choisi : authentification, écran de choix
+    #: lui-même, profil et ressources techniques.
+    PREFIXES_LIBRES = (
+        "/login",
+        "/logout",
+        "/choix-client",
+        "/password",
+        "/forgot-password",
+        "/reset-password",
+        "/confirm-password",
+        "/verify-email",
+        "/email/",
+        "/profile",
+        "/static/",
+        "/storage/",
+        "/site.webmanifest",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from .partenaires import URL_CHOIX, partenaire_courant
+
+        user = getattr(request, "user", None)
+        if (
+            user is not None
+            and user.is_authenticated
+            and user.choisit_son_partenaire
+            and not request.path.startswith(self.PREFIXES_LIBRES)
+            and partenaire_courant(request) is None
+        ):
+            return redirect(URL_CHOIX)
+        return self.get_response(request)
+
+
 class InertiaSharedDataMiddleware:
     """
     Props partagées avec toutes les pages Inertia : utilisateur courant,
@@ -153,6 +199,11 @@ class InertiaSharedDataMiddleware:
     `peut_vendre` / `peut_enroler` conditionnent l'affichage des tunnels de
     saisie côté React : un commercial ne peut saisir que s'il est réellement
     engagé sur une campagne ouverte du type correspondant.
+
+    `client` porte le partenaire courant — le client de GDA dont on regarde les
+    données. Toutes les pages en ont besoin : le sélecteur de la barre latérale
+    l'affiche, et plusieurs écrans masquent la notion d'agence quand le
+    partenaire n'en a pas.
     """
 
     def __init__(self, get_response):
@@ -164,10 +215,42 @@ class InertiaSharedDataMiddleware:
         share(
             request,
             auth=lambda: {"user": self._utilisateur(request)},
+            client=lambda: self._client(request),
             flash=lambda: self._flash(request),
             errors=lambda: request.session.pop(CLE_ERREURS, {}) or {},
         )
         return self.get_response(request)
+
+    def _client(self, request):
+        """Partenaire courant et liste de ceux entre lesquels basculer."""
+        from .partenaires import partenaire_courant, partenaires_accessibles
+
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return None
+
+        courant = partenaire_courant(request)
+        accessibles = partenaires_accessibles(user)
+
+        return {
+            "courant": self._partenaire(courant),
+            "disponibles": [self._partenaire(p) for p in accessibles],
+            # Seuls l'administration et la direction peuvent changer de client.
+            "peut_changer": bool(user.choisit_son_partenaire and len(accessibles) > 1),
+        }
+
+    def _partenaire(self, partenaire):
+        if partenaire is None:
+            return None
+        return {
+            "id": partenaire.id,
+            "code": partenaire.code,
+            "nom": partenaire.nom,
+            "nom_complet": partenaire.nom_complet,
+            "organisation": partenaire.organisation,
+            "a_des_agences": partenaire.a_des_agences,
+            "fiche_adhesion": bool(partenaire.fiche_adhesion),
+        }
 
     def _flash(self, request):
         depose = request.session.pop(CLE_FLASH, {}) or {}
@@ -184,6 +267,7 @@ class InertiaSharedDataMiddleware:
             "prenom": user.prenom,
             "role": user.role,
             "agence_id": user.agence_id,
+            "partenaire_id": user.partenaire_id,
             "is_admin": user.is_admin,
             "is_direction": user.is_direction,
             "is_commercial": user.is_commercial,
@@ -193,15 +277,20 @@ class InertiaSharedDataMiddleware:
         }
 
     def _campagne_ouverte_engagee(self, user, type_campagne) -> bool:
-        """Le commercial a-t-il une campagne ouverte de ce type où il est engagé ?"""
-        if not user.is_commercial or not user.agence_id:
+        """
+        Le commercial a-t-il une campagne ouverte de ce type où il est engagé ?
+
+        Le rattachement passe par l'agence chez un partenaire qui en a, par le
+        partenaire lui-même sinon : c'est `actives_pour_commercial` qui tranche.
+        """
+        if not user.is_commercial:
             return False
 
         from campagnes.models import Campagne
 
         return any(
             campagne.est_engage_commercial(user.id)
-            for campagne in Campagne.actives_pour_agence(int(user.agence_id)).filter(
+            for campagne in Campagne.actives_pour_commercial(user).filter(
                 type=type_campagne
             )
         )

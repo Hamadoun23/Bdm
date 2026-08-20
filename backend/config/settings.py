@@ -70,6 +70,8 @@ MIDDLEWARE = [
     "core.middleware.CorpsJsonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Après l'authentification : la garde a besoin de connaître le rôle.
+    "core.middleware.ChoixClientRequisMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "inertia.middleware.InertiaMiddleware",

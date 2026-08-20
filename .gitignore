@@ -29,7 +29,10 @@ Thumbs.db
 /.zed
 
 # Documents métier (accès, listes nominatives) : jamais sur un dépôt public.
-docs/*.docx
-docs/*.xlsx
-docs/*.bak
+# Les sous-dossiers comptent : docs/UBA/ porte la liste nominative des
+# commerciaux et la convention de la banque.
+docs/**/*.docx
+docs/**/*.xlsx
+docs/**/*.pdf
+docs/**/*.bak
 docs/~$*

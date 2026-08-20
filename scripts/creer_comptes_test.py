@@ -23,7 +23,7 @@ from django.conf import settings  # noqa: E402
 
 from campagnes.models import Campagne, CampagneCommercialContrat, ContratPrestationReponse  # noqa: E402
 from core.auth_backend import hacher_mot_de_passe  # noqa: E402
-from core.models import Role, User  # noqa: E402
+from core.models import Partenaire, Role, User  # noqa: E402
 
 MOT_DE_PASSE = "TestMigration#2026"
 
@@ -51,13 +51,22 @@ def garde_fou():
 def main():
     garde_fou()
 
+    # Les comptes de test sont ceux de la BDM : c'est son périmètre que le banc
+    # de comparaison rejoue, et un compte sans client ne verrait aucun écran.
+    partenaire = Partenaire.objects.filter(code="bdm").first()
+
     # Les comptes commerciaux sont rattachés à l'agence de la campagne active,
     # sans quoi les écrans de vente et de contrat resteraient vides.
-    campagne = Campagne.objects.filter(actif=True).order_by("-date_debut").first()
+    campagnes = Campagne.objects.filter(actif=True)
+    if partenaire:
+        campagnes = campagnes.filter(partenaire_id=partenaire.id)
+    campagne = campagnes.order_by("-date_debut").first()
+
     agence_id = None
     if campagne:
+        # `agences_perimetre()` renvoie une liste, pas un queryset.
         agences = campagne.agences_perimetre()
-        agence_id = agences.first().id if agences.exists() else None
+        agence_id = agences[0].id if agences else None
 
     for definition in COMPTES:
         user, cree = User.objects.get_or_create(
@@ -74,6 +83,11 @@ def main():
         user.actif = True
         user.password = hacher_mot_de_passe(MOT_DE_PASSE)
         user.agence_id = agence_id if definition["agence"] else None
+        # L'administrateur et la direction choisissent leur client à la
+        # connexion ; les commerciaux sont rattachés au leur.
+        user.partenaire_id = (
+            partenaire.id if (partenaire and definition["agence"]) else None
+        )
         user.save()
 
         # Engagement sur la campagne active pour les profils commerciaux :

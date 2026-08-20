@@ -18,7 +18,7 @@ from core.models import ROLES_COMMERCIAUX, Agence, Role, TypeCarte, User
 from core.php import nombre_format
 from terrain.models import EnrolementClient, Prime, TelephoniqueRapport, Vente
 
-from .articles_defaut import articles_par_defaut
+from .articles_defaut import MARQUEURS, articles_par_defaut
 from .models import (
     Campagne,
     CampagneContratArticle,
@@ -49,10 +49,47 @@ def _nom(user):
 # ---------------------------------------------------------------------------
 
 
-def creer_articles_par_defaut_si_absents(campagne_id, type_campagne=TypeCampagne.VENTE_CARTE):
-    """Portage de CampagneContratArticle::seedDefaultsIfEmpty()."""
+def _remplir_marqueurs(texte, campagne):
+    """
+    Remplace `{date_debut}`, `{emolument_forfait}`… par les valeurs de la campagne.
+
+    Les articles sont recopiés une fois pour toutes dans la campagne : ce qui
+    est signé doit dire les vraies dates et les vrais montants, pas un gabarit.
+    """
+    from core.php import nombre_format
+
+    for marqueur, (champ, genre) in MARQUEURS.items():
+        if marqueur not in texte:
+            continue
+        valeur = getattr(campagne, champ, None)
+        if valeur is None:
+            continue
+        rendu = (
+            valeur.strftime("%d/%m/%Y") if genre == "date" else nombre_format(valeur)
+        )
+        texte = texte.replace(marqueur, rendu)
+    return texte
+
+
+def creer_articles_par_defaut_si_absents(
+    campagne_id, type_campagne=TypeCampagne.VENTE_CARTE, modele=None
+):
+    """
+    Portage de CampagneContratArticle::seedDefaultsIfEmpty(), étendu au modèle
+    de contrat du client.
+
+    `modele` est celui du partenaire de la campagne ; il est lu ici quand
+    l'appelant ne le fournit pas, pour qu'aucun chemin ne puisse poser par
+    inadvertance le contrat d'un autre client.
+    """
     if CampagneContratArticle.objects.filter(campagne_id=campagne_id).exists():
         return
+
+    campagne = Campagne.objects.filter(pk=campagne_id).first()
+    if campagne is None:
+        return
+    if modele is None and campagne.partenaire_id:
+        modele = campagne.partenaire.contrat_modele
 
     CampagneContratArticle.objects.bulk_create(
         [
@@ -60,9 +97,11 @@ def creer_articles_par_defaut_si_absents(campagne_id, type_campagne=TypeCampagne
                 campagne_id=campagne_id,
                 sort_order=index,
                 titre=article["titre"],
-                contenu=article["contenu"],
+                contenu=_remplir_marqueurs(article["contenu"], campagne),
             )
-            for index, article in enumerate(articles_par_defaut(type_campagne))
+            for index, article in enumerate(
+                articles_par_defaut(type_campagne, modele)
+            )
         ]
     )
 

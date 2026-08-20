@@ -20,11 +20,17 @@ from campagnes.models import (
     StatutReponseContrat,
     TypeCampagne,
 )
+from campagnes.articles_defaut import remuneration_dans_articles
 from campagnes.services import totaux_telephonique
 from core.decorators import http_methods, role_required
 from core.middleware import deposer_flash, retour_avec_erreurs
 from core.models import Role, TypeCarte
 from core.pagination import paginer
+from core.partenaires import (
+    filtrer_saisies,
+    filtrer_types_cartes,
+    partenaire_courant,
+)
 from core.php import nombre_format
 from core.validation import ErreursValidation, Validateur
 
@@ -34,6 +40,7 @@ from .models import (
     Client,
     EnrolementClient,
     TelephoniqueRapport,
+    TypePieceIdentite,
     Vente,
 )
 
@@ -61,17 +68,24 @@ def _corps(request):
 @http_methods("GET", "HEAD")
 def ventes_index(request):
     user = request.user
-    ventes = Vente.objects.select_related("client", "agence", "user", "type_carte", "campagne")
+    partenaire = partenaire_courant(request)
+    ventes = filtrer_saisies(
+        Vente.objects.select_related(
+            "client", "agence", "user", "type_carte", "campagne"
+        ),
+        partenaire,
+    )
 
     agence_id = None
     if user.is_commercial:
         ventes = ventes.filter(user_id=user.id)
         agence_id = int(user.agence_id) if user.agence_id else None
-    # Admin et direction voient toutes les ventes, bornées au périmètre de campagne.
+    # Admin et direction voient toutes les ventes du client courant, bornées au
+    # périmètre de campagne.
 
-    ventes = services.restreindre_aux_campagnes_vente(ventes, agence_id).order_by(
-        "-created_at", "-id"
-    )
+    ventes = services.restreindre_aux_campagnes_vente(
+        ventes, agence_id, partenaire.id if partenaire else None
+    ).order_by("-created_at", "-id")
 
     def formater(v):
         return {
@@ -93,10 +107,12 @@ def ventes_index(request):
         "Ventes/Index",
         {
             "libelleStatsCampagne": services.libelle_stats(
-                agence_id, TypeCampagne.VENTE_CARTE
+                agence_id, TypeCampagne.VENTE_CARTE,
+                partenaire.id if partenaire else None,
             ),
             "canManage": bool(user.is_commercial),
             "canSeeCommercial": bool(user.is_admin or user.is_direction),
+            "aDesAgences": partenaire is None or partenaire.a_des_agences,
             "ventes": paginer(request, ventes, 15, formater),
         },
     )
@@ -109,22 +125,31 @@ def ventes_create(request):
     user = request.user
     ouvertes = services.campagnes_ouvertes_pour(user, TypeCampagne.VENTE_CARTE)
 
+    # La demande d'adhésion s'affiche dès que le client de GDA l'exige.
+    partenaire = partenaire_courant(request)
     return render(
         request,
         "Ventes/Create",
         {
             "typesCartes": [
                 {"id": t.id, "code": t.code}
-                for t in TypeCarte.objects.filter(actif=True).order_by("code")
+                for t in filtrer_types_cartes(
+                    TypeCarte.objects.filter(actif=True), partenaire
+                ).order_by("code")
             ],
             "campagnesOuvertes": [
                 {"id": c.id, "nom": c.nom, "date_fin": c.date_fin.strftime("%d/%m/%Y")}
                 for c in ouvertes
             ],
-            "peutVendre": bool(user.agence_id and ouvertes),
+            "peutVendre": bool(ouvertes),
             "contratAccepte": any(
                 c.commercial_a_accepte_contrat(user.id) for c in ouvertes
             ),
+            "ficheAdhesion": bool(partenaire and partenaire.fiche_adhesion),
+            "clientNom": partenaire.nom if partenaire else None,
+            "typesPiece": [
+                {"valeur": v, "libelle": l} for v, l in TypePieceIdentite.choices
+            ],
         },
     )
 
@@ -172,7 +197,7 @@ def _supprimer_piece_identite(client):
 def api_vente_store(request):
     """Enregistrement d'une vente depuis le formulaire React (réponse JSON)."""
     user = request.user
-    if not user.is_commercial or not user.agence_id:
+    if not user.is_commercial or not (user.agence_id or user.partenaire_id):
         return JsonResponse(
             {
                 "success": False,
@@ -189,7 +214,8 @@ def api_vente_store(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "Aucune campagne ouverte pour votre agence : enregistrement de vente impossible.",
+                "message": "Aucune campagne ouverte pour votre périmètre : "
+                "enregistrement de vente impossible.",
             },
             status=400,
         )
@@ -202,7 +228,12 @@ def api_vente_store(request):
     validateur.champ("quartier", "nullable|max:100")
     validateur.champ("type_carte_id", "required|integer")
     validateur.champ("campagne_id", "nullable|integer")
-    validateur.existe("type_carte_id", TypeCarte.objects.filter(actif=True))
+    validateur.existe(
+        "type_carte_id",
+        filtrer_types_cartes(
+            TypeCarte.objects.filter(actif=True), partenaire_courant(request)
+        ),
+    )
     # La campagne n'est exigée que s'il y a une ambiguïté à lever.
     if len(ids_ouvertes) > 1 and not validateur.valeurs.get("campagne_id"):
         validateur.erreur("campagne_id", "Le champ campagne id est obligatoire.")
@@ -227,8 +258,26 @@ def api_vente_store(request):
     if fichier:
         donnees["carte_identite"] = _stocker_piece_identite(fichier)
 
+    partenaire = partenaire_courant(request)
+    adhesion = None
+    if partenaire and partenaire.fiche_adhesion:
+        try:
+            adhesion = _valider_adhesion(request, donnees)
+        except ErreursValidation as erreur:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Données invalides.",
+                    "errors": {
+                        champ: [message]
+                        for champ, message in erreur.erreurs.items()
+                    },
+                },
+                status=422,
+            )
+
     try:
-        vente = services.enregistrer_vente(donnees, user)
+        vente = services.enregistrer_vente(donnees, user, adhesion)
     except services.ErreurMetier as erreur:
         return JsonResponse({"success": False, "message": str(erreur)}, status=400)
 
@@ -240,6 +289,43 @@ def api_vente_store(request):
         },
         status=201,
     )
+
+
+def _valider_adhesion(request, donnees):
+    """
+    Valide la demande d'adhésion carte prépayée et la ramène à un dictionnaire.
+
+    Seuls le nom à imprimer sur la carte et la pièce d'identité sont exigés en
+    plus de l'état civil : ce sont eux qui bloquent l'émission côté banque. Le
+    reste est recopié tel quel de l'imprimé, et peut rester vide sur le terrain.
+    """
+    validateur = Validateur(request.POST)
+    validateur.champ("date_naissance", "nullable|date")
+    validateur.champ("lieu_naissance", "nullable|max:191")
+    validateur.champ("nationalite", "nullable|max:100")
+    validateur.champ("email", "nullable|email")
+    validateur.champ("adresse", "nullable|max:255")
+    validateur.champ("pays_residence", "nullable|max:100")
+    validateur.champ("nom_sur_carte", "required|max:100")
+    validateur.champ("piece_type", "required|in:cni,passeport,nina")
+    validateur.champ("piece_numero", "required|max:100")
+    validateur.champ("piece_delivree_le", "nullable|date")
+    validateur.champ("piece_expire_le", "nullable|date")
+    validateur.champ("piece_autorite", "nullable|max:191")
+    validateur.champ("numero_compte_uba", "nullable|max:50")
+    validateur.champ("profession", "nullable|max:191")
+    validateur.champ("employeur", "nullable|max:191")
+
+    valides = validateur.resultat()
+
+    # L'état civil de la fiche est celui de la vente : une seule saisie, deux
+    # enregistrements. Les divergences seraient impossibles à arbitrer ensuite.
+    valides["nom"] = donnees["nom"]
+    valides["prenoms"] = donnees["prenom"]
+    valides["telephone"] = donnees.get("telephone")
+    valides["ville"] = donnees.get("ville")
+    valides["quartier"] = donnees.get("quartier")
+    return valides
 
 
 def _stocker_piece_identite(fichier):
@@ -261,7 +347,11 @@ def _stocker_piece_identite(fichier):
 @http_methods("GET", "HEAD")
 def enrolements_index(request):
     user = request.user
-    enrolements = EnrolementClient.objects.select_related("user", "agence", "campagne")
+    partenaire = partenaire_courant(request)
+    enrolements = filtrer_saisies(
+        EnrolementClient.objects.select_related("user", "agence", "campagne"),
+        partenaire,
+    )
     if user.is_commercial:
         enrolements = enrolements.filter(user_id=user.id)
     enrolements = enrolements.order_by("-created_at", "-id")
@@ -285,6 +375,7 @@ def enrolements_index(request):
         {
             "canManage": bool(user.is_commercial),
             "canSeeCommercial": bool(user.is_admin or user.is_direction),
+            "aDesAgences": partenaire is None or partenaire.a_des_agences,
             "enrolements": paginer(request, enrolements, 15, formater),
         },
     )
@@ -305,7 +396,7 @@ def enrolements_create(request):
                 {"id": c.id, "nom": c.nom, "date_fin": c.date_fin.strftime("%d/%m/%Y")}
                 for c in ouvertes
             ],
-            "peutEnroler": bool(user.agence_id and ouvertes),
+            "peutEnroler": bool(ouvertes),
             "contratAccepte": any(
                 c.commercial_a_accepte_contrat(user.id) for c in ouvertes
             ),
@@ -337,7 +428,7 @@ def enrolements_destroy(request, enrolement):
 @http_methods("POST")
 def api_enrolement_store(request):
     user = request.user
-    if not user.is_commercial or not user.agence_id:
+    if not user.is_commercial or not (user.agence_id or user.partenaire_id):
         return JsonResponse(
             {
                 "success": False,
@@ -407,9 +498,11 @@ def api_enrolement_store(request):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def clients_index(request):
-    clients = (
-        Client.objects.select_related("user__agence", "type_carte")
-        .order_by("-created_at", "-id")
+    clients = filtrer_saisies(
+        Client.objects.select_related("user__agence", "type_carte").order_by(
+            "-created_at", "-id"
+        ),
+        partenaire_courant(request),
     )
 
     def formater(c):
@@ -432,7 +525,11 @@ def clients_index(request):
 @http_methods("GET", "HEAD")
 def clients_show(request, client):
     client = get_object_or_404(
-        Client.objects.select_related("user__agence", "type_carte"), pk=client
+        filtrer_saisies(
+            Client.objects.select_related("user__agence", "type_carte"),
+            partenaire_courant(request),
+        ),
+        pk=client,
     )
     ventes = client.ventes.select_related("agence", "type_carte", "user").all()
 
@@ -585,11 +682,9 @@ def commercial_client_destroy(request, client):
 
 
 def _campagne_du_commercial(user):
-    """Première campagne active de l'agence où le commercial est engagé."""
+    """Première campagne active du périmètre où le commercial est engagé."""
     Campagne.sync_statuts()
-    if not user.agence_id:
-        return None
-    for campagne in Campagne.actives_pour_agence(int(user.agence_id)):
+    for campagne in Campagne.actives_pour_commercial(user):
         if campagne.est_engage_commercial(user.id):
             return campagne
     return None
@@ -651,6 +746,15 @@ def contrat_show(request):
             "peutRepondre": bool(peut_repondre),
             "echeance": echeance.strftime("%d/%m/%Y %H:%M") if echeance else None,
             "document": {
+                # Le contrat UBA énonce la rémunération dans son article 4 ;
+                # celui de la BDM la laisse au bloc calculé plus bas. Afficher
+                # les deux la ferait dire deux fois, au risque de diverger.
+                "remuneration_dans_articles": remuneration_dans_articles(
+                    campagne.partenaire.contrat_modele
+                    if campagne.partenaire_id
+                    else None
+                ),
+                "client_nom": campagne.partenaire.nom if campagne.partenaire_id else None,
                 "representant_nom": campagne.contrat_representant_nom,
                 "nom_presta": _nom(user),
                 "contact_presta": user.telephone or "—",
@@ -775,7 +879,9 @@ def telephonique_index(request):
     user = request.user
     agence_id = int(user.agence_id) if user.agence_id else None
     base = services.restreindre_aux_campagnes_vente(
-        TelephoniqueRapport.objects.filter(user_id=user.id), agence_id
+        TelephoniqueRapport.objects.filter(user_id=user.id),
+        agence_id,
+        user.partenaire_id,
     )
 
     def formater(r):
@@ -798,7 +904,7 @@ def telephonique_index(request):
         "Commercial/Telephonique/Index",
         {
             "libelleStatsCampagne": services.libelle_stats(
-                agence_id, TypeCampagne.VENTE_CARTE
+                agence_id, TypeCampagne.VENTE_CARTE, user.partenaire_id
             ),
             "totauxListe": totaux_telephonique(base),
             "rapports": paginer(
@@ -809,11 +915,9 @@ def telephonique_index(request):
 
 
 def _types_cartes_campagne(user):
-    """Types proposés au reporting, selon la campagne active de l'agence."""
+    """Types proposés au reporting, selon la campagne active du périmètre."""
     Campagne.sync_statuts()
-    if not user.agence_id:
-        return None, []
-    actives = list(Campagne.actives_pour_agence(int(user.agence_id))[:1])
+    actives = list(Campagne.actives_pour_commercial(user)[:1])
     campagne = actives[0] if actives else None
     if campagne is None:
         return None, []
@@ -939,7 +1043,7 @@ def telephonique_store(request):
 
     agence_id = int(user.agence_id) if user.agence_id else None
     campagne_fiche = Campagne.pour_fiche_telephonique(
-        agence_id, date.fromisoformat(jour)
+        agence_id, date.fromisoformat(jour), user.partenaire_id
     )
 
     valeurs = {

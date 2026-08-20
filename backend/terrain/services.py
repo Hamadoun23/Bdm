@@ -13,7 +13,7 @@ from django.db import transaction
 from campagnes.models import Campagne, TypeCampagne
 from core.models import Role, TypeCarte, User
 
-from .models import Client, EnrolementClient, StatutCarte, Vente
+from .models import AdhesionCarte, Client, EnrolementClient, StatutCarte, Vente
 
 
 class ErreurMetier(Exception):
@@ -25,18 +25,20 @@ class ErreurMetier(Exception):
 # ---------------------------------------------------------------------------
 
 
-def campagnes_pour_stats(agence_id=None, type_campagne=None):
-    campagnes = Campagne.campagnes_pour_stats(agence_id)
+def campagnes_pour_stats(agence_id=None, type_campagne=None, partenaire_id=None):
+    campagnes = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
     if type_campagne is None:
         return campagnes
     return [c for c in campagnes if c.type == type_campagne]
 
 
-def ids_pour_stats(agence_id=None, type_campagne=None):
-    return [c.id for c in campagnes_pour_stats(agence_id, type_campagne)]
+def ids_pour_stats(agence_id=None, type_campagne=None, partenaire_id=None):
+    return [
+        c.id for c in campagnes_pour_stats(agence_id, type_campagne, partenaire_id)
+    ]
 
 
-def restreindre_aux_campagnes_vente(queryset, agence_id=None):
+def restreindre_aux_campagnes_vente(queryset, agence_id=None, partenaire_id=None):
     """
     Borne une requête aux campagnes de vente du périmètre.
 
@@ -44,12 +46,12 @@ def restreindre_aux_campagnes_vente(queryset, agence_id=None):
     d'enrôlement : elle renverrait un ensemble vide tout en affichant le nom de
     cette campagne comme périmètre.
     """
-    ids = ids_pour_stats(agence_id, TypeCampagne.VENTE_CARTE)
+    ids = ids_pour_stats(agence_id, TypeCampagne.VENTE_CARTE, partenaire_id)
     return queryset.filter(campagne_id__in=ids) if ids else queryset.none()
 
 
-def libelle_stats(agence_id=None, type_campagne=None):
-    campagnes = campagnes_pour_stats(agence_id, type_campagne)
+def libelle_stats(agence_id=None, type_campagne=None, partenaire_id=None):
+    campagnes = campagnes_pour_stats(agence_id, type_campagne, partenaire_id)
     if not campagnes:
         return "Aucune campagne"
     noms = [f"« {c.nom} »" for c in campagnes]
@@ -62,12 +64,16 @@ def libelle_stats(agence_id=None, type_campagne=None):
 
 
 def campagnes_ouvertes_pour(user, type_campagne):
-    """Campagnes actives de ce type où le commercial est réellement engagé."""
-    if not user.agence_id:
-        return []
+    """
+    Campagnes actives de ce type où le commercial est réellement engagé.
+
+    L'entrée dans le périmètre dépend de l'organisation du partenaire : agence
+    pour la BDM, rattachement direct pour UBA (cf.
+    `Campagne.actives_pour_commercial`).
+    """
     return [
         campagne
-        for campagne in Campagne.actives_pour_agence(int(user.agence_id)).filter(
+        for campagne in Campagne.actives_pour_commercial(user).filter(
             type=type_campagne
         )
         if campagne.est_engage_commercial(user.id)
@@ -99,9 +105,13 @@ def _resoudre_campagne(ouvertes, campagne_id_demande, libelle_type):
 
 
 def _verifier_commercial(user, action):
-    if user.role != Role.COMMERCIAL or not user.agence_id:
+    # Un commercial doit être rattaché quelque part : à une agence chez un
+    # partenaire qui en a, au partenaire lui-même sinon. Un compte sans l'un
+    # ni l'autre n'appartient à aucun périmètre de campagne.
+    if user.role != Role.COMMERCIAL or not (user.agence_id or user.partenaire_id):
         raise ErreurMetier(
-            f"Seul un commercial avec une agence peut enregistrer {action}."
+            f"Seul un commercial rattaché à une agence ou à un client peut "
+            f"enregistrer {action}."
         )
     if not user.actif:
         raise ErreurMetier(
@@ -109,20 +119,37 @@ def _verifier_commercial(user, action):
         )
 
 
-def enregistrer_vente(donnees, user):
-    """Portage de VenteService::enregistrerVente() : crée le client puis la vente."""
+#: Champs de la demande d'adhésion recopiés tels quels depuis le formulaire.
+CHAMPS_ADHESION = (
+    "nom", "prenoms", "date_naissance", "lieu_naissance", "nationalite",
+    "telephone", "email", "adresse", "pays_residence", "ville", "quartier",
+    "nom_sur_carte", "piece_type", "piece_numero", "piece_delivree_le",
+    "piece_expire_le", "piece_autorite", "numero_compte_uba", "profession",
+    "employeur",
+)
+
+
+def enregistrer_vente(donnees, user, adhesion=None):
+    """
+    Portage de VenteService::enregistrerVente() : crée le client puis la vente.
+
+    `adhesion` porte la demande d'adhésion carte prépayée quand le partenaire
+    de la campagne l'exige (UBA). Elle est écrite dans la même transaction que
+    la vente : une vente sans sa fiche serait inexploitable par la banque.
+    """
     _verifier_commercial(user, "une vente")
 
     type_carte_id = int(donnees.get("type_carte_id") or 0)
     if not TypeCarte.objects.filter(id=type_carte_id, actif=True).exists():
         raise ErreurMetier("Type de carte invalide ou inactif.")
 
-    agence_id = int(user.agence_id)
+    # Nul chez un partenaire sans réseau d'agences : la colonne est nullable.
+    agence_id = int(user.agence_id) if user.agence_id else None
     Campagne.sync_statuts()
     ouvertes = campagnes_ouvertes_pour(user, TypeCampagne.VENTE_CARTE)
     if not ouvertes:
         raise ErreurMetier(
-            "Aucune campagne en cours pour votre agence. Les ventes ne sont possibles que "
+            "Aucune campagne en cours pour votre périmètre. Les ventes ne sont possibles que "
             "pendant une campagne active ; une campagne terminée ou arrêtée ne permet plus "
             "d’enregistrer de vente."
         )
@@ -133,12 +160,20 @@ def enregistrer_vente(donnees, user):
 
     if not campagne.est_ouverte(agence_id):
         raise ErreurMetier(
-            "Cette campagne n’accepte pas les ventes pour votre agence pour le moment."
+            "Cette campagne n’accepte pas les ventes pour votre périmètre pour le moment."
         )
     if not campagne.commercial_a_accepte_contrat(user.id):
         raise ErreurMetier(
             f"Vous devez d’abord accepter le contrat de prestation de la campagne "
             f"« {campagne.nom} » (rubrique « Mon contrat ») avant de pouvoir enregistrer une vente."
+        )
+
+    exige_adhesion = bool(
+        campagne.partenaire_id and campagne.partenaire.fiche_adhesion
+    )
+    if exige_adhesion and not adhesion:
+        raise ErreurMetier(
+            "La demande d’adhésion est obligatoire pour les cartes de ce client."
         )
 
     with transaction.atomic():
@@ -153,7 +188,7 @@ def enregistrer_vente(donnees, user):
             carte_identite=donnees.get("carte_identite") or None,
             user_id=user.id,
         )
-        return Vente.objects.create(
+        vente = Vente.objects.create(
             client_id=client.id,
             user_id=user.id,
             agence_id=agence_id,
@@ -161,17 +196,29 @@ def enregistrer_vente(donnees, user):
             type_carte_id=type_carte_id,
             statut_activation=StatutCarte.VENDUE,
         )
+        if exige_adhesion:
+            AdhesionCarte.objects.create(
+                vente_id=vente.id,
+                client_id=client.id,
+                campagne_id=campagne.id,
+                user_id=user.id,
+                **{
+                    champ: (adhesion.get(champ) or None)
+                    for champ in CHAMPS_ADHESION
+                },
+            )
+        return vente
 
 
 def enregistrer_enrolement(donnees, user):
     """Portage de EnrolementService::enregistrerEnrolement()."""
     _verifier_commercial(user, "un enrôlement")
 
-    agence_id = int(user.agence_id)
+    agence_id = int(user.agence_id) if user.agence_id else None
     Campagne.sync_statuts()
     ouvertes = campagnes_ouvertes_pour(user, TypeCampagne.ENROLEMENT_APP)
     if not ouvertes:
-        raise ErreurMetier("Aucune campagne d’enrôlement en cours pour votre agence.")
+        raise ErreurMetier("Aucune campagne d’enrôlement en cours pour votre périmètre.")
 
     campagne = _resoudre_campagne(
         ouvertes,
@@ -181,7 +228,7 @@ def enregistrer_enrolement(donnees, user):
 
     if not campagne.est_ouverte(agence_id):
         raise ErreurMetier(
-            "Cette campagne n’accepte pas d’enrôlements pour votre agence pour le moment."
+            "Cette campagne n’accepte pas d’enrôlements pour votre périmètre pour le moment."
         )
     if not campagne.commercial_a_accepte_contrat(user.id):
         raise ErreurMetier(
@@ -212,12 +259,23 @@ def donnees_contrat(campagne):
 
     Le contrat court à partir du lundi de la semaine de démarrage, même si la
     campagne commence en cours de semaine.
+
+    La date du « Fait à …, le … » dépend du modèle de contrat du client : jour
+    de l'acceptation pour la BDM, date de prise d'effet pour UBA.
     """
+    from campagnes.articles_defaut import date_signature
+
     lundi = campagne.date_debut
     if lundi.weekday() != 0:
         lundi = lundi - timedelta(days=lundi.weekday())
 
+    modele = (
+        campagne.partenaire.contrat_modele if campagne.partenaire_id else None
+    )
+
     return {
         "lundi_effectif": lundi,
-        "date_signature_affichee": date.today().strftime("%d/%m/%Y"),
+        "date_signature_affichee": date_signature(modele, campagne).strftime(
+            "%d/%m/%Y"
+        ),
     }

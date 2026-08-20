@@ -6,7 +6,7 @@ import Badge from '@/Components/ui/Badge';
 import Button from '@/Components/ui/Button';
 import Pagination from '@/Components/ui/Pagination';
 
-export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, canSeeCommercial }) {
+export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, canSeeCommercial, aDesAgences = true }) {
     function destroy(v) {
         if (confirm('Supprimer cette vente et la fiche client associée ?')) {
             router.delete(route('ventes.destroy', v.id));
@@ -43,7 +43,7 @@ export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, c
                                 {canSeeCommercial && (
                                     <>
                                         <th className="px-5 py-3 font-medium">Commercial</th>
-                                        <th className="px-5 py-3 font-medium">Agence</th>
+                                        {aDesAgences && <th className="px-5 py-3 font-medium">Agence</th>}
                                     </>
                                 )}
                                 {canManage && <th className="px-5 py-3 text-right font-medium">Actions</th>}
@@ -58,7 +58,7 @@ export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, c
                                     {canSeeCommercial && (
                                         <>
                                             <td className="px-5 py-3 text-gray-600">{v.commercial}</td>
-                                            <td className="px-5 py-3 text-gray-600">{v.agence}</td>
+                                            {aDesAgences && <td className="px-5 py-3 text-gray-600">{v.agence}</td>}
                                         </>
                                     )}
                                     {canManage && (

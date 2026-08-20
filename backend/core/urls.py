@@ -20,6 +20,10 @@ urlpatterns = [
     path("logout", views.logout_store, name="logout"),
     path("password", adm.mot_de_passe_update, name="password.update"),
     path("dashboard", dashboard.dashboard, name="dashboard"),
+    # Choix du client de GDA (BDM, UBA…). Une seule URI pour l'affichage et la
+    # sélection, comme le reste des écrans repris de Laravel.
+    path("choix-client", views.choix_client, name="partenaires.choix"),
+    path("choix-client", views.choix_client, name="partenaires.choix.store"),
     # Réinitialisation de mot de passe et vérification d'e-mail (routes/auth.php).
     path("forgot-password", mdp.mot_de_passe_oublie, name="password.request"),
     path("forgot-password", mdp.mot_de_passe_oublie, name="password.email"),

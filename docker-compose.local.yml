@@ -1,0 +1,121 @@
+# Stack de DÉVELOPPEMENT complète, entièrement dans Docker.
+#
+# `docker-compose.dev.yml` ne monte que MySQL : Django et Vite tournent alors
+# sur la machine hôte. Ce fichier-ci monte tout — base, Django, nginx — pour
+# travailler sans installer Python ni Node en local.
+#
+# Il REPREND la base de `docker-compose.dev.yml` : même conteneur, même volume
+# `bdm_db_dev_data`, donc les mêmes données. Les deux fichiers ne peuvent pas
+# tourner en même temps (le nom de conteneur entrerait en conflit) — celui-ci
+# remplace l'autre, il ne s'y ajoute pas.
+#
+# Usage :
+#   docker compose -f docker-compose.dev.yml down     # si l'autre stack tourne
+#   docker compose -f docker-compose.local.yml up -d --build
+#   docker compose -f docker-compose.local.yml logs -f django
+#   docker compose -f docker-compose.local.yml down
+#
+# L'application répond sur http://localhost:8001
+
+name: bdm-local
+
+services:
+  db_dev:
+    image: mysql:8.0
+    container_name: bdm_db_dev
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: bdm_dev
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      # Toujours exposé sur l'hôte : les scripts de recette (`tester_multi_client`,
+      # `charger_dump_prod`) attaquent la base directement.
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - db_dev_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  django:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: bdm_django_local
+    environment:
+      APP_NAME: "Campagnes GDA"
+      DJANGO_SECRET_KEY: "dev-local-insecure-key"
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,django,web"
+      # `db_dev` est le nom du service : Docker le résout sur son réseau
+      # interne. Le port est celui du conteneur (3306), pas celui de l'hôte.
+      DB_HOST: db_dev
+      DB_PORT: "3306"
+      DB_NAME: bdm_dev
+      DB_USER: root
+      DB_PASSWORD: root
+      # Les assets sont compilés dans l'image : pas de serveur Vite ici.
+      VITE_DEV: "false"
+    volumes:
+      # Le code est monté depuis l'hôte : gunicorn tourne en `--reload`, une
+      # modification Python est prise en compte sans reconstruire l'image.
+      - ./backend:/app
+      # Idem pour les assets : `npm run build` sur l'hôte suffit à les
+      # rafraîchir, sans passer par l'étape Node de l'image.
+      - ./frontend/dist:/frontend/dist:ro
+    depends_on:
+      db_dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/login >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    # `--reload` en développement seulement ; la production garde les 3 workers
+    # définis par le CMD du Dockerfile.
+    command:
+      - gunicorn
+      - config.wsgi:application
+      - --bind
+      - 0.0.0.0:8000
+      - --workers
+      - "2"
+      - --timeout
+      - "180"
+      - --reload
+      - --access-logfile
+      - "-"
+      - --error-logfile
+      - "-"
+
+  web:
+    image: nginx:alpine
+    container_name: bdm_web_local
+    volumes:
+      - ./docker/nginx/django.conf:/etc/nginx/conf.d/default.conf:ro
+      # `collectstatic` écrit dans backend/staticfiles au démarrage de Django ;
+      # nginx y lit les assets sans réveiller Python.
+      - ./backend/staticfiles:/var/www/static:ro
+      - ./backend/media:/var/www/media:ro
+    ports:
+      # 8001 : le port habituel du projet en local, celui que la configuration
+      # CSRF de Django reconnaît déjà (cf. CSRF_TRUSTED_ORIGINS).
+      - "127.0.0.1:8001:80"
+    depends_on:
+      django:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  # Volume déjà créé par `docker-compose.dev.yml` : on s'y raccroche pour
+  # retrouver la base chargée depuis le dump de production.
+  db_dev_data:
+    external: true
+    name: bdm_db_dev_data

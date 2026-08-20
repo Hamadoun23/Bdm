@@ -1,8 +1,10 @@
 """
-Modèles du socle : utilisateurs, agences, types de cartes, journal de connexion.
+Modèles du socle : partenaires, utilisateurs, agences, types de cartes,
+journal de connexion.
 
 Correspondances Laravel : app/Models/User.php, Agence.php, TypeCarte.php,
-UserLoginLog.php.
+UserLoginLog.php. `Partenaire` est postérieur à la migration : il n'a pas
+d'équivalent Laravel.
 """
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
@@ -22,8 +24,61 @@ class Role(models.TextChoices):
 ROLES_COMMERCIAUX = [Role.COMMERCIAL, Role.COMMERCIAL_TELEPHONIQUE]
 
 
+class Organisation(models.TextChoices):
+    """Comment le partenaire structure son réseau de vente."""
+
+    AGENCES = "agences", "Réseau d'agences"
+    COMMERCIAUX = "commerciaux", "Commerciaux directs"
+
+
+class Partenaire(LaravelModel):
+    """
+    Le client de GDA : la banque pour laquelle une campagne est menée.
+
+    La BDM travaille par agences, chaque commercial étant rattaché à l'une
+    d'elles. UBA n'en a pas dans ce dispositif : ses commerciaux dépendent
+    directement du partenaire, et toute la logique de périmètre par agence est
+    alors court-circuitée (cf. `Campagne.query_commerciaux_perimetre`).
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    code = models.CharField(max_length=30, unique=True)
+    nom = models.CharField(max_length=100)
+    nom_complet = models.CharField(max_length=255, null=True, blank=True)
+    organisation = models.CharField(
+        max_length=20, choices=Organisation.choices, default=Organisation.AGENCES
+    )
+    #: Le partenaire exige la demande d'adhésion carte prépayée à la vente.
+    fiche_adhesion = models.BooleanField(default=False)
+    #: Modèle de contrat de prestation appliqué à ses campagnes — le registre
+    #: est tenu par `campagnes.articles_defaut.MODELES`.
+    contrat_modele = models.CharField(max_length=30, default="gda_bdm")
+    ordre = models.PositiveIntegerField(default=0)
+    actif = models.BooleanField(default=True)
+
+    class Meta:
+        managed = False
+        db_table = "partenaires"
+        ordering = ["ordre", "nom"]
+
+    def __str__(self):
+        return self.nom
+
+    @property
+    def a_des_agences(self) -> bool:
+        return self.organisation == Organisation.AGENCES
+
+
 class Agence(LaravelModel):
     id = models.BigAutoField(primary_key=True)
+    partenaire = models.ForeignKey(
+        Partenaire,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="partenaire_id",
+        related_name="agences",
+    )
     ordre = models.PositiveIntegerField(default=0)
     nom = models.CharField(max_length=255)
     adresse = models.CharField(max_length=255, null=True, blank=True)
@@ -46,6 +101,15 @@ class Agence(LaravelModel):
 
 class TypeCarte(LaravelModel):
     id = models.BigAutoField(primary_key=True)
+    #: Catalogue du partenaire. Nul = carte commune à tous les clients.
+    partenaire = models.ForeignKey(
+        Partenaire,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="partenaire_id",
+        related_name="types_cartes",
+    )
     code = models.CharField(max_length=50, unique=True)
     actif = models.BooleanField(default=True)
 
@@ -92,6 +156,16 @@ class User(AbstractBaseUser):
         null=True,
         blank=True,
         db_column="agence_id",
+        related_name="utilisateurs",
+    )
+    #: Client de GDA auquel ce compte est rattaché. Nul pour les administrateurs
+    #: et la direction, qui basculent d'un partenaire à l'autre.
+    partenaire = models.ForeignKey(
+        Partenaire,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="partenaire_id",
         related_name="utilisateurs",
     )
     actif = models.BooleanField(default=True)
@@ -166,6 +240,17 @@ class User(AbstractBaseUser):
     @property
     def is_commercial_ou_telephonique(self):
         return self.role in ROLES_COMMERCIAUX
+
+    @property
+    def choisit_son_partenaire(self):
+        """
+        Ce compte travaille-t-il pour plusieurs clients de GDA ?
+
+        Administration et direction pilotent toutes les campagnes, quel que
+        soit le partenaire : ils choisissent celui qu'ils consultent. Les
+        commerciaux, eux, sont rattachés à un seul.
+        """
+        return self.role in (Role.ADMIN, Role.DIRECTION)
 
     @property
     def nom_complet(self):

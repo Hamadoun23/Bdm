@@ -25,6 +25,7 @@ from core.exports.tableur import (
 )
 from core.middleware import deposer_flash
 from core.models import Agence, Role, TypeCarte, User
+from core.partenaires import filtrer_campagnes, filtrer_saisies, partenaire_courant
 from terrain.exports import (
     ENTETES_FICHES_TEL,
     lignes_fiches_telephoniques,
@@ -96,11 +97,17 @@ def export_ventes_periode(request):
 
     from terrain.services import restreindre_aux_campagnes_vente
 
-    ventes = Vente.objects.select_related(
-        "client", "user", "agence", "type_carte", "campagne"
+    partenaire = partenaire_courant(request)
+    ventes = filtrer_saisies(
+        Vente.objects.select_related(
+            "client", "user", "agence", "type_carte", "campagne"
+        ),
+        partenaire,
     ).filter(created_at__range=(views._debut_jour(debut), views._fin_jour(fin)))
     ventes = restreindre_aux_campagnes_vente(
-        ventes, int(agence_id) if agence_id else None
+        ventes,
+        int(agence_id) if agence_id else None,
+        partenaire.id if partenaire else None,
     )
     if agence_id:
         ventes = ventes.filter(agence_id=agence_id)
@@ -267,6 +274,8 @@ def _classeur_campagne_complet(campagne, debut, fin, agence_id, user_id, type_ca
     """Classeur multi-onglets reprenant l'ensemble du rapport de campagne."""
     est_enrolement = campagne.type == TypeCampagne.ENROLEMENT_APP
     libelle = gr.libelle_volume(est_enrolement)
+    # Le client de cette campagne a-t-il un réseau d'agences ?
+    avec_agences = bool(campagne.agences_perimetre())
 
     synthese = services.synthese_campagne(campagne, debut, fin, agence_id, user_id)
     entetes_detail, lignes_detail = _lignes_detail_campagne(
@@ -308,32 +317,43 @@ def _classeur_campagne_complet(campagne, debut, fin, agence_id, user_id, type_ca
             "titre": "Commerciaux",
             "titre_document": "Rapport campagne — Synthèse commerciaux",
             "lignes_meta": meta,
-            "entetes": ["Rang", "Commercial", "Agence", libelle],
+            "entetes": ["Rang", "Commercial"]
+            + (["Agence"] if avec_agences else [])
+            + [libelle],
             "lignes": [
-                [l["rang"], l["user_name"], l["agence_nom"] or "", l["total_ventes"]]
+                [l["rang"], l["user_name"]]
+                + ([l["agence_nom"] or ""] if avec_agences else [])
+                + [l["total_ventes"]]
                 for l in synthese["commerciaux"]
             ],
-            "ligne_totaux": [
-                "", "", "TOTAUX",
-                sum(l["total_ventes"] for l in synthese["commerciaux"]),
-            ],
-        },
-        {
-            "titre": "Agences",
-            "titre_document": "Rapport campagne — Synthèse agences",
-            "lignes_meta": meta,
-            "entetes": ["Agence", libelle, "Part % volume", "Nb commerciaux"],
-            "lignes": [
-                [l["agence_nom"], l["total_ventes"], l["pct_volume"], l["nb_commerciaux"]]
-                for l in synthese["agences"]
-            ],
-            "ligne_totaux": [
-                "TOTAUX",
-                sum(l["total_ventes"] for l in synthese["agences"]),
-                "", "",
-            ],
+            "ligne_totaux": ["", ""]
+            + ([""] if avec_agences else [])
+            + [sum(l["total_ventes"] for l in synthese["commerciaux"])],
         },
     ]
+
+    # Pas de réseau d'agences, pas d'onglet « Agences » : il serait vide.
+    if avec_agences:
+        definitions.append(
+            {
+                "titre": "Agences",
+                "titre_document": "Rapport campagne — Synthèse agences",
+                "lignes_meta": meta,
+                "entetes": ["Agence", libelle, "Part % volume", "Nb commerciaux"],
+                "lignes": [
+                    [
+                        l["agence_nom"], l["total_ventes"],
+                        l["pct_volume"], l["nb_commerciaux"],
+                    ]
+                    for l in synthese["agences"]
+                ],
+                "ligne_totaux": [
+                    "TOTAUX",
+                    sum(l["total_ventes"] for l in synthese["agences"]),
+                    "", "",
+                ],
+            }
+        )
 
     if not est_enrolement:
         definitions.append(
@@ -560,7 +580,11 @@ def _cumul_contexte(request):
         return None, "Sélectionnez au moins une campagne pour l’export cumul."
 
     Campagne.sync_statuts()
-    campagnes = list(Campagne.objects.filter(id__in=ids).order_by("-date_debut", "-id"))
+    campagnes = list(
+        filtrer_campagnes(
+            Campagne.objects.filter(id__in=ids), partenaire_courant(request)
+        ).order_by("-date_debut", "-id")
+    )
     if len(campagnes) != len(ids):
         return None, "Sélection de campagnes invalide pour l’export."
 

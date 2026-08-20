@@ -5,7 +5,7 @@ import { Select } from '@/Components/ui/Select';
 import Checkbox from '@/Components/ui/Checkbox';
 import Button from '@/Components/ui/Button';
 
-export default function UserForm({ user, agences }) {
+export default function UserForm({ user, agences, aDesAgences = true, clientNom }) {
     const isEdit = !!user;
     const { data, setData, post, put, processing, errors } = useForm({
         name: user?.name ?? '',
@@ -96,21 +96,29 @@ export default function UserForm({ user, agences }) {
                         </Select>
                     </div>
 
-                    <div>
-                        <Label htmlFor="agence_id">Agence {!isDirection && <span className="text-gray-400">*</span>}</Label>
-                        <Select
-                            id="agence_id"
-                            value={data.agence_id}
-                            onChange={(e) => setData('agence_id', e.target.value)}
-                            disabled={isDirection}
-                            error={errors.agence_id}
-                        >
-                            <option value="">— Sélectionner —</option>
-                            {agences.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
-                        </Select>
-                        <p className="mt-1 text-xs text-gray-500">Obligatoire pour un commercial uniquement.</p>
-                        <FieldError>{errors.agence_id}</FieldError>
-                    </div>
+                    {/* Un client sans réseau d'agences rattache ses commerciaux directement. */}
+                    {aDesAgences ? (
+                        <div>
+                            <Label htmlFor="agence_id">Agence {!isDirection && <span className="text-gray-400">*</span>}</Label>
+                            <Select
+                                id="agence_id"
+                                value={data.agence_id}
+                                onChange={(e) => setData('agence_id', e.target.value)}
+                                disabled={isDirection}
+                                error={errors.agence_id}
+                            >
+                                <option value="">— Sélectionner —</option>
+                                {agences.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+                            </Select>
+                            <p className="mt-1 text-xs text-gray-500">Obligatoire pour un commercial uniquement.</p>
+                            <FieldError>{errors.agence_id}</FieldError>
+                        </div>
+                    ) : (
+                        <p className="rounded-lg bg-gray-50 px-3.5 py-2.5 text-xs text-gray-500">
+                            {clientNom || 'Ce client'} n'a pas de réseau d'agences : ce compte est
+                            rattaché directement au client.
+                        </p>
+                    )}
 
                     {isTerrainOuTel && (
                         <div className="space-y-4 border-t border-gray-100 pt-4">
@@ -136,7 +144,7 @@ export default function UserForm({ user, agences }) {
                     <div className="flex gap-2 pt-2">
                         <Button type="submit" disabled={processing}>{isEdit ? 'Enregistrer' : 'Créer'}</Button>
                         <Button href={route('admin.users.index')} variant="outline">Annuler</Button>
-                        {isEdit && user.is_commercial_ou_telephonique && (
+                        {isEdit && aDesAgences && user.is_commercial_ou_telephonique && (
                             <Button href={route('admin.users.transfert-agence', user.id)} variant="ghost" className="ml-auto">
                                 Transfert d'agence / ventes
                             </Button>

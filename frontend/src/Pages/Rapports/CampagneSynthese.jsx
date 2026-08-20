@@ -25,26 +25,41 @@ export default function CampagneSynthese({
     const [userId, setUserId] = useState(filtres.user_id ?? '');
     const [tab, setTab] = useState('commerciaux');
 
+    // Le client de cette campagne a-t-il un réseau d'agences ? La liste des
+    // agences du périmètre répond seule à la question : vide, il n'y en a pas.
+    const aDesAgences = agencesChoix.length > 0;
+    // Un catalogue d'une seule carte ne se répartit pas.
+    const aPlusieursTypes = !estEnrolement && parTypeCarte.length > 1;
+    // Trois graphiques possibles : types de carte, commerciaux, agences. La
+    // grille se resserre sur ceux que ce client a effectivement.
+    const colonnesGraphiques = {
+        1: 'lg:grid-cols-1',
+        2: 'lg:grid-cols-2',
+        3: 'lg:grid-cols-3',
+    }[1 + Number(aPlusieursTypes) + Number(aDesAgences)];
+
     const libelleVentes = estEnrolement ? 'Enrôlements' : 'Ventes';
     const TABS = [
         { key: 'commerciaux', label: 'Commerciaux' },
-        { key: 'agences', label: 'Agences' },
-        ...(estEnrolement ? [] : [{ key: 'types', label: 'Types de carte' }]),
+        ...(aDesAgences ? [{ key: 'agences', label: 'Agences' }] : []),
+        ...(aPlusieursTypes ? [{ key: 'types', label: 'Types de carte' }] : []),
         { key: 'temps', label: 'Semaines / Mois' },
     ];
     // `key` = section attendue par la route d'export ; `label` = ce que lit l'utilisateur.
     const sectionsExport = [
         { key: 'ventes', label: libelleVentes },
         { key: 'commerciaux', label: 'Commerciaux' },
-        { key: 'agences', label: 'Agences' },
-        ...(estEnrolement ? [] : [{ key: 'types', label: 'Types' }]),
+        ...(aDesAgences ? [{ key: 'agences', label: 'Agences' }] : []),
+        ...(aPlusieursTypes ? [{ key: 'types', label: 'Types' }] : []),
         { key: 'semaines', label: 'Semaines' },
         { key: 'mois', label: 'Mois' },
     ];
 
     function applyFilters(e) {
         e.preventDefault();
-        router.get(route('rapports.campagnes.synthese', campagne.id), { du, au, agence_id: agenceId, user_id: userId });
+        router.get(route('rapports.campagnes.synthese', campagne.id), {
+            du, au, agence_id: aDesAgences ? agenceId : '', user_id: userId,
+        });
     }
 
     const ventesUrl = (extra = {}) => route('rapports.campagnes.ventes', { campagne: campagne.id, ...qExp, ...extra });
@@ -71,13 +86,15 @@ export default function CampagneSynthese({
                     <Label htmlFor="au">Au</Label>
                     <Input id="au" type="date" value={au} onChange={(e) => setAu(e.target.value)} min={campagne.date_debut_iso} max={campagne.date_fin_iso} />
                 </div>
-                <div className="w-56">
-                    <Label htmlFor="agence_id">Agence</Label>
-                    <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
-                        <option value="">— Toutes (périmètre campagne) —</option>
-                        {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
-                    </Select>
-                </div>
+                {aDesAgences && (
+                    <div className="w-56">
+                        <Label htmlFor="agence_id">Agence</Label>
+                        <Select id="agence_id" value={agenceId} onChange={(e) => setAgenceId(e.target.value)}>
+                            <option value="">— Toutes (périmètre campagne) —</option>
+                            {agencesChoix.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+                        </Select>
+                    </div>
+                )}
                 <div className="w-56">
                     <Label htmlFor="user_id">Commercial</Label>
                     <Select id="user_id" value={userId} onChange={(e) => setUserId(e.target.value)}>
@@ -96,12 +113,14 @@ export default function CampagneSynthese({
                 ))}
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className={cn('mb-6 grid grid-cols-2 gap-3', aDesAgences ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
                 <StatCard label={`Total ${libelleVentes.toLowerCase()}`} value={nf.format(resume.total_ventes)} tone="orange" />
                 <StatCard label="Commerciaux (périmètre)" value={resume.nb_commerciaux_perimetre} tone="gray" />
                 <StatCard label={`Avec ${libelleVentes.toLowerCase()}`} value={resume.nb_avec_ventes} tone="green" />
                 <StatCard label="À 0" value={resume.nb_zero_vente} tone="gray" />
-                <StatCard label="Agences actives" value={resume.nb_agences_avec_ventes} tone="blue" />
+                {aDesAgences && (
+                    <StatCard label="Agences actives" value={resume.nb_agences_avec_ventes} tone="blue" />
+                )}
             </div>
 
             <div className="mb-3 flex justify-end gap-2">
@@ -109,9 +128,9 @@ export default function CampagneSynthese({
                 <Button href={route('rapports.campagnes.synthese.export-graphiques-word', { campagne: campagne.id, ...qExp })} target="_blank" variant="outline" size="sm">Export graphiques (Word)</Button>
             </div>
 
-            {(parTypeCarte.length > 0 || chartCommerciaux.length > 0 || chartAgences.length > 0) && (
-                <div className="mb-6 grid gap-4 lg:grid-cols-3">
-                    {!estEnrolement && (
+            {(aPlusieursTypes || chartCommerciaux.length > 0 || (aDesAgences && chartAgences.length > 0)) && (
+                <div className={cn('mb-6 grid gap-4', colonnesGraphiques)}>
+                    {aPlusieursTypes && (
                         <Card>
                             <CardHeader><CardTitle>Mix des ventes par type de carte</CardTitle></CardHeader>
                             <CardBody style={{ height: 240 }}>
@@ -131,15 +150,17 @@ export default function CampagneSynthese({
                             />
                         </CardBody>
                     </Card>
-                    <Card>
-                        <CardHeader><CardTitle>Part des agences</CardTitle></CardHeader>
-                        <CardBody style={{ height: 240 }}>
-                            <Pie
-                                data={{ labels: chartAgences.map((r) => r.label), datasets: [{ data: chartAgences.map((r) => r.total_ventes), backgroundColor: chartAgences.map((_, i) => ['#6f42c1', '#d63384', '#fd7e14', '#198754', '#20c997', '#ffc107', '#FF6A3A', '#0d6efd', '#4d8ef7', '#6610f2'][i % 10]) }] }}
-                                options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
-                            />
-                        </CardBody>
-                    </Card>
+                    {aDesAgences && (
+                        <Card>
+                            <CardHeader><CardTitle>Part des agences</CardTitle></CardHeader>
+                            <CardBody style={{ height: 240 }}>
+                                <Pie
+                                    data={{ labels: chartAgences.map((r) => r.label), datasets: [{ data: chartAgences.map((r) => r.total_ventes), backgroundColor: chartAgences.map((_, i) => ['#6f42c1', '#d63384', '#fd7e14', '#198754', '#20c997', '#ffc107', '#FF6A3A', '#0d6efd', '#4d8ef7', '#6610f2'][i % 10]) }] }}
+                                    options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
+                                />
+                            </CardBody>
+                        </Card>
+                    )}
                 </div>
             )}
 
@@ -182,7 +203,7 @@ export default function CampagneSynthese({
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-4 py-2.5 font-medium">Rang</th>
                                 <th className="px-4 py-2.5 font-medium">Commercial</th>
-                                <th className="px-4 py-2.5 font-medium">Agence</th>
+                                {aDesAgences && <th className="px-4 py-2.5 font-medium">Agence</th>}
                                 <th className="px-4 py-2.5 text-right font-medium">{libelleVentes}</th>
                                 <th className="px-4 py-2.5"></th>
                             </tr>
@@ -192,7 +213,7 @@ export default function CampagneSynthese({
                                 <tr key={l.user_id} className={cn('hover:bg-gray-50', l.total_ventes === 0 && 'bg-amber-50/40')}>
                                     <td className="px-4 py-2.5">{l.rang}ᵉ</td>
                                     <td className="px-4 py-2.5 font-medium text-gray-900">{l.user_name}</td>
-                                    <td className="px-4 py-2.5 text-gray-600">{l.agence_nom ?? '—'}</td>
+                                    {aDesAgences && <td className="px-4 py-2.5 text-gray-600">{l.agence_nom ?? '—'}</td>}
                                     <td className="px-4 py-2.5 text-right">{nf.format(l.total_ventes)}</td>
                                     <td className="px-4 py-2.5 text-right">
                                         <Button href={ventesUrl({ user_id: l.user_id })} variant="outline" size="sm">Détail</Button>

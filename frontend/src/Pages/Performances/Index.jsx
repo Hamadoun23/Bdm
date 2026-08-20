@@ -35,7 +35,7 @@ function RangBadge({ rang, total = 0 }) {
 
 export default function PerformancesIndex(props) {
     const {
-        filters, canFilterAgence, agencesSelect, campagnesSelect, libellePeriode,
+        filters, canFilterAgence, aDesAgences = true, agencesSelect, campagnesSelect, libellePeriode,
         vueCommerciale, canExport, exportQuery,
         stats, statsPrev, compareDelta, compareEnabled, typesCartes,
         topCommerciauxChart, ventesParAgenceChart, campagneRefNom, primeMeilleurVendeur,
@@ -168,7 +168,7 @@ export default function PerformancesIndex(props) {
                 <>
                     <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <StatCard label={`Total ${libelle.toLowerCase()}`} value={nf.format(totalVentes)} sub={compareEnabled && statsPrev ? `Avant : ${nf.format(statsPrev.total_ventes)}` : undefined} tone="orange" />
-                        {typesCartes.map((tc) => (
+                        {typesCartes.length > 1 && typesCartes.map((tc) => (
                             <StatCard key={tc.id} label={tc.code} value={stats.par_type?.[tc.id] ?? 0} tone="gray" />
                         ))}
                     </div>
@@ -192,19 +192,21 @@ export default function PerformancesIndex(props) {
                                     />
                                 </CardBody>
                             </Card>
-                            <Card>
-                                <CardHeader><CardTitle>Répartition — part des agences</CardTitle></CardHeader>
-                                <CardBody style={{ height: 280 }}>
-                                    <Doughnut
-                                        data={{
-                                            labels: ventesParAgenceChart.map((r) => r.label),
-                                            datasets: [{ data: ventesParAgenceChart.map((r) => r.ventes), backgroundColor: ventesParAgenceChart.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 1, borderColor: '#fff' }],
-                                        }}
-                                        options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
-                                    />
-                                </CardBody>
-                            </Card>
-                            {!estEnrolement && (
+                            {aDesAgences && (
+                                <Card>
+                                    <CardHeader><CardTitle>Répartition — part des agences</CardTitle></CardHeader>
+                                    <CardBody style={{ height: 280 }}>
+                                        <Doughnut
+                                            data={{
+                                                labels: ventesParAgenceChart.map((r) => r.label),
+                                                datasets: [{ data: ventesParAgenceChart.map((r) => r.ventes), backgroundColor: ventesParAgenceChart.map((_, i) => PALETTE[i % PALETTE.length]), borderWidth: 1, borderColor: '#fff' }],
+                                            }}
+                                            options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }}
+                                        />
+                                    </CardBody>
+                                </Card>
+                            )}
+                            {!estEnrolement && typesCartes.length > 1 && (
                                 <Card>
                                     <CardHeader><CardTitle>Ventes par type de carte</CardTitle></CardHeader>
                                     <CardBody style={{ height: 280 }}>
@@ -297,6 +299,7 @@ export default function PerformancesIndex(props) {
 
             {!vueCommerciale && (
                 <>
+                    {aDesAgences && (
                     <Card className="mt-4 overflow-hidden">
                         <CardHeader><CardTitle>Classement des agences</CardTitle></CardHeader>
                         <table className="w-full text-left text-sm">
@@ -324,8 +327,9 @@ export default function PerformancesIndex(props) {
                             </tbody>
                         </table>
                     </Card>
+                    )}
 
-                    {!estEnrolement && (
+                    {!estEnrolement && classementTypesCartes.length > 1 && (
                         <Card className="mt-4 overflow-hidden">
                             <CardHeader><CardTitle>Classement des types de cartes</CardTitle></CardHeader>
                             <table className="w-full text-left text-sm">

@@ -1,5 +1,5 @@
 """
-Vues du socle : connexion, déconnexion, manifeste PWA.
+Vues du socle : connexion, déconnexion, choix du client, manifeste PWA.
 
 Portage de App\\Http\\Controllers\\Auth\\AuthenticatedSessionController et de la
 route `pwa.manifest` de routes/web.php.
@@ -24,8 +24,9 @@ from .auth_backend import (
     compte_desactive,
 )
 from .decorators import http_methods
-from .middleware import deposer_erreurs
+from .middleware import deposer_erreurs, deposer_flash
 from .models import UserLoginLog
+from .partenaires import definir_partenaire, partenaire_courant, partenaires_accessibles
 
 BACKEND_AUTH = "core.auth_backend.LaravelBcryptBackend"
 
@@ -94,7 +95,13 @@ def _login_store(request):
     )
 
     suivante = request.session.pop("url_demandee", None)
-    return redirect(suivante or "/dashboard")
+    if suivante:
+        return redirect(suivante)
+    # Un compte qui pilote plusieurs clients de GDA choisit d'abord lequel il
+    # consulte ; le tableau de bord n'aurait sinon aucun périmètre à afficher.
+    if user.choisit_son_partenaire:
+        return redirect("/choix-client")
+    return redirect("/dashboard")
 
 
 @csrf_protect
@@ -108,6 +115,60 @@ def logout_store(request):
 @http_methods("GET", "HEAD")
 def racine(request):
     return redirect("/dashboard" if request.user.is_authenticated else "/login")
+
+
+@csrf_protect
+@http_methods("GET", "HEAD", "POST")
+def choix_client(request):
+    """
+    Écran de sélection du client de GDA — BDM, UBA…
+
+    Il s'affiche à la connexion des comptes d'administration et de direction,
+    et reste accessible en permanence pour basculer d'un client à l'autre.
+    Les commerciaux n'y ont rien à faire : leur périmètre est celui de leur
+    compte.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return redirect("/login")
+    if not user.choisit_son_partenaire:
+        return redirect("/dashboard")
+
+    accessibles = partenaires_accessibles(user)
+
+    if request.method == "POST":
+        demande = request.POST.get("partenaire_id")
+        choisi = next(
+            (p for p in accessibles if str(p.id) == str(demande)), None
+        )
+        if choisi is None:
+            deposer_erreurs(request, partenaire_id="Client inconnu ou indisponible.")
+            return redirect("/choix-client")
+        definir_partenaire(request, choisi)
+        deposer_flash(request, success=f"Client sélectionné : {choisi.nom}.")
+        return redirect("/dashboard")
+
+    courant = partenaire_courant(request)
+    return render(
+        request,
+        "Partenaires/Choix",
+        {
+            "partenaires": [
+                {
+                    "id": p.id,
+                    "code": p.code,
+                    "nom": p.nom,
+                    "nom_complet": p.nom_complet,
+                    "organisation": p.organisation,
+                    "campagnes_actives": p.campagnes.filter(actif=True).count(),
+                    "commerciaux": p.utilisateurs.filter(actif=True).count(),
+                    "agences": p.agences.count() if p.a_des_agences else 0,
+                }
+                for p in accessibles
+            ],
+            "courantId": courant.id if courant else None,
+        },
+    )
 
 
 @http_methods("GET", "HEAD")

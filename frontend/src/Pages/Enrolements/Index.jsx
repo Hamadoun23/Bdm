@@ -5,7 +5,7 @@ import { Card } from '@/Components/ui/Card';
 import Button from '@/Components/ui/Button';
 import Pagination from '@/Components/ui/Pagination';
 
-export default function EnrolementsIndex({ enrolements, canManage, canSeeCommercial }) {
+export default function EnrolementsIndex({ enrolements, canManage, canSeeCommercial, aDesAgences = true }) {
     function destroy(e) {
         if (confirm('Supprimer cet enrôlement ?')) {
             router.delete(route('enrolements.destroy', e.id));
@@ -38,7 +38,7 @@ export default function EnrolementsIndex({ enrolements, canManage, canSeeCommerc
                                 {canSeeCommercial && (
                                     <>
                                         <th className="px-5 py-3 font-medium">Commercial</th>
-                                        <th className="px-5 py-3 font-medium">Agence</th>
+                                        {aDesAgences && <th className="px-5 py-3 font-medium">Agence</th>}
                                     </>
                                 )}
                                 {canManage && <th className="px-5 py-3 text-right font-medium">Actions</th>}
@@ -54,7 +54,7 @@ export default function EnrolementsIndex({ enrolements, canManage, canSeeCommerc
                                     {canSeeCommercial && (
                                         <>
                                             <td className="px-5 py-3 text-gray-600">{e.commercial}</td>
-                                            <td className="px-5 py-3 text-gray-600">{e.agence}</td>
+                                            {aDesAgences && <td className="px-5 py-3 text-gray-600">{e.agence}</td>}
                                         </>
                                     )}
                                     {canManage && (

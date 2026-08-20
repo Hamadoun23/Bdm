@@ -24,6 +24,7 @@ from core.models import Agence, Role, TypeCarte, User
 from core.pagination import paginer
 from core.php import nombre_format, tableau
 from terrain.models import Client, EnrolementClient, TelephoniqueRapport, Vente
+from core.partenaires import filtrer_campagnes, filtrer_saisies, partenaire_courant
 from terrain.services import libelle_stats
 
 from . import services
@@ -45,6 +46,16 @@ def _fin_jour(jour):
 
 def _entier(valeur):
     return int(valeur) if valeur not in (None, "") else None
+
+
+def _campagne_du_perimetre(request, campagne_id):
+    """Une campagne du client courant, 404 sinon."""
+    from django.shortcuts import get_object_or_404
+
+    return get_object_or_404(
+        filtrer_campagnes(Campagne.objects.all(), partenaire_courant(request)),
+        pk=campagne_id,
+    )
 
 
 def _filtres_synthese(request, campagne):
@@ -83,7 +94,10 @@ def _filtres_synthese(request, campagne):
 @http_methods("GET", "HEAD")
 def index(request):
     Campagne.sync_statuts()
-    campagnes = Campagne.objects.order_by("-date_debut", "-id")
+    partenaire = partenaire_courant(request)
+    campagnes = filtrer_campagnes(
+        Campagne.objects.order_by("-date_debut", "-id"), partenaire
+    )
 
     def nb_lignes(campagne):
         modele = (
@@ -95,7 +109,9 @@ def index(request):
         request,
         "Rapports/Index",
         {
-            "libelleStatsCampagne": libelle_stats(None),
+            "libelleStatsCampagne": libelle_stats(
+                None, None, partenaire.id if partenaire else None
+            ),
             "isAdmin": request.user.is_admin,
             "campagnes": [
                 {
@@ -168,8 +184,13 @@ def cumul(request):
         return redirect("/rapports")
 
     Campagne.sync_statuts()
+    # Le filtre par partenaire fait aussi office de contrôle d'accès : une
+    # campagne d'un autre client tombe hors du compte et la sélection est
+    # rejetée, plutôt que d'être cumulée en silence.
     campagnes = list(
-        Campagne.objects.filter(id__in=ids).order_by("-date_debut", "-id")
+        filtrer_campagnes(
+            Campagne.objects.filter(id__in=ids), partenaire_courant(request)
+        ).order_by("-date_debut", "-id")
     )
     if len(campagnes) != len(ids):
         deposer_flash(request, warning="Sélection de campagnes invalide.")
@@ -268,6 +289,8 @@ def cumul(request):
             "nbClientsDistincts": len(clients),
             "nbCommerciauxAvecVentes": len(par_commercial),
             "nbAgencesAvecVentes": sum(1 for l in par_agence if l["agence_id"] is not None),
+            # Vrai dès qu'une des campagnes cumulées porte un réseau d'agences.
+            "aDesAgences": any(c.agences_perimetre() for c in campagnes),
             "typesCarteKpi": types_kpi,
             "chartTypes": [
                 {"code": t["code"], "total_ventes": t["total"]} for t in types_kpi
@@ -355,7 +378,7 @@ def cumul(request):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def campagne_ventes(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
     est_enrolement = campagne.type == TypeCampagne.ENROLEMENT_APP
     debut, fin, agence_id, user_id = _filtres_synthese(request, campagne)
     type_carte_id = None if est_enrolement else _entier(request.GET.get("type_carte_id"))
@@ -463,7 +486,7 @@ def campagne_ventes(request, campagne):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def campagne_clients(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
 
     if campagne.type == TypeCampagne.ENROLEMENT_APP:
         enrolements = (
@@ -523,7 +546,7 @@ def campagne_clients(request, campagne):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def campagne_synthese(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
     Campagne.sync_statuts()
 
     debut, fin, agence_id, user_id = _filtres_synthese(request, campagne)
@@ -626,7 +649,7 @@ def _dates_reporting(request, campagne):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def campagne_reporting_telephonique(request, campagne):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
     Campagne.sync_statuts()
 
     debut, fin = _dates_reporting(request, campagne)
@@ -726,7 +749,7 @@ def _pourcentage_affiche(valeur_base, valeur_calculee):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def campagne_reporting_telephonique_show(request, campagne, telephoniqueRapport):
-    campagne = get_object_or_404(Campagne, pk=campagne)
+    campagne = _campagne_du_perimetre(request, campagne)
     rapport = get_object_or_404(
         TelephoniqueRapport.objects.select_related("user__agence", "campagne"),
         pk=telephoniqueRapport,
@@ -825,9 +848,12 @@ def _rapports_telephoniques_filtres(request):
     (fiches rattachées + orphelines) ; sinon on filtre à plat et on borne aux
     campagnes de vente de référence.
     """
+    partenaire = partenaire_courant(request)
     campagne_id = request.GET.get("campagne_id")
     if campagne_id:
-        campagne = Campagne.objects.filter(pk=campagne_id).first()
+        campagne = filtrer_campagnes(
+            Campagne.objects.filter(pk=campagne_id), partenaire
+        ).first()
         if campagne is None:
             return TelephoniqueRapport.objects.none()
         du = request.GET.get("date_debut")
@@ -838,7 +864,7 @@ def _rapports_telephoniques_filtres(request):
             campagne, debut, fin, None, _entier(request.GET.get("user_id"))
         )
 
-    qs = TelephoniqueRapport.objects.all()
+    qs = filtrer_saisies(TelephoniqueRapport.objects.all(), partenaire)
     if request.GET.get("user_id"):
         qs = qs.filter(user_id=int(request.GET["user_id"]))
     if request.GET.get("date_debut"):
@@ -848,7 +874,9 @@ def _rapports_telephoniques_filtres(request):
 
     from terrain.services import restreindre_aux_campagnes_vente
 
-    return restreindre_aux_campagnes_vente(qs, None)
+    return restreindre_aux_campagnes_vente(
+        qs, None, partenaire.id if partenaire else None
+    )
 
 
 @role_required(Role.ADMIN)
@@ -872,7 +900,11 @@ def telephonique_admin_index(request):
             # Le libellé de périmètre n'a de sens que sans campagne explicite.
             "libelleStatsCampagne": None
             if request.GET.get("campagne_id")
-            else libelle_stats(None, TypeCampagne.VENTE_CARTE),
+            else libelle_stats(
+                None,
+                TypeCampagne.VENTE_CARTE,
+                (partenaire_courant(request).id if partenaire_courant(request) else None),
+            ),
             "telephoniques": [
                 {
                     "id": t.id,

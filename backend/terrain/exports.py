@@ -25,6 +25,7 @@ from core.exports.tableur import (
 )
 from core.models import Role
 from core.php import nombre_format
+from core.partenaires import filtrer_saisies, partenaire_courant
 
 from . import services
 from .models import Client, TelephoniqueRapport, Vente
@@ -56,16 +57,22 @@ def _date_longue():
 @http_methods("GET", "HEAD")
 def ventes_export_excel(request):
     user = request.user
-    ventes = Vente.objects.select_related("client", "agence", "user", "type_carte", "campagne")
+    partenaire = partenaire_courant(request)
+    ventes = filtrer_saisies(
+        Vente.objects.select_related(
+            "client", "agence", "user", "type_carte", "campagne"
+        ),
+        partenaire,
+    )
 
     agence_id = None
     if user.is_commercial:
         ventes = ventes.filter(user_id=user.id)
         agence_id = int(user.agence_id) if user.agence_id else None
 
-    ventes = services.restreindre_aux_campagnes_vente(ventes, agence_id).order_by(
-        "-created_at", "-id"
-    )
+    ventes = services.restreindre_aux_campagnes_vente(
+        ventes, agence_id, partenaire.id if partenaire else None
+    ).order_by("-created_at", "-id")
 
     # Le commercial ne voit pas les colonnes qui désignent d'autres vendeurs.
     avec_commercial = user.is_admin or user.is_direction
@@ -174,6 +181,7 @@ def telephonique_export_excel(request):
                 user_id=user.id
             ),
             agence_id,
+            user.partenaire_id,
         ).order_by("-date_rapport", "-id")
     )
 
