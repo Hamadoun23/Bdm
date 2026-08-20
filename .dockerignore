@@ -28,8 +28,12 @@ backend/.env
 backend/.env.*
 !backend/.env.*.example
 
-# Documents métier et outillage hors exécution
+# Documents métier : listes nominatives et conventions, hors de l'image.
 docs
-scripts
+
+# `scripts/` reste embarqué : la procédure de bascule et l'installation d'un
+# client se jouent depuis le conteneur, sur le serveur. Les en exclure oblige
+# à un `docker cp` au pire moment.
+
 .vscode
 .idea
