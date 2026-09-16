@@ -43,7 +43,15 @@ import secrets
 import sys
 from datetime import date, datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+#: En local, scripts/ et backend/ sont deux dossiers frères du dépôt. Dans le
+#: conteneur (COPY backend/ . dans backend/Dockerfile), le contenu de backend/
+#: est copié à la racine /app — scripts/ y est un sous-dossier, et « backend »
+#: n'existe pas comme tel. On teste les deux dispositions.
+_ICI = os.path.dirname(__file__)
+_BACKEND = os.path.join(_ICI, "..", "backend")
+if not os.path.isdir(_BACKEND):
+    _BACKEND = os.path.join(_ICI, "..")
+sys.path.insert(0, _BACKEND)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 import django  # noqa: E402

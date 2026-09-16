@@ -27,7 +27,14 @@ import os
 import sys
 from datetime import date
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+#: cf. preparer_campagne_bdm_sept2026.py : layout différente en local
+#: (scripts/ et backend/ frères) et dans le conteneur (backend/ copié à la
+#: racine /app, scripts/ en sous-dossier).
+_ICI = os.path.dirname(__file__)
+_BACKEND = os.path.join(_ICI, "..", "backend")
+if not os.path.isdir(_BACKEND):
+    _BACKEND = os.path.join(_ICI, "..")
+sys.path.insert(0, _BACKEND)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

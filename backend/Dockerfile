@@ -30,6 +30,12 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 COPY backend/ .
 COPY --from=frontend /build/dist /app/../frontend/dist
 
+# scripts/ est exclu du .dockerignore depuis 607ee13 (« embarque scripts/ dans
+# l'image du backend ») mais aucune ligne ne le copiait encore : la procédure
+# de bascule et l'installation d'un client se jouent depuis le conteneur, sur
+# le serveur, et exigeaient jusqu'ici un `docker cp` manuel avant chaque usage.
+COPY scripts/ /app/scripts/
+
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
