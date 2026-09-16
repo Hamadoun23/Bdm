@@ -682,12 +682,20 @@ def commercial_client_destroy(request, client):
 
 
 def _campagne_du_commercial(user):
-    """Première campagne active du périmètre où le commercial est engagé."""
+    """
+    Campagne pour laquelle ce commercial voit et signe son contrat.
+
+    D'abord la campagne en cours où il est engagé ; à défaut, la prochaine
+    campagne programmée où il est engagé et dont le contrat est déjà publié —
+    pour qu'il puisse le consulter et le signer avant le démarrage, sans
+    attendre que la campagne passe « en cours ».
+    """
     Campagne.sync_statuts()
     for campagne in Campagne.actives_pour_commercial(user):
         if campagne.est_engage_commercial(user.id):
             return campagne
-    return None
+    a_venir = Campagne.programmees_pour_commercial(user)
+    return a_venir[0] if a_venir else None
 
 
 @role_required(Role.COMMERCIAL, Role.COMMERCIAL_TELEPHONIQUE)
@@ -731,6 +739,9 @@ def contrat_show(request):
                 "date_fin": campagne.date_fin.strftime("%d/%m/%Y"),
                 "contrat_publie_at": bool(campagne.contrat_publie_at),
                 "aide_hebdo_active": campagne.aide_hebdo_active,
+                # La campagne n'a pas encore démarré : le commercial peut
+                # signer par avance (cf. _campagne_du_commercial).
+                "a_venir": campagne.date_debut > date.today(),
             },
             "user": {
                 "adresse_contrat": user.adresse_contrat,

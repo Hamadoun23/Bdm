@@ -1,7 +1,7 @@
 import { Head } from '@inertiajs/react';
 import {
     CreditCard, TrendingUp, Megaphone, Trophy, Phone, ArrowRight, CheckCircle2,
-    ShieldCheck, FileBarChart, Smartphone,
+    ShieldCheck, FileBarChart, Smartphone, BellRing,
 } from 'lucide-react';
 import AppLayout from '@/Layouts/AppLayout';
 import { Card, CardBody } from '@/Components/ui/Card';
@@ -233,11 +233,38 @@ function DashboardAdmin(props) {
     );
 }
 
+function CampagneAVenirBanner({ campagneAVenir }) {
+    if (!campagneAVenir) return null;
+    const dejaRepondu = campagneAVenir.contrat_statut !== 'en_attente';
+
+    return (
+        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex items-start gap-2">
+                <BellRing size={16} className="mt-0.5 shrink-0" />
+                <span>
+                    <strong>Nouvelle campagne à venir</strong> — « {campagneAVenir.nom} » démarre le{' '}
+                    {campagneAVenir.date_debut}.{' '}
+                    {dejaRepondu
+                        ? 'Votre réponse au contrat est déjà enregistrée.'
+                        : 'Consultez et signez votre contrat dès maintenant.'}
+                </span>
+            </span>
+            {!dejaRepondu && (
+                <Button href={route('commercial.contrat')} size="sm" className="shrink-0">
+                    Voir mon contrat
+                </Button>
+            )}
+        </div>
+    );
+}
+
 function DashboardCommercial(props) {
-    const { peutVendre, peutEnroler, vente, enrolement } = props;
+    const { peutVendre, peutEnroler, vente, enrolement, campagneAVenir } = props;
 
     return (
         <>
+            <CampagneAVenirBanner campagneAVenir={campagneAVenir} />
+
             {!peutVendre && !peutEnroler && (
                 <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     <strong>Aucune campagne active.</strong> Aucune campagne ouverte pour votre agence en ce moment, ou
@@ -319,10 +346,12 @@ function DashboardCommercial(props) {
 }
 
 function DashboardTelephonique(props) {
-    const { campagneActive, signataire } = props;
+    const { campagneActive, signataire, campagneAVenir } = props;
 
     return (
         <>
+            <CampagneAVenirBanner campagneAVenir={campagneAVenir} />
+
             <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                 Vous saisissez le <strong>reporting d'appels</strong> (fiche journalière). Le{' '}
                 <strong>contrat de prestation</strong> et les éventuelles aides restent disponibles si vous êtes

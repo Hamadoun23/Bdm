@@ -389,6 +389,23 @@ class Campagne(LaravelModel):
         return Campagne.objects.none()
 
     @staticmethod
+    def programmees_pour_commercial(user):
+        """
+        Campagnes à venir où ce commercial est engagé et dont le contrat est
+        déjà publié — pour l'avertir et lui permettre de le signer avant le
+        démarrage, plutôt que d'attendre que la campagne passe « en cours ».
+
+        Appelant responsable de `sync_statuts()` au préalable, comme pour
+        `actives_pour_commercial`.
+        """
+        qs = Campagne.objects.filter(
+            statut=StatutCampagne.PROGRAMMEE, contrat_publie_at__isnull=False
+        ).order_by("date_debut")
+        if user.partenaire_id:
+            qs = qs.filter(partenaire_id=user.partenaire_id)
+        return [c for c in qs if c.est_engage_commercial(user.id)]
+
+    @staticmethod
     def campagnes_pour_stats(agence_id: int | None = None, partenaire_id: int | None = None):
         """
         Campagnes servant de référence aux statistiques : les campagnes en cours

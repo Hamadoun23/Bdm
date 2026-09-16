@@ -27,7 +27,14 @@ export default function ContratShow({ campagne, user, reponse, verrou5j, peutRep
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     Le contrat n'a pas encore été publié. Revenez plus tard ou contactez l'administration.
                 </div>
-            ) : echeance && (
+            ) : campagne.a_venir && (
+                <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    Cette campagne démarre le <strong>{campagne.date_debut}</strong> — vous pouvez consulter et
+                    signer votre contrat dès maintenant, avant son ouverture.
+                </div>
+            )}
+
+            {campagne.contrat_publie_at && echeance && (
                 <p className="mb-4 text-sm text-gray-500">
                     Date limite pour accepter ou refuser : <strong>{echeance}</strong> (5 jours après publication).
                 </p>
