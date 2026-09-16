@@ -265,7 +265,7 @@ function DashboardCommercial(props) {
         <>
             <CampagneAVenirBanner campagneAVenir={campagneAVenir} />
 
-            {!peutVendre && !peutEnroler && (
+            {!peutVendre && !peutEnroler && !campagneAVenir && (
                 <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     <strong>Aucune campagne active.</strong> Aucune campagne ouverte pour votre agence en ce moment, ou
                     les campagnes concernées sont terminées / arrêtées.
@@ -374,9 +374,11 @@ function DashboardTelephonique(props) {
                     </CardBody>
                 </Card>
             ) : (
-                <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    Aucune campagne active pour votre agence pour le moment.
-                </div>
+                !campagneAVenir && (
+                    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Aucune campagne active pour votre agence pour le moment.
+                    </div>
+                )
             )}
 
             <div className="flex flex-wrap gap-2">
