@@ -1,4 +1,5 @@
 import { GrainGradient } from '@paper-design/shaders-react';
+import { InstallAppToast } from '@/Components/InstallApp';
 
 /**
  * Coquille commune aux écrans d'authentification : dégradé animé plein écran
@@ -82,6 +83,8 @@ export default function AuthCard({ title, subtitle, children }) {
                     </div>
                 </div>
             </div>
+
+            <InstallAppToast />
         </div>
     );
 }

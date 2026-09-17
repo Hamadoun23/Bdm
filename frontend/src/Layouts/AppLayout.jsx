@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { ArrowLeft, Menu, Search, Bell, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import Sidebar from '@/Components/Sidebar';
-import { InstallAppButton } from '@/Components/InstallApp';
+import { InstallAppButton, InstallAppToast } from '@/Components/InstallApp';
 import { cn } from '@/lib/cn';
 
 const alertConfig = {
@@ -87,6 +87,8 @@ export default function AppLayout({ title, subtitle, actions, children }) {
                     {children}
                 </main>
             </div>
+
+            <InstallAppToast />
         </div>
     );
 }

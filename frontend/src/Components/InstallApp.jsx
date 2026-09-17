@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Download, X } from 'lucide-react';
+import { Download } from 'lucide-react';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import useInstallPrompt from '@/hooks/useInstallPrompt';
 
-const CLE_BANNIERE_MASQUEE = 'bdm_install_banniere_masquee';
+//: Un seul indicateur pour le toast et le bouton d'en-tête : une fois la
+//: notification traitée (installée, refusée, ou instructions déjà vues), le
+//: bouton d'en-tête reste l'unique voie pour installer plus tard.
+const CLE_NOTIF_MASQUEE = 'bdm_install_notif_masquee';
 
 function InstructionsInstallation({ open, onClose, iOS }) {
     return (
@@ -41,10 +44,22 @@ function InstructionsInstallation({ open, onClose, iOS }) {
     );
 }
 
+function masquerNotif() {
+    try {
+        localStorage.setItem(CLE_NOTIF_MASQUEE, '1');
+    } catch {
+        // Stockage indisponible (navigation privée...) : la notification
+        // réapparaîtra à la prochaine visite, sans conséquence grave.
+    }
+}
+
 /**
  * Bouton compact pour l'en-tête : toujours accessible, discret, disparaît une
  * fois l'application installée. Sur un navigateur sans voie d'installation
  * fiable (Firefox desktop, par ex.), il n'y a rien de vrai à proposer.
+ *
+ * C'est le seul moyen d'installer une fois que la notification (ci-dessous) a
+ * été traitée — elle ne revient pas nager l'utilisateur à chaque visite.
  */
 export function InstallAppButton() {
     const { installee, peutInstallerNatif, iOS, installer } = useInstallPrompt();
@@ -75,15 +90,18 @@ export function InstallAppButton() {
 }
 
 /**
- * Bannière plus visible sur le dashboard, refermable (le choix reste en
- * mémoire sur cet appareil). Même logique de disponibilité que le bouton.
+ * Notification flottante (façon pop-up mobile), posée sur l'écran de
+ * connexion et sur les pages une fois connecté. Vue une seule fois par
+ * appareil : « Installer » lance le geste natif (ou les instructions iOS),
+ * « Non merci » la masque définitivement — pour l'utilisateur qui a déjà
+ * l'application installée ou ne la veut pas.
  */
-export function InstallAppBanner() {
+export function InstallAppToast() {
     const { installee, peutInstallerNatif, iOS, installer } = useInstallPrompt();
     const [showInstructions, setShowInstructions] = useState(false);
     const [masquee, setMasquee] = useState(() => {
         try {
-            return localStorage.getItem(CLE_BANNIERE_MASQUEE) === '1';
+            return localStorage.getItem(CLE_NOTIF_MASQUEE) === '1';
         } catch {
             return false;
         }
@@ -91,37 +109,44 @@ export function InstallAppBanner() {
 
     if (installee || masquee || (!peutInstallerNatif && !iOS)) return null;
 
-    function fermer() {
+    function nonMerci() {
         setMasquee(true);
-        try {
-            localStorage.setItem(CLE_BANNIERE_MASQUEE, '1');
-        } catch {
-            // Stockage indisponible (navigation privée...) : la bannière
-            // réapparaîtra à la prochaine visite, sans conséquence grave.
-        }
+        masquerNotif();
     }
 
-    async function onClick() {
+    async function installerMaintenant() {
         if (peutInstallerNatif) {
             await installer();
-            return;
+        } else {
+            setShowInstructions(true);
         }
-        setShowInstructions(true);
+        // Vue et traitée : le bouton d'en-tête reste disponible si besoin.
+        setMasquee(true);
+        masquerNotif();
     }
 
     return (
-        <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
-            <span className="flex items-center gap-2">
-                <Download size={16} className="shrink-0" />
-                Installez l'application sur votre écran d'accueil pour un accès plus rapide.
-            </span>
-            <div className="flex shrink-0 items-center gap-2">
-                <Button onClick={onClick} size="sm">Installer</Button>
-                <button onClick={fermer} title="Ne plus afficher" className="text-orange-400 hover:text-orange-600">
-                    <X size={16} />
-                </button>
+        <>
+            <div
+                className="fixed inset-x-4 bottom-4 z-[60] mx-auto flex max-w-sm items-start gap-3 rounded-2xl bg-white p-4 shadow-[0_10px_40px_-10px_rgba(56,20,25,0.35)] ring-1 ring-gray-200 sm:inset-x-auto sm:right-6 sm:bottom-6"
+                style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+                role="dialog"
+                aria-label="Installer l'application"
+            >
+                <img src="/logo/iconesgda.png" alt="" className="h-10 w-10 shrink-0 rounded-xl object-contain" />
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900">Installer l'application ?</p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                        Ajoutez-la à votre écran d'accueil pour un accès plus rapide, sans passer par le
+                        navigateur.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                        <Button onClick={installerMaintenant} size="sm">Installer</Button>
+                        <Button onClick={nonMerci} variant="ghost" size="sm">Non merci</Button>
+                    </div>
+                </div>
             </div>
             <InstructionsInstallation open={showInstructions} onClose={() => setShowInstructions(false)} iOS={iOS} />
-        </div>
+        </>
     );
 }

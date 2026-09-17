@@ -9,7 +9,6 @@ import Badge from '@/Components/ui/Badge';
 import Button from '@/Components/ui/Button';
 import Sparkline from '@/Components/ui/Sparkline';
 import Gauge from '@/Components/ui/Gauge';
-import { InstallAppBanner } from '@/Components/InstallApp';
 import { cn } from '@/lib/cn';
 
 function hasData(values) {
@@ -415,7 +414,6 @@ export default function Dashboard(props) {
     return (
         <AppLayout title={variant === 'admin' || variant === 'telephonique' ? titles[variant] : undefined}>
             <Head title="Dashboard" />
-            {variant !== 'guest' && <InstallAppBanner />}
             {variant === 'admin' && <DashboardAdmin {...props} />}
             {variant === 'commercial' && <DashboardCommercial {...props} />}
             {variant === 'telephonique' && <DashboardTelephonique {...props} />}
