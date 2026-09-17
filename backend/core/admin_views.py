@@ -412,16 +412,12 @@ def users_create(request):
 
 def _corps(request):
     """
-    Corps de la requête, que la méthode soit POST ou PUT/PATCH.
-
-    Le frontend Inertia envoie les mises à jour en PUT ; Django ne remplit
-    `request.POST` que pour les POST.
+    `CorpsJsonMiddleware` remplit déjà `request.POST` pour tout corps JSON,
+    quelle que soit la méthode (POST/PUT/PATCH/DELETE) — un second passage ici
+    via `QueryDict(request.body)` reparserait à tort le JSON brut comme une
+    chaîne de requête et viderait tous les champs sur les mises à jour PUT.
     """
-    if request.method == "POST":
-        return request.POST
-    from django.http import QueryDict
-
-    return QueryDict(request.body)
+    return request.POST
 
 
 def _valider_user(request, user=None):

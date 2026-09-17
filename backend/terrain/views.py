@@ -52,11 +52,13 @@ def _nom(user):
 
 
 def _corps(request):
-    if request.method == "POST":
-        return request.POST
-    from django.http import QueryDict
-
-    return QueryDict(request.body)
+    """
+    `CorpsJsonMiddleware` remplit déjà `request.POST` pour tout corps JSON,
+    quelle que soit la méthode (POST/PUT/PATCH/DELETE) — un second passage ici
+    via `QueryDict(request.body)` reparserait à tort le JSON brut comme une
+    chaîne de requête et viderait tous les champs sur les mises à jour PUT.
+    """
+    return request.POST
 
 
 # ---------------------------------------------------------------------------
