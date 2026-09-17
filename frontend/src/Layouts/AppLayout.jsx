@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { ArrowLeft, Menu, Search, Bell, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import Sidebar from '@/Components/Sidebar';
+import { InstallAppButton } from '@/Components/InstallApp';
 import { cn } from '@/lib/cn';
 
 const alertConfig = {
@@ -64,6 +65,8 @@ export default function AppLayout({ title, subtitle, actions, children }) {
 
                     <div className="flex items-center gap-2">
                         {actions}
+                        {/* Visible sur mobile aussi : c'est là que l'installation compte le plus. */}
+                        <InstallAppButton />
                         <div className="hidden items-center gap-2 sm:flex">
                             <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2 text-sm text-gray-400 shadow-sm ring-1 ring-gray-200">
                                 <Search size={15} />
