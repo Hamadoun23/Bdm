@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import AppLayout from '@/Layouts/AppLayout';
@@ -9,6 +9,25 @@ import { Input } from '@/Components/ui/Input';
 import ContratDocument from './ContratDocument';
 
 export default function ContratShow({ campagne, user, reponse, verrou5j, peutRepondre, echeance, document, versements }) {
+    // La zone des articles défile sur elle-même (long contrat) ; les boutons
+    // Accepter/Refuser sont eux dans le flux normal de la page, en dessous.
+    // Sur mobile, arriver au bout du défilement interne ne fait pas défiler
+    // la page toute seule : beaucoup d'utilisateurs restent bloqués en pensant
+    // avoir tout lu, sans voir qu'il faut encore faire défiler la page. On
+    // enchaîne automatiquement sur le défilement de la page une seule fois,
+    // dès que l'utilisateur atteint la fin des articles.
+    const finLectureAtteinte = useRef(false);
+    const actionsRef = useRef(null);
+
+    function onScrollArticles(e) {
+        if (finLectureAtteinte.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        if (scrollHeight - (scrollTop + clientHeight) < 24) {
+            finLectureAtteinte.current = true;
+            actionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+    }
+
     function accepter() {
         router.post(route('commercial.contrat.accepter'));
     }
@@ -36,7 +55,7 @@ export default function ContratShow({ campagne, user, reponse, verrou5j, peutRep
 
             {campagne.contrat_publie_at && echeance && (
                 <p className="mb-4 text-sm text-gray-500">
-                    Date limite pour accepter ou refuser : <strong>{echeance}</strong> (5 jours après publication).
+                    Date limite pour accepter ou refuser : <strong>{echeance}</strong> (10 jours après publication).
                 </p>
             )}
 
@@ -51,12 +70,12 @@ export default function ContratShow({ campagne, user, reponse, verrou5j, peutRep
             </Card>
 
             <Card className={`mb-4 ${verrou5j && reponse.statut === 'en_attente' ? 'opacity-50' : ''}`}>
-                <CardBody className="max-h-[32rem] overflow-y-auto">
+                <CardBody className="max-h-[32rem] overflow-y-auto" onScroll={onScrollArticles}>
                     <ContratDocument d={document} />
                 </CardBody>
             </Card>
 
-            <div className="mb-6">
+            <div ref={actionsRef} className="mb-6">
                 {reponse.statut === 'accepte' && (
                     <p className="mb-3 flex items-center gap-1.5 font-semibold text-green-700">
                         <CheckCircle2 size={16} /> Vous avez accepté ce contrat le {reponse.repondu_at}.
@@ -68,7 +87,7 @@ export default function ContratShow({ campagne, user, reponse, verrou5j, peutRep
                     </p>
                 )}
                 {verrou5j && reponse.statut === 'en_attente' && (
-                    <p className="mb-3 font-semibold text-gray-500">Délai de 5 jours dépassé — vous ne pouvez plus accepter ou refuser en ligne.</p>
+                    <p className="mb-3 font-semibold text-gray-500">Délai de 10 jours dépassé — vous ne pouvez plus accepter ou refuser en ligne.</p>
                 )}
 
                 {peutRepondre && (

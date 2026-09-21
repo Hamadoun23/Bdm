@@ -30,6 +30,13 @@ class TypeCampagne(models.TextChoices):
 #: Statuts posés manuellement : ils ne sont jamais recalculés à partir des dates.
 STATUTS_MANUELS = [StatutCampagne.ARRETEE, StatutCampagne.ANNULEE]
 
+#: Délai laissé à un commercial pour accepter ou refuser son contrat de
+#: prestation, à compter de la publication du contrat (ou de son engagement si
+#: celui-ci est postérieur, cf. `Campagne.contrat_delai_expire`). Porté de 5 à
+#: 10 jours le 21/09/2026 : plusieurs commerciaux avaient rejoint la campagne
+#: en retard et se retrouvaient avec un délai déjà expiré.
+DELAI_REPONSE_CONTRAT_JOURS = 10
+
 
 class Campagne(LaravelModel):
     id = models.BigAutoField(primary_key=True)
@@ -230,13 +237,25 @@ class Campagne(LaravelModel):
 
     # -- Contrat et remise ---------------------------------------------------
 
-    def contrat_delai_expire(self) -> bool:
-        """Le commercial dispose de 5 jours après publication pour répondre."""
+    def contrat_delai_expire(self, depuis=None) -> bool:
+        """
+        Le commercial dispose de `DELAI_REPONSE_CONTRAT_JOURS` pour répondre,
+        à partir de la publication du contrat — ou de son engagement si
+        celui-ci est postérieur (`ContratPrestationReponse.created_at`).
+
+        Sans ce garde-fou, un commercial ajouté à une campagne dont le contrat
+        est publié depuis plus longtemps que ce délai (renfort en cours de
+        campagne) hériterait d'un délai déjà expiré et ne pourrait jamais
+        répondre.
+        """
         if not self.contrat_publie_at:
             return False
         from datetime import datetime
 
-        return self.contrat_publie_at + timedelta(days=5) < datetime.now()
+        depart = self.contrat_publie_at
+        if depuis and depuis > depart:
+            depart = depuis
+        return depart + timedelta(days=DELAI_REPONSE_CONTRAT_JOURS) < datetime.now()
 
     def remise_sapplique_au_type(self, type_carte_id: int) -> bool:
         pourcentage = float(self.remise_pourcentage or 0)

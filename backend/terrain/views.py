@@ -17,6 +17,7 @@ from campagnes.models import (
     Campagne,
     CampagneAideVersement,
     ContratPrestationReponse,
+    DELAI_REPONSE_CONTRAT_JOURS,
     StatutReponseContrat,
     TypeCampagne,
 )
@@ -715,7 +716,7 @@ def contrat_show(request):
         defaults={"statut": StatutReponseContrat.EN_ATTENTE},
     )
 
-    verrou = bool(campagne.contrat_publie_at) and campagne.contrat_delai_expire()
+    verrou = bool(campagne.contrat_publie_at) and campagne.contrat_delai_expire(reponse.created_at)
     peut_repondre = (
         bool(campagne.contrat_publie_at)
         and not verrou
@@ -724,9 +725,12 @@ def contrat_show(request):
 
     contexte = services.donnees_contrat(campagne)
     versements = campagne.aide_versements.filter(user_id=user.id).order_by("-semaine_debut")
-    # Le commercial dispose de 5 jours après publication pour répondre.
+    # Le commercial dispose de DELAI_REPONSE_CONTRAT_JOURS après publication
+    # pour répondre — ou après son engagement, si celui-ci est postérieur
+    # (renfort en cours de campagne, cf. Campagne.contrat_delai_expire).
     echeance = (
-        campagne.contrat_publie_at + timedelta(days=5)
+        max(campagne.contrat_publie_at, reponse.created_at)
+        + timedelta(days=DELAI_REPONSE_CONTRAT_JOURS)
         if campagne.contrat_publie_at
         else None
     )
@@ -824,11 +828,14 @@ def _repondre_contrat(request, statut):
     if reponse is None:
         raise Http404
 
-    if campagne.contrat_delai_expire() or reponse.statut != StatutReponseContrat.EN_ATTENTE:
+    if (
+        campagne.contrat_delai_expire(reponse.created_at)
+        or reponse.statut != StatutReponseContrat.EN_ATTENTE
+    ):
         deposer_flash(
             request,
             error="Vous ne pouvez plus modifier votre réponse "
-            "(délai de 5 jours dépassé ou décision déjà enregistrée).",
+            f"(délai de {DELAI_REPONSE_CONTRAT_JOURS} jours dépassé ou décision déjà enregistrée).",
         )
         return redirect("/mon-contrat")
 

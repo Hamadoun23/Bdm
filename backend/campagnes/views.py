@@ -29,6 +29,7 @@ from core.validation import ErreursValidation, Validateur, booleen
 
 from . import services
 from .models import (
+    DELAI_REPONSE_CONTRAT_JOURS,
     STATUTS_MANUELS,
     Campagne,
     CampagneAction,
@@ -931,7 +932,7 @@ def republier_contrat(request, campagne):
     )
     deposer_flash(
         request,
-        success="Contrat republié — nouveau délai de 5 jours pour accepter ou refuser.",
+        success=f"Contrat republié — nouveau délai de {DELAI_REPONSE_CONTRAT_JOURS} jours pour accepter ou refuser.",
     )
     return redirect(_url_show(campagne.id, "contrat"))
 
