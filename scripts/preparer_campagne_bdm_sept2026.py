@@ -109,6 +109,11 @@ AGENCE_PAR_NOM_PDF = {
     "KOULIKORO": "Koulikoro",
     "SIKASSO 1": "SIKASSO 1",
     "KAYES 1": "Kayes 1",
+    # Renfort du 21/09/2026 (4 commerciaux supplémentaires).
+    "SOTUBA": "Sotuba",
+    "KALANBA COURA": "Kalaban coura",
+    "DRAMANE DIAKITE": "Dramane DIAKITE",
+    "YIRIMADIO": "Yirimadio",
 }
 
 #: (nom, prénom, téléphone, clé d'agence PDF). Extrait de
@@ -133,13 +138,19 @@ COMMERCIAUX = [
     ("DEMBELE", "Salimata", "72189105", "KOROFINA"),
     ("THIAM", "Fatoumata", "92274352", "TOROKORO"),
     ("GAKOU", "Oumar", "79787541", "SENOU"),
-    ("DICKO", "Djeneba", "74548282", "SEMA GESCO"),
+    # Téléphone corrigé le 21/09/2026 (74548282 sur le PDF était erroné).
+    ("DICKO", "Djeneba", "74548228", "SEMA GESCO"),
     ("TOURE", "NANA ALASSANE", "73006222", "LAFIABOUGOU"),
     ("THIAM", "Mohamed Aly", "70442854", "SEGOU 2"),
     ("THERA", "Hawa", "62036940", "SAN"),
     ("SANOGO", "Fatoumata", "92330460", "KOULIKORO"),
     ("DEMBELE", "Karidiata", "60625221", "SIKASSO 1"),
     ("SISSOKO", "Djeneba", "69418521", "KAYES 1"),
+    # Renfort du 21/09/2026 (4 commerciaux supplémentaires).
+    ("DIARRA", "Djeneba", "93804215", "SOTUBA"),
+    ("SAMAKE", "Assetou", "94875294", "KALANBA COURA"),
+    ("TRAORE", "FATOUMATA A.", "71676717", "DRAMANE DIAKITE"),
+    ("SANGARE", "Dougo", "76036596", "YIRIMADIO"),
 ]
 
 CAMPAGNE = {
