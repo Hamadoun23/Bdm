@@ -114,6 +114,8 @@ AGENCE_PAR_NOM_PDF = {
     "KALANBA COURA": "Kalaban coura",
     "DRAMANE DIAKITE": "Dramane DIAKITE",
     "YIRIMADIO": "Yirimadio",
+    # Renfort du 23/09/2026.
+    "BACO-DJICORONI": "Baco Djicoroni",
 }
 
 #: (nom, prénom, téléphone, clé d'agence PDF). Extrait de
@@ -151,6 +153,10 @@ COMMERCIAUX = [
     ("SAMAKE", "Assetou", "94875294", "KALANBA COURA"),
     ("TRAORE", "FATOUMATA A.", "71676717", "DRAMANE DIAKITE"),
     ("SANGARE", "Dougo", "76036596", "YIRIMADIO"),
+    # Renfort du 23/09/2026. Ce téléphone correspond à un compte existant
+    # (id 47, créé en avril 2026 pour la Campagne Juin 2026, désactivé depuis,
+    # agence MAGNAMBOUGOU) : redéployé sur Baco Djicoroni plutôt que dupliqué.
+    ("COULIBALY", "MAMADOU BODIE", "76411856", "BACO-DJICORONI"),
 ]
 
 CAMPAGNE = {
