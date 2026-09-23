@@ -124,7 +124,8 @@ COMMERCIAUX = [
     ("THERA", "Mariam", "74082712", "NIAMANA"),
     ("CAMARA", "ALY BADRA", "73907530", "QUINZABOUGOU"),
     ("KANSAYE", "Diahara", "78522819", "MISSIRA"),
-    ("MAIGA", "Adiaratou A", "90889198", "DIBIDA"),
+    # Permutée avec SANGARE Dougo le 23/09/2026 (redéploiement demandé).
+    ("MAIGA", "Adiaratou A", "90889198", "YIRIMADIO"),
     ("COULIBALY", "Aminata", "71766277", "AZAR CENTER"),
     ("SANGARE", "Fatimata", "78754962", "SOGONIKO"),
     ("TOURE", "Mary N", "69098738", "DJICORONI-PARA"),
@@ -152,7 +153,8 @@ COMMERCIAUX = [
     ("DIARRA", "Djeneba", "93804215", "SOTUBA"),
     ("SAMAKE", "Assetou", "94875294", "KALANBA COURA"),
     ("TRAORE", "FATOUMATA A.", "71676717", "DRAMANE DIAKITE"),
-    ("SANGARE", "Dougo", "76036596", "YIRIMADIO"),
+    # Permutée avec MAIGA Adiaratou A. le 23/09/2026 (redéploiement demandé).
+    ("SANGARE", "Dougo", "76036596", "DIBIDA"),
     # Renfort du 23/09/2026. Ce téléphone correspond à un compte existant
     # (id 47, créé en avril 2026 pour la Campagne Juin 2026, désactivé depuis,
     # agence MAGNAMBOUGOU) : redéployé sur Baco Djicoroni plutôt que dupliqué.
