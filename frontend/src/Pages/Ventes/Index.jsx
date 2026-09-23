@@ -13,6 +13,8 @@ export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, c
         }
     }
 
+    const nbColonnes = 3 + (canSeeCommercial ? 1 : 0) + (aDesAgences ? 1 : 0) + (canManage ? 1 : 0);
+
     return (
         <AppLayout
             title="Historique des ventes"
@@ -40,12 +42,8 @@ export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, c
                                 <th className="px-5 py-3 font-medium">Date</th>
                                 <th className="px-5 py-3 font-medium">Client</th>
                                 <th className="px-5 py-3 font-medium">Type carte</th>
-                                {canSeeCommercial && (
-                                    <>
-                                        <th className="px-5 py-3 font-medium">Commercial</th>
-                                        {aDesAgences && <th className="px-5 py-3 font-medium">Agence</th>}
-                                    </>
-                                )}
+                                {canSeeCommercial && <th className="px-5 py-3 font-medium">Commercial</th>}
+                                {aDesAgences && <th className="px-5 py-3 font-medium">Agence</th>}
                                 {canManage && <th className="px-5 py-3 text-right font-medium">Actions</th>}
                             </tr>
                         </thead>
@@ -55,12 +53,8 @@ export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, c
                                     <td className="px-5 py-3 text-gray-600">{v.date}</td>
                                     <td className="px-5 py-3 font-medium text-gray-900">{v.client_nom}</td>
                                     <td className="px-5 py-3"><Badge tone="blue">{v.type_carte}</Badge></td>
-                                    {canSeeCommercial && (
-                                        <>
-                                            <td className="px-5 py-3 text-gray-600">{v.commercial}</td>
-                                            {aDesAgences && <td className="px-5 py-3 text-gray-600">{v.agence}</td>}
-                                        </>
-                                    )}
+                                    {canSeeCommercial && <td className="px-5 py-3 text-gray-600">{v.commercial}</td>}
+                                    {aDesAgences && <td className="px-5 py-3 text-gray-600">{v.agence}</td>}
                                     {canManage && (
                                         <td className="px-5 py-3">
                                             <div className="flex justify-end gap-1.5">
@@ -89,7 +83,7 @@ export default function VentesIndex({ ventes, libelleStatsCampagne, canManage, c
                             ))}
                             {ventes.data.length === 0 && (
                                 <tr>
-                                    <td colSpan={canSeeCommercial ? 5 : canManage ? 4 : 3} className="px-5 py-8 text-center text-gray-500">
+                                    <td colSpan={nbColonnes} className="px-5 py-8 text-center text-gray-500">
                                         Aucune vente.
                                     </td>
                                 </tr>

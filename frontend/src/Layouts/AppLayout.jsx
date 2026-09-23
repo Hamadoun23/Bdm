@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
-import { ArrowLeft, Menu, Search, Bell, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { ArrowLeft, Menu, Search, Bell, MapPin, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import Sidebar from '@/Components/Sidebar';
 import { InstallAppButton, InstallAppToast } from '@/Components/InstallApp';
+import Badge from '@/Components/ui/Badge';
 import { cn } from '@/lib/cn';
 
 const alertConfig = {
@@ -55,9 +56,19 @@ export default function AppLayout({ title, subtitle, actions, children }) {
                     )}
 
                     <div className="min-w-0 flex-1">
-                        <h1 className="truncate text-lg font-semibold text-gray-900">
-                            {title || `Bonjour, ${firstName} !`}
-                        </h1>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h1 className="truncate text-lg font-semibold text-gray-900">
+                                {title || `Bonjour, ${firstName} !`}
+                            </h1>
+                            {/* Rappel constant de l'agence du commercial connecté : les
+                                admins/direction n'ont pas d'agence propre, le badge ne
+                                s'affiche donc que pour les comptes qui en ont une. */}
+                            {auth.user?.agence_nom && (
+                                <Badge tone="orange" className="shrink-0 gap-1">
+                                    <MapPin size={11} /> {auth.user.agence_nom}
+                                </Badge>
+                            )}
+                        </div>
                         <p className="truncate text-sm text-gray-500">
                             {subtitle || 'Voici le suivi de votre activité.'}
                         </p>

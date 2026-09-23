@@ -54,6 +54,7 @@ export default function PerformancesIndex(props) {
         router.get(route('performances.index'), { du, au, agence, campagne_id: campagneId, compare: compare ? 1 : '' });
     }
 
+    const colSpanClassementCommercial = (estEnrolement ? 3 : 4) + (aDesAgences ? 1 : 0);
     const totalVentes = stats.total_ventes ?? 0;
     const showCharts = !vueCommerciale && totalVentes > 0;
     const libelle = estEnrolement ? 'Enrôlements' : 'Ventes';
@@ -238,6 +239,7 @@ export default function PerformancesIndex(props) {
                             <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-500">
                                 <th className="px-5 py-3 font-medium">Rang</th>
                                 <th className="px-5 py-3 font-medium">Commercial</th>
+                                {vueCommerciale && aDesAgences && <th className="px-5 py-3 font-medium">Agence</th>}
                                 <th className="px-5 py-3 text-right font-medium">{libelle}</th>
                                 {!vueCommerciale && <th className="px-5 py-3 text-right font-medium">Part %</th>}
                                 {!estEnrolement && <th className="px-5 py-3 font-medium">Prime (estimée)</th>}
@@ -254,23 +256,25 @@ export default function PerformancesIndex(props) {
                                                 {classementLigneTop1.user_name}
                                                 {userEstPremier && <Badge tone="neutral" className="ml-1.5">vous</Badge>}
                                             </td>
+                                            {aDesAgences && <td className="px-5 py-3 text-gray-600">{classementLigneTop1.agence_nom || '—'}</td>}
                                             <td className="px-5 py-3 text-right">{nf.format(classementLigneTop1.total_ventes)}</td>
                                             {!estEnrolement && <td className="px-5 py-3">{primeMeilleurVendeur ? `${primeMeilleurVendeur} F` : '-'}</td>}
                                         </tr>
                                     )}
                                     {ligneCommercialConnecte && !userEstPremier && (
                                         <>
-                                            <tr className="bg-gray-50"><td colSpan={estEnrolement ? 3 : 4} className="px-5 py-2 text-xs font-semibold text-gray-500">Ma position</td></tr>
+                                            <tr className="bg-gray-50"><td colSpan={colSpanClassementCommercial} className="px-5 py-2 text-xs font-semibold text-gray-500">Ma position</td></tr>
                                             <tr className="bg-blue-50/40">
                                                 <td className="px-5 py-3"><Badge>{rangLabel(ligneCommercialConnecte.rang)}</Badge></td>
                                                 <td className="px-5 py-3 font-medium text-gray-900">{ligneCommercialConnecte.user_name} <Badge tone="neutral" className="ml-1.5">vous</Badge></td>
+                                                {aDesAgences && <td className="px-5 py-3 text-gray-600">{ligneCommercialConnecte.agence_nom || '—'}</td>}
                                                 <td className="px-5 py-3 text-right">{nf.format(ligneCommercialConnecte.total_ventes)}</td>
                                                 {!estEnrolement && <td className="px-5 py-3">-</td>}
                                             </tr>
                                         </>
                                     )}
                                     {!classementLigneTop1 && !ligneCommercialConnecte && (
-                                        <tr><td colSpan={estEnrolement ? 3 : 4} className="px-5 py-8 text-center text-gray-500">Aucun classement à afficher pour cette période.</td></tr>
+                                        <tr><td colSpan={colSpanClassementCommercial} className="px-5 py-8 text-center text-gray-500">Aucun classement à afficher pour cette période.</td></tr>
                                     )}
                                 </>
                             ) : (

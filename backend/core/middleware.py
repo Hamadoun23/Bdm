@@ -276,6 +276,7 @@ class InertiaSharedDataMiddleware:
             "prenom": user.prenom,
             "role": user.role,
             "agence_id": user.agence_id,
+            "agence_nom": user.agence.nom if user.agence_id else None,
             "partenaire_id": user.partenaire_id,
             "is_admin": user.is_admin,
             "is_direction": user.is_direction,
