@@ -26,7 +26,7 @@ export default function Login({ status }) {
 
             <form onSubmit={submit} className="space-y-3">
                 <FieldBox
-                    label="Identifiant"
+                    label="Numéro de téléphone"
                     type="text"
                     autoFocus
                     autoComplete="username"
