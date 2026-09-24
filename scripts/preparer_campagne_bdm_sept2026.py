@@ -139,7 +139,6 @@ COMMERCIAUX = [
     ("DIARRA", "Assetou YALCOYE", "66986621", "AP2"),
     # Téléphone corrigé (72789105 sur le PDF) — voir la note en tête de fichier.
     ("DEMBELE", "Salimata", "72189105", "KOROFINA"),
-    ("THIAM", "Fatoumata", "92274352", "TOROKORO"),
     ("GAKOU", "Oumar", "79787541", "SENOU"),
     # Téléphone corrigé le 21/09/2026 (74548282 sur le PDF était erroné).
     ("DICKO", "Djeneba", "74548228", "SEMA GESCO"),
@@ -159,6 +158,18 @@ COMMERCIAUX = [
     # (id 47, créé en avril 2026 pour la Campagne Juin 2026, désactivé depuis,
     # agence MAGNAMBOUGOU) : redéployé sur Baco Djicoroni plutôt que dupliqué.
     ("COULIBALY", "MAMADOU BODIE", "76411856", "BACO-DJICORONI"),
+    # Renfort du 24/09/2026. Redéployée depuis SEBENIKORO.
+    ("COULIBALY", "Fatoumata", "92666022", "DRAMANE DIAKITE"),
+    # Remplace THIAM Fatoumata (désistement, cf. COMMERCIAUX_RETIRES) sur TOROKORO.
+    ("SANGARA", "KADIATOU", "77046778", "TOROKORO"),
+]
+
+#: (nom, prénom, téléphone). Commerciaux retirés de la campagne — désistement,
+#: etc. Le script les désengage (contrat + réponse supprimés du périmètre de
+#: la campagne) et désactive leur compte.
+COMMERCIAUX_RETIRES = [
+    # Désistement le 24/09/2026, remplacée par SANGARA Kadiatou sur TOROKORO.
+    ("THIAM", "Fatoumata", "92274352"),
 ]
 
 CAMPAGNE = {
@@ -277,6 +288,33 @@ def _campagne(partenaire, agences_par_cle, commerciaux):
     return campagne, cree
 
 
+def _retirer_commerciaux(campagne):
+    """
+    Désengage les commerciaux de `COMMERCIAUX_RETIRES` de cette campagne
+    (désistement, etc.) et désactive leur compte — ils ne doivent plus
+    apparaître dans le périmètre ni pouvoir se connecter.
+    """
+    resultats = []
+    for nom, prenom, telephone in COMMERCIAUX_RETIRES:
+        user = User.objects.filter(telephone=telephone).first()
+        if user is None:
+            continue
+
+        CampagneCommercialContrat.objects.filter(
+            campagne_id=campagne.id, user_id=user.id
+        ).delete()
+        ContratPrestationReponse.objects.filter(
+            campagne_id=campagne.id, user_id=user.id
+        ).delete()
+
+        if user.actif:
+            user.actif = False
+            user.save(update_fields=["actif"])
+
+        resultats.append(user)
+    return resultats
+
+
 def main():
     analyseur = argparse.ArgumentParser(description=__doc__)
     analyseur.add_argument(
@@ -293,6 +331,7 @@ def main():
     with transaction.atomic():
         commerciaux = _commerciaux(partenaire, agences_par_cle, mot_de_passe_initial)
         campagne, campagne_creee = _campagne(partenaire, agences_par_cle, commerciaux)
+        retires = _retirer_commerciaux(campagne)
 
     Campagne.sync_statuts()
     campagne.refresh_from_db()
@@ -317,6 +356,12 @@ def main():
     for user, cree, changee in commerciaux:
         marque = "+" if cree else ("~" if changee else " ")
         print(f"  {marque} {user.telephone:<12} {user.nom_complet:<28} -> {user.agence.nom}")
+
+    if retires:
+        print()
+        print(f"Retirés         : {len(retires)} (désengagés et compte désactivé)")
+        for user in retires:
+            print(f"  - {user.telephone:<12} {user.nom_complet}")
 
     print()
     print("Attribuer à chacun son mot de passe et produire le fichier Excel :")
