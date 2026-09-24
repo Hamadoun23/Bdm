@@ -48,7 +48,7 @@ from openpyxl import Workbook  # noqa: E402
 from openpyxl.styles import Alignment, Font, PatternFill  # noqa: E402
 from openpyxl.utils import get_column_letter  # noqa: E402
 
-from campagnes.models import Campagne  # noqa: E402
+from campagnes.models import Campagne, ContratPrestationReponse  # noqa: E402
 from campagnes.services import generer_mot_de_passe_initial  # noqa: E402
 from core.auth_backend import hacher_mot_de_passe  # noqa: E402
 from core.models import Partenaire  # noqa: E402
@@ -69,15 +69,15 @@ def construire_classeur(commerciaux, site, periode):
     feuille = classeur.active
     feuille.title = "Accès commerciaux"
 
-    feuille.merge_cells("A1:D1")
+    feuille.merge_cells("A1:E1")
     feuille["A1"] = f"Accès à l'application — {NOM_CAMPAGNE}"
     feuille["A1"].font = Font(size=14, bold=True, color=BORDEAUX)
 
-    feuille.merge_cells("A2:D2")
+    feuille.merge_cells("A2:E2")
     feuille["A2"] = f"Vente des cartes BDM · {periode} · {site}"
     feuille["A2"].font = Font(size=10, italic=True, color="595959")
 
-    feuille.merge_cells("A3:D3")
+    feuille.merge_cells("A3:E3")
     feuille["A3"] = (
         "Identifiant = numéro de téléphone (chiffres uniquement). Le mot de "
         "passe respecte les majuscules/minuscules : 1re et dernière lettre en "
@@ -85,7 +85,7 @@ def construire_classeur(commerciaux, site, periode):
     )
     feuille["A3"].font = Font(size=9, color="8C8C8C")
 
-    entetes = ["Nom", "Agence", "Identifiant (téléphone)", "Mot de passe"]
+    entetes = ["Nom", "Agence", "Identifiant (téléphone)", "Mot de passe", "Date d'ajout"]
     ligne_entete = 5
     for colonne, intitule in enumerate(entetes, start=1):
         cellule = feuille.cell(row=ligne_entete, column=colonne, value=intitule)
@@ -93,25 +93,29 @@ def construire_classeur(commerciaux, site, periode):
         cellule.fill = PatternFill("solid", fgColor=BORDEAUX)
         cellule.alignment = Alignment(vertical="center")
 
-    for index, (user, agence_nom, secret) in enumerate(commerciaux):
+    for index, (user, agence_nom, secret, date_ajout) in enumerate(commerciaux):
         ligne = ligne_entete + 1 + index
         feuille.cell(row=ligne, column=1, value=user.nom_complet)
         feuille.cell(row=ligne, column=2, value=agence_nom)
         feuille.cell(row=ligne, column=3, value=user.telephone or "—")
         cellule_mdp = feuille.cell(row=ligne, column=4, value=secret)
         cellule_mdp.font = Font(bold=True, color=BORDEAUX)
+        feuille.cell(
+            row=ligne, column=5,
+            value=date_ajout.strftime("%d/%m/%Y") if date_ajout else "—",
+        )
         if index % 2 == 1:
-            for colonne in range(1, 5):
+            for colonne in range(1, 6):
                 feuille.cell(row=ligne, column=colonne).fill = PatternFill(
                     "solid", fgColor=GRIS_CLAIR
                 )
 
-    largeurs = (28, 18, 22, 16)
-    for colonne, largeur in zip(range(1, 5), largeurs):
+    largeurs = (28, 18, 22, 16, 14)
+    for colonne, largeur in zip(range(1, 6), largeurs):
         feuille.column_dimensions[get_column_letter(colonne)].width = largeur
 
     derniere_ligne = ligne_entete + len(commerciaux) + 1
-    feuille.merge_cells(f"A{derniere_ligne}:D{derniere_ligne}")
+    feuille.merge_cells(f"A{derniere_ligne}:E{derniere_ligne}")
     feuille[f"A{derniere_ligne}"] = (
         f"Document généré le {date.today():%d/%m/%Y} — {len(commerciaux)} "
         f"commerciaux, {NOM_CAMPAGNE}."
@@ -170,19 +174,26 @@ def main():
             "`scripts/preparer_campagne_bdm_sept2026.py`."
         )
 
+    dates_ajout = dict(
+        ContratPrestationReponse.objects.filter(campagne_id=campagne.id).values_list(
+            "user_id", "created_at"
+        )
+    )
+
     commerciaux = [
         (
             user,
             user.agence.nom if user.agence_id else "—",
             generer_mot_de_passe_initial(user.prenom, user.name, user.telephone or ""),
+            dates_ajout.get(user.id),
         )
         for user in users
     ]
 
     doublons = {
         secret
-        for _, _, secret in commerciaux
-        if [s for _, _, s in commerciaux].count(secret) > 1
+        for _, _, secret, _ in commerciaux
+        if [s for _, _, s, _ in commerciaux].count(secret) > 1
     }
     if doublons:
         raise SystemExit(
@@ -191,7 +202,7 @@ def main():
         )
 
     if not options.sans_ecriture:
-        for user, _, secret in commerciaux:
+        for user, _, secret, _ in commerciaux:
             user.password = hacher_mot_de_passe(secret)
             user.save(update_fields=["password"])
 
@@ -212,10 +223,11 @@ def main():
     )
     print(f"Fichier    : {chemin}\n")
 
-    print(f"{'Nom':<28} {'Agence':<18} {'Téléphone':<12} Mot de passe")
-    print("-" * 72)
-    for user, agence_nom, secret in commerciaux:
-        print(f"{user.nom_complet:<28} {agence_nom:<18} {user.telephone or '—':<12} {secret}")
+    print(f"{'Nom':<28} {'Agence':<18} {'Téléphone':<12} {'Mot de passe':<14} Date d'ajout")
+    print("-" * 86)
+    for user, agence_nom, secret, date_ajout in commerciaux:
+        date_affichee = date_ajout.strftime("%d/%m/%Y") if date_ajout else "—"
+        print(f"{user.nom_complet:<28} {agence_nom:<18} {user.telephone or '—':<12} {secret:<14} {date_affichee}")
 
 
 if __name__ == "__main__":
