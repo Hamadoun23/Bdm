@@ -13,7 +13,7 @@ import Pagination from '@/Components/ui/Pagination';
 const VIDE = {
     q: '', type_carte_id: '', user_id: '', agence_id: '', campagne_id: '',
     statut: '', ville: '', du: '', au: '', doublons: '', cas: '',
-    delai: '', campagne_resaisie: '', resaisie_du: '', resaisie_au: '', tri: '',
+    delai: '', campagne_resaisie: '', resaisie_du: '', resaisie_au: '', tri: '', avec: '',
 };
 
 const SAISIE = {
@@ -189,6 +189,49 @@ function Decompte({ titre, lignes, vide = 'Aucun.', onChoisir }) {
     );
 }
 
+function finDeMois(cle) {
+    const [annee, mois] = cle.split('-').map(Number);
+    const jour = new Date(annee, mois, 0).getDate();
+    return `${cle}-${String(jour).padStart(2, '0')}`;
+}
+
+const LIBELLES_CAS = {
+    autre: "a ressaisi le client d'un autre commercial",
+    meme: 'a ressaisi son propre client',
+    victime: 'ses clients ressaisis par un autre commercial',
+};
+
+/** Ce qui est affiché dans la liste, en une phrase, avec de quoi revenir en arrière. */
+function TitreListe({ doublons, filters, filtrer }) {
+    const { audit, avecNom, groupes } = doublons;
+    const precisions = [];
+    if (avecNom) precisions.push(`avec ${avecNom}`);
+    if (filters.delai) precisions.push('délai filtré');
+    if (filters.resaisie_du || filters.resaisie_au) precisions.push('période de re-saisie filtrée');
+    if (filters.campagne_id) precisions.push('campagne filtrée');
+    const sousFiltres = precisions.length > 0;
+    return (
+        <div id="liste-doublons" className="flex scroll-mt-4 flex-wrap items-baseline justify-between gap-2 pt-2">
+            <h2 className="text-base font-semibold text-gray-900">
+                {audit ? `Doublons de ${audit.commercial}` : 'Doublons'}
+                {filters.cas && LIBELLES_CAS[filters.cas] && <span className="font-normal text-gray-600"> — {LIBELLES_CAS[filters.cas]}</span>}
+                {sousFiltres && <span className="font-normal text-gray-600"> ({precisions.join(', ')})</span>}
+                <span className="ml-2 text-sm font-normal text-gray-500">{nombre(groupes.total)} client(s)</span>
+            </h2>
+            {sousFiltres && (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => filtrer({ avec: '', delai: '', resaisie_du: '', resaisie_au: '', campagne_id: '' })}
+                >
+                    Retirer ces précisions
+                </Button>
+            )}
+        </div>
+    );
+}
+
 /** Bilan d'audit du commercial choisi dans le filtre « Commercial ». */
 function AuditCommercial({ audit, cas, filtrer }) {
     const onglets = [
@@ -216,7 +259,7 @@ function AuditCommercial({ audit, cas, filtrer }) {
                         <button
                             key={o.id || 'tous'}
                             type="button"
-                            onClick={() => filtrer({ cas: o.id })}
+                            onClick={() => filtrer({ cas: o.id, avec: '' })}
                             className={`bg-white px-5 py-3 text-left hover:bg-orange-50 ${actif ? 'ring-2 ring-inset ring-gda-orange' : ''}`}
                         >
                             <p className="text-xs text-gray-500">{o.label}</p>
@@ -230,20 +273,28 @@ function AuditCommercial({ audit, cas, filtrer }) {
                 <Decompte
                     titre="Clients repris à"
                     lignes={audit.pris_a}
-                    onChoisir={() => filtrer({ cas: 'autre' })}
+                    onChoisir={(l) => filtrer({ cas: 'autre', avec: String(l.id) })}
                 />
                 <Decompte
                     titre="Ses clients repris par"
                     lignes={audit.pris_par}
-                    onChoisir={() => filtrer({ cas: 'victime' })}
+                    onChoisir={(l) => filtrer({ cas: 'victime', avec: String(l.id) })}
                 />
-                <Decompte titre="Re-saisies par campagne" lignes={audit.par_campagne} />
+                <Decompte
+                    titre="Re-saisies par campagne"
+                    lignes={audit.par_campagne}
+                    onChoisir={(l) => filtrer({ cas: cas === 'victime' ? '' : cas, campagne_id: String(l.id) })}
+                />
                 <Decompte
                     titre="Délai après la 1ère saisie"
                     lignes={audit.par_delai}
                     onChoisir={(l) => filtrer({ delai: l.id })}
                 />
-                <Decompte titre="Re-saisies par mois" lignes={audit.par_mois} />
+                <Decompte
+                    titre="Re-saisies par mois"
+                    lignes={audit.par_mois}
+                    onChoisir={(l) => filtrer({ resaisie_du: `${l.id}-01`, resaisie_au: finDeMois(l.id) })}
+                />
             </div>
         </Card>
     );
@@ -297,6 +348,8 @@ function Doublons({ doublons, filters, filtrer }) {
                     </div>
                 </Card>
             )}
+
+            <TitreListe doublons={doublons} filters={filters} filtrer={filtrer} />
 
             {groupes.data.length === 0 && (
                 <Card className="p-8 text-center text-sm text-gray-500">Aucun doublon pour ces filtres.</Card>
@@ -389,8 +442,16 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
 
     const nettoyer = (valeurs) => Object.fromEntries(Object.entries(valeurs).filter(([, v]) => v !== ''));
 
-    function envoyer(valeurs) {
-        router.get(route('clients.index'), nettoyer(valeurs), { preserveState: true, preserveScroll: true });
+    function envoyer(valeurs, defiler = false) {
+        router.get(route('clients.index'), nettoyer(valeurs), {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                if (defiler) {
+                    document.getElementById('liste-doublons')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            },
+        });
     }
 
     function appliquer(e) {
@@ -402,7 +463,7 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
     function filtrer(changement) {
         const valeurs = { ...actuels, ...changement };
         setF(valeurs);
-        envoyer(valeurs);
+        envoyer(valeurs, Boolean(valeurs.doublons));
     }
 
     function reinitialiser() {

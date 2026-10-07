@@ -534,6 +534,7 @@ def clients_index(request):
             "stats": doublons.statistiques(groupes),
             "classement": classement[:20],
             "audit": _audit_commercial(tous_groupes, f, noms, totaux),
+            "avecNom": noms.get(int(f["avec"])) if f["avec"].isdigit() else None,
             "groupes": paginer(request, groupes, 15, _formateur_groupes(ids_filtres, noms)),
         }
     else:
@@ -562,7 +563,7 @@ def clients_index(request):
 FILTRES_CLIENTS = (
     "q", "type_carte_id", "user_id", "agence_id", "campagne_id", "statut",
     "ville", "du", "au", "doublons", "cas", "delai", "campagne_resaisie",
-    "resaisie_du", "resaisie_au", "tri",
+    "resaisie_du", "resaisie_au", "tri", "avec",
 )
 
 
@@ -660,6 +661,10 @@ def analyser_doublons(base, ids_filtres, critere, f):
         else:
             ok = x.id in ids_filtres or premiere.id in ids_filtres
         if not ok:
+            return False
+        # « avec » : l'autre commercial impliqué, qu'il ait saisi le client en
+        # premier ou qu'il l'ait ressaisi.
+        if f["avec"].isdigit() and int(f["avec"]) not in (x.user_id, premiere.user_id):
             return False
         if f["delai"] in doublons.DELAIS and doublons.tranche_delai(x.delai) != f["delai"]:
             return False
