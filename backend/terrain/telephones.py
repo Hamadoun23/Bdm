@@ -7,8 +7,9 @@ Règles en vigueur depuis le 07/10/2026, pour empêcher la fraude :
   international compact (`+22376123456`) ;
 - un numéro n'appartient qu'à une seule personne : il est refusé s'il est déjà
   enregistré, en vente ou en enrôlement, au nom de quelqu'un d'autre ;
-- un client ne peut pas être ressaisi par un autre commercial que celui qui
-  l'a enregistré en premier (vente), ni être enrôlé deux fois.
+- une vente à un client déjà enregistré n'est pas enregistrée directement :
+  elle devient une demande que l'administrateur valide ou refuse
+  (`DemandeClientExistant`) ; un client ne peut pas être enrôlé deux fois.
 
 La comparaison se fait sur les 8 derniers chiffres : les fiches anciennes,
 saisies sans indicatif, sont ainsi reconnues.
@@ -136,12 +137,36 @@ def verifier(telephone, prenom, nom, user, *, nature, exclure_id=None):
                 f"Ce client est déjà enrôlé (par {_nom(fiche.user)} le {quand}). "
                 "Un client ne peut être enrôlé qu'une seule fois."
             )
-        if nature == "vente" and meme_reseau and fiche.user_id != user.id:
+        # Correction d'une fiche : elle ne doit pas devenir le doublon d'un
+        # client existant. Une nouvelle vente, elle, passe par une demande.
+        if nature == "vente" and exclure_id and meme_reseau:
             return (
                 f"Ce client est déjà enregistré par {_nom(fiche.user)} le {quand}. "
-                "Un client ne peut pas être ressaisi par un autre commercial."
+                "Pour lui vendre une autre carte, faites une nouvelle vente : "
+                "elle sera soumise à l'administrateur."
             )
     return None
+
+
+def clients_existants(telephone, prenom, nom, user):
+    """
+    Fiches clients de la même personne, chez le même partenaire, les plus
+    anciennes d'abord. Une vente à l'un de ces clients exige la validation
+    de l'administrateur.
+    """
+    from .models import Client
+
+    cle = cle_numero(telephone)
+    if not cle:
+        return []
+    personne = cle_nom(prenom, nom)
+    fiches = [
+        c for c in _meme_numero(Client.objects.select_related("type_carte"), cle)
+        if cle_nom(c.prenom, c.nom) == personne
+        and c.user
+        and c.user.partenaire_id == user.partenaire_id
+    ]
+    return sorted(fiches, key=lambda c: c.created_at)
 
 
 def verifier_compte(numero_compte, *, exclure_id=None):

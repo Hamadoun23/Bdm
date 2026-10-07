@@ -102,13 +102,17 @@ export default function VentesCreate({
     const [errors, setErrors] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [fileName, setFileName] = useState('');
+    // Client déjà enregistré : la vente devient une demande à l'administrateur.
+    const [existant, setExistant] = useState(null);
+    const [motif, setMotif] = useState('');
 
     function set(key, value) {
         setForm((f) => ({ ...f, [key]: value }));
+        if (['telephone', 'prenom', 'nom', 'type_carte_id'].includes(key)) setExistant(null);
     }
 
-    async function submit(e) {
-        e.preventDefault();
+    async function submit(e, demande = false) {
+        e?.preventDefault();
         setSubmitting(true);
         setErrors({});
 
@@ -116,15 +120,22 @@ export default function VentesCreate({
         Object.entries(form).forEach(([k, v]) => {
             if (v !== null && v !== '') fd.append(k, v);
         });
+        if (demande) {
+            fd.append('demande_validation', '1');
+            fd.append('motif', motif);
+        }
 
         try {
-            await window.axios.post('/api/ventes', fd, {
+            const reponse = await window.axios.post('/api/ventes', fd, {
                 headers: { Accept: 'application/json' },
             });
-            router.visit(route('dashboard'));
+            router.visit(route(reponse.data?.demande ? 'commercial.demandes.index' : 'dashboard'));
         } catch (err) {
             const res = err.response?.data;
-            if (res?.errors) {
+            if (err.response?.status === 409 && res?.client_existant) {
+                setExistant(res);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else if (res?.errors) {
                 const flat = {};
                 Object.entries(res.errors).forEach(([k, v]) => { flat[k] = Array.isArray(v) ? v[0] : v; });
                 setErrors(flat);
@@ -155,6 +166,33 @@ export default function VentesCreate({
                             <div className="mb-5 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3.5 py-2.5 text-sm text-green-800">
                                 <CheckCircle2 size={16} />
                                 Vente rattachée à <strong>{campagnesOuvertes[0].nom}</strong> (fin le {campagnesOuvertes[0].date_fin})
+                            </div>
+                        )}
+
+                        {existant && (
+                            <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                                <p className="font-semibold">{existant.message}</p>
+                                <ul className="mt-2 space-y-1">
+                                    {existant.existants.map((c, i) => (
+                                        <li key={i} className={c.meme_type_carte ? 'font-medium text-red-800' : undefined}>
+                                            {c.nom_complet} · {c.type_carte} · enregistré par {c.commercial} le {c.date}
+                                        </li>
+                                    ))}
+                                </ul>
+                                <label className="mt-3 block text-xs font-medium text-amber-900">Motif de la demande (pourquoi ce client prend une nouvelle carte)</label>
+                                <textarea
+                                    rows={2}
+                                    value={motif}
+                                    onChange={(e) => setMotif(e.target.value)}
+                                    className="mt-1 block w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gda-orange/30"
+                                    placeholder="Ex. : le client veut une carte GIM en plus de sa carte ADAN"
+                                />
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <Button type="button" disabled={submitting || !motif.trim()} onClick={() => submit(null, true)}>
+                                        {submitting ? 'Envoi…' : "Envoyer la demande à l'administrateur"}
+                                    </Button>
+                                    <Button type="button" variant="ghost" onClick={() => setExistant(null)}>Annuler</Button>
+                                </div>
                             </div>
                         )}
 

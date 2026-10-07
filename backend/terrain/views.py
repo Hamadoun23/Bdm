@@ -44,8 +44,10 @@ from . import doublons, services, telephones
 from .models import (
     DELAI_MODIFICATION_COMMERCIAL_HEURES,
     Client,
+    DemandeClientExistant,
     EnrolementClient,
     StatutCarte,
+    StatutDemande,
     TelephoniqueRapport,
     TypePieceIdentite,
     Vente,
@@ -267,6 +269,14 @@ def api_vente_store(request):
 
     if len(ids_ouvertes) == 1:
         donnees["campagne_id"] = ids_ouvertes[0]
+
+    # Client déjà enregistré : la vente passe par l'administrateur.
+    existants = telephones.clients_existants(
+        donnees["telephone"], donnees["prenom"], donnees["nom"], user
+    )
+    if existants and request.POST.get("demande_validation") != "1":
+        return JsonResponse(_reponse_client_existant(existants, donnees), status=409)
+
     fichier = request.FILES.get("carte_identite")
     if fichier:
         donnees["carte_identite"] = _stocker_piece_identite(fichier)
@@ -288,6 +298,22 @@ def api_vente_store(request):
                 },
                 status=422,
             )
+
+    if existants:
+        try:
+            demande = _creer_demande(donnees, user, adhesion, existants, request.POST.get("motif"))
+        except services.ErreurMetier as erreur:
+            return JsonResponse({"success": False, "message": str(erreur)}, status=400)
+        return JsonResponse(
+            {
+                "success": True,
+                "demande": True,
+                "message": "Ce client est déjà enregistré : votre vente a été envoyée à "
+                "l’administrateur. Elle sera comptée dès qu’il l’aura validée.",
+                "demande_id": demande.id,
+            },
+            status=202,
+        )
 
     try:
         vente = services.enregistrer_vente(donnees, user, adhesion)
@@ -316,6 +342,64 @@ def _controler_telephone(donnees, user, nature, exclure_id=None):
     return telephones.verifier(
         donnees["telephone"], donnees["prenom"], donnees["nom"], user,
         nature=nature, exclure_id=exclure_id,
+    )
+
+
+def _reponse_client_existant(existants, donnees):
+    """Ce que le commercial doit savoir avant d'envoyer sa demande."""
+    type_carte_id = int(donnees["type_carte_id"])
+    meme_type = any(c.type_carte_id == type_carte_id for c in existants)
+    return {
+        "success": False,
+        "client_existant": True,
+        "meme_type_carte": meme_type,
+        "message": (
+            "Ce client a déjà cette carte. " if meme_type else "Ce client est déjà enregistré. "
+        )
+        + "La vente ne peut être enregistrée qu’avec l’accord de l’administrateur : "
+        "indiquez le motif et envoyez la demande.",
+        "existants": [
+            {
+                "nom_complet": f"{c.prenom} {c.nom}".strip(),
+                "telephone": c.telephone,
+                "type_carte": c.type_carte.code if c.type_carte_id else "?",
+                "meme_type_carte": c.type_carte_id == type_carte_id,
+                "commercial": _nom(c.user) or "—",
+                "date": c.created_at.strftime("%d/%m/%Y %H:%M") if c.created_at else "—",
+            }
+            for c in existants
+        ],
+    }
+
+
+def _creer_demande(donnees, user, adhesion, existants, motif):
+    """Enregistre la demande de vente à un client existant, sans créer la vente."""
+    _, _, campagne, _ = services.preparer_vente(donnees, user, adhesion)
+    type_carte_id = int(donnees["type_carte_id"])
+    deja = DemandeClientExistant.objects.filter(
+        user=user, statut=StatutDemande.EN_ATTENTE, type_carte_id=type_carte_id,
+        telephone=donnees["telephone"],
+    ).first()
+    if deja:
+        raise services.ErreurMetier(
+            f"Une demande pour ce client et cette carte est déjà en attente depuis le "
+            f"{deja.created_at.strftime('%d/%m/%Y %H:%M')}."
+        )
+
+    def serialisable(valeurs):
+        return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in (valeurs or {}).items()}
+
+    return DemandeClientExistant.objects.create(
+        user=user,
+        campagne=campagne,
+        type_carte_id=type_carte_id,
+        client_existant=existants[0],
+        telephone=donnees["telephone"],
+        prenom=donnees["prenom"],
+        nom=donnees["nom"],
+        donnees={"vente": serialisable(donnees), "adhesion": serialisable(adhesion) if adhesion else None},
+        meme_type_carte=any(c.type_carte_id == type_carte_id for c in existants),
+        motif=(motif or "").strip()[:2000] or None,
     )
 
 

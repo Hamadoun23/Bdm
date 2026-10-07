@@ -129,13 +129,14 @@ CHAMPS_ADHESION = (
 )
 
 
-def enregistrer_vente(donnees, user, adhesion=None):
+def preparer_vente(donnees, user, adhesion=None):
     """
-    Portage de VenteService::enregistrerVente() : crée le client puis la vente.
+    Contrôles préalables à une vente : carte, campagne ouverte, contrat
+    accepté, fiche d'adhésion. Renvoie (type_carte_id, agence_id, campagne,
+    exige_adhesion) ou lève ErreurMetier.
 
-    `adhesion` porte la demande d'adhésion carte prépayée quand le partenaire
-    de la campagne l'exige (UBA). Elle est écrite dans la même transaction que
-    la vente : une vente sans sa fiche serait inexploitable par la banque.
+    Sert aussi à une demande de vente à un client existant : elle n'est
+    acceptée que si la vente aurait pu être enregistrée au moment de la saisie.
     """
     _verifier_commercial(user, "une vente")
 
@@ -175,6 +176,35 @@ def enregistrer_vente(donnees, user, adhesion=None):
         raise ErreurMetier(
             "La demande d’adhésion est obligatoire pour les cartes de ce client."
         )
+    return type_carte_id, agence_id, campagne, exige_adhesion
+
+
+def enregistrer_vente(donnees, user, adhesion=None, *, demande=None):
+    """
+    Portage de VenteService::enregistrerVente() : crée le client puis la vente.
+
+    `adhesion` porte la demande d'adhésion carte prépayée quand le partenaire
+    de la campagne l'exige (UBA). Elle est écrite dans la même transaction que
+    la vente : une vente sans sa fiche serait inexploitable par la banque.
+
+    `demande` : vente à un client existant, validée par l'administrateur. Les
+    contrôles ont été faits à la saisie ; la vente est rattachée à la campagne
+    de la demande et datée du jour de la saisie, même si l'administrateur la
+    valide après la fin de la campagne.
+    """
+    if demande is None:
+        type_carte_id, agence_id, campagne, exige_adhesion = preparer_vente(
+            donnees, user, adhesion
+        )
+        horodatage = {}
+    else:
+        type_carte_id = demande.type_carte_id
+        agence_id = int(user.agence_id) if user.agence_id else None
+        campagne = demande.campagne
+        if campagne is None:
+            raise ErreurMetier("La campagne de cette demande n’existe plus.")
+        exige_adhesion = bool(adhesion)
+        horodatage = {"created_at": demande.created_at, "updated_at": demande.created_at}
 
     with transaction.atomic():
         client = Client.objects.create(
@@ -187,6 +217,7 @@ def enregistrer_vente(donnees, user, adhesion=None):
             statut_carte=StatutCarte.VENDUE,
             carte_identite=donnees.get("carte_identite") or None,
             user_id=user.id,
+            **horodatage,
         )
         vente = Vente.objects.create(
             client_id=client.id,
@@ -195,6 +226,7 @@ def enregistrer_vente(donnees, user, adhesion=None):
             campagne_id=campagne.id,
             type_carte_id=type_carte_id,
             statut_activation=StatutCarte.VENDUE,
+            **horodatage,
         )
         if exige_adhesion:
             AdhesionCarte.objects.create(

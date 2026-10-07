@@ -1,7 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     LayoutDashboard, Building2, Users, Megaphone, CreditCard, FileBarChart,
-    ClipboardList, Phone, FileText, TrendingUp, LogOut, X, Smartphone, Repeat,
+    ClipboardList, Phone, FileText, TrendingUp, LogOut, X, Smartphone, Repeat, ShieldCheck, Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -28,6 +28,7 @@ function itemsFor(user, client) {
             { href: route('admin.types-cartes.index'), label: 'Types de cartes', icon: CreditCard, match: 'admin.types-cartes.*' },
             { href: route('rapports.index'), label: 'Rapports', icon: FileBarChart, match: 'rapports.*' },
             { href: route('clients.index'), label: 'Clients', icon: Users, match: 'clients.*' },
+            { href: route('admin.demandes.index'), label: 'Demandes à valider', icon: ShieldCheck, match: 'admin.demandes.*', badge: user.demandes_en_attente },
             { href: route('performances.index'), label: 'Performances', icon: TrendingUp, match: 'performances.*' },
             { href: route('admin.login-logs.index'), label: 'Journal des connexions', icon: ClipboardList, match: 'admin.login-logs.*' },
             { href: route('admin.telephonique-rapports.index'), label: 'Reporting téléphonique', icon: Phone, match: 'admin.telephonique-rapports.*' },
@@ -37,6 +38,7 @@ function itemsFor(user, client) {
     if (user.is_commercial) {
         if (user.peut_vendre) {
             items.push({ href: route('ventes.index'), label: 'Mes ventes', icon: CreditCard, match: 'ventes.*' });
+            items.push({ href: route('commercial.demandes.index'), label: 'Mes demandes', icon: Inbox, match: 'commercial.demandes.*' });
         }
         if (user.peut_enroler) {
             items.push({ href: route('enrolements.index'), label: 'Enrôlement clients', icon: Smartphone, match: 'enrolements.*' });
@@ -72,6 +74,11 @@ function RailItem({ item }) {
         >
             {active && <span className="absolute left-0 h-5 w-1 rounded-r-full bg-gda-orange" />}
             <Icon size={19} strokeWidth={2} />
+            {item.badge > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                    {item.badge}
+                </span>
+            )}
             <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 z-50">
                 {item.label}
             </span>
@@ -94,6 +101,9 @@ function DrawerItem({ item, onClick }) {
         >
             <Icon size={18} strokeWidth={2} />
             {item.label}
+            {item.badge > 0 && (
+                <span className="ml-auto rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{item.badge}</span>
+            )}
         </Link>
     );
 }

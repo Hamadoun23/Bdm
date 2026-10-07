@@ -4,7 +4,7 @@ from django.urls import path
 
 from core.decorators import par_methode
 
-from . import exports, views
+from . import demandes, exports, views
 
 urlpatterns = [
     # Ventes
@@ -50,6 +50,19 @@ urlpatterns = [
     ),
     # Clients — consultation admin / direction
     path("clients", views.clients_index, name="clients.index"),
+    # Ventes à un client déjà enregistré : validation par l'administrateur
+    path("admin/demandes-clients", demandes.demandes_index, name="admin.demandes.index"),
+    path(
+        "admin/demandes-clients/<int:demande>/valider",
+        demandes.demandes_valider,
+        name="admin.demandes.valider",
+    ),
+    path(
+        "admin/demandes-clients/<int:demande>/refuser",
+        demandes.demandes_refuser,
+        name="admin.demandes.refuser",
+    ),
+    path("mes-demandes", demandes.mes_demandes, name="commercial.demandes.index"),
     path(
         "clients/doublons/export",
         exports.clients_doublons_export,

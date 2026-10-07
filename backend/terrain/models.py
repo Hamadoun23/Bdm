@@ -361,3 +361,64 @@ class Reclamation(LaravelModel):
     class Meta:
         managed = False
         db_table = "reclamations"
+
+
+class StatutDemande(models.TextChoices):
+    EN_ATTENTE = "en_attente", "En attente"
+    ACCEPTEE = "acceptee", "Validée"
+    REFUSEE = "refusee", "Refusée"
+
+
+class DemandeClientExistant(LaravelModel):
+    """
+    Vente à un client déjà enregistré, soumise à l'administrateur.
+
+    `donnees` garde la saisie du commercial (état civil, ville, pièce
+    d'identité, fiche d'adhésion) : la vente est créée à l'identique quand
+    la demande est validée.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, db_column="user_id", related_name="demandes_clients"
+    )
+    campagne = models.ForeignKey(
+        Campagne, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="campagne_id", related_name="demandes_clients",
+    )
+    type_carte = models.ForeignKey(
+        TypeCarte, on_delete=models.RESTRICT, db_column="type_carte_id",
+        related_name="demandes_clients",
+    )
+    client_existant = models.ForeignKey(
+        Client, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="client_existant_id", related_name="demandes_resaisie",
+    )
+    telephone = models.CharField(max_length=25)
+    prenom = models.CharField(max_length=255)
+    nom = models.CharField(max_length=255)
+    donnees = models.JSONField()
+    #: Le client a déjà une carte de ce type : signal fort de doublon.
+    meme_type_carte = models.BooleanField(default=False)
+    motif = models.TextField(null=True, blank=True)
+    statut = models.CharField(
+        max_length=20, choices=StatutDemande.choices, default=StatutDemande.EN_ATTENTE
+    )
+    traite_par = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="traite_par_id", related_name="demandes_clients_traitees",
+    )
+    traite_le = models.DateTimeField(null=True, blank=True)
+    commentaire_admin = models.TextField(null=True, blank=True)
+    vente = models.ForeignKey(
+        Vente, on_delete=models.SET_NULL, null=True, blank=True,
+        db_column="vente_id", related_name="+",
+    )
+
+    class Meta:
+        managed = False
+        db_table = "demandes_clients_existants"
+
+    @property
+    def nom_complet(self):
+        return f"{self.prenom} {self.nom}".strip()

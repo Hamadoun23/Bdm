@@ -284,7 +284,16 @@ class InertiaSharedDataMiddleware:
             "is_commercial_telephonique": user.is_commercial_telephonique,
             "peut_vendre": self._campagne_ouverte_engagee(user, "vente_carte"),
             "peut_enroler": self._campagne_ouverte_engagee(user, "enrolement_app"),
+            "demandes_en_attente": self._demandes_en_attente(request, user),
         }
+
+    def _demandes_en_attente(self, request, user):
+        """Ventes à un client existant qui attendent l'administrateur (badge du menu)."""
+        if not user.is_admin:
+            return 0
+        from terrain.demandes import nombre_en_attente
+
+        return nombre_en_attente(request)
 
     def _campagne_ouverte_engagee(self, user, type_campagne) -> bool:
         """
