@@ -24,8 +24,10 @@ from datetime import datetime
 #: Critères de regroupement proposés à l'écran.
 CRITERE_NUMERO = "numero"
 CRITERE_NOM = "nom"
+CRITERE_NUMERO_ET_NOM = "numero_et_nom"
 CRITERE_NUMERO_OU_NOM = "numero_ou_nom"
 CRITERES = {
+    CRITERE_NUMERO_ET_NOM: "Même numéro et même nom (doublon certain)",
     CRITERE_NUMERO: "Même numéro de téléphone",
     CRITERE_NOM: "Même nom et prénom",
     CRITERE_NUMERO_OU_NOM: "Même numéro ou même nom",
@@ -150,6 +152,12 @@ def analyser(fiches, critere=CRITERE_NUMERO):
         cles.append(lambda f: ("tel", cle_numero(f.telephone)))
     if critere in (CRITERE_NOM, CRITERE_NUMERO_OU_NOM):
         cles.append(lambda f: ("nom", cle_nom(f.prenom, f.nom)))
+    if critere == CRITERE_NUMERO_ET_NOM:
+        def numero_et_nom(f):
+            tel, nom = cle_numero(f.telephone), cle_nom(f.prenom, f.nom)
+            return ("tel+nom", (tel, nom) if tel and nom else None)
+
+        cles.append(numero_et_nom)
 
     # Union-find : avec « numéro ou nom », deux fiches reliées par un numéro
     # et une troisième reliée à l'une d'elles par le nom forment un seul groupe.
