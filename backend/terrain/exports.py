@@ -27,7 +27,7 @@ from core.models import Role
 from core.php import nombre_format
 from core.partenaires import filtrer_saisies, partenaire_courant
 
-from . import services
+from . import doublons, services
 from .models import Client, TelephoniqueRapport, Vente
 
 MOIS_FR = [
@@ -360,3 +360,78 @@ def _client_excel(client, nom_base):
         )
 
     return reponse_xlsx(classeur_multi_feuilles(definitions), f"{nom_base}.xlsx")
+
+
+# ---------------------------------------------------------------------------
+# Contrôle des doublons clients
+# ---------------------------------------------------------------------------
+
+LIBELLES_SAISIE = {
+    doublons.ORIGINALE: "1ère saisie (originale)",
+    doublons.RESAISIE_AUTRE: "Re-saisie : client d'un autre commercial",
+    doublons.RESAISIE_MEME: "Re-saisie : son propre client",
+}
+
+
+@role_required(Role.ADMIN, Role.DIRECTION)
+@http_methods("GET", "HEAD")
+def clients_doublons_export(request):
+    """Les doublons de l'écran Clients, avec les mêmes filtres."""
+    from .views import (
+        analyser_doublons,
+        appliquer_filtres_clients,
+        charger_clients,
+        critere_doublons,
+        filtres_clients,
+        lignes_groupe,
+        noms_commerciaux,
+        totaux_par_commercial,
+    )
+
+    base = filtrer_saisies(Client.objects.all(), partenaire_courant(request))
+    f = filtres_clients(request)
+    critere = critere_doublons(f) or doublons.CRITERE_NUMERO
+    ids_filtres = set(appliquer_filtres_clients(base, f).values_list("id", flat=True))
+    groupes, fiches_filtrees = analyser_doublons(base, ids_filtres, critere, f["cas"])
+    noms = noms_commerciaux({x.user_id for g in groupes for x in g.fiches})
+    objets = charger_clients([x.id for g in groupes for x in g.fiches])
+
+    entetes = [
+        "Groupe", "Nb fiches du groupe", "Saisie", "Client", "Téléphone", "Type carte",
+        "Ville", "Commercial", "Agence", "Campagne", "Date d'enregistrement",
+        "1ère saisie par", "Jours après la 1ère saisie",
+    ]
+    lignes = []
+    for g in groupes:
+        for x in lignes_groupe(g, objets, ids_filtres, noms):
+            lignes.append([
+                g.numero, len(g.fiches), LIBELLES_SAISIE[x["statut_saisie"]],
+                x["nom_complet"], x["telephone"] or "", x["type_carte"], x["ville"] or "",
+                x["commercial"], x["agence"] or "", x["campagne"] or "", x["heure"],
+                noms.get(g.fiches[0].user_id, ""),
+                "" if x["jours_apres"] is None else x["jours_apres"],
+            ])
+
+    classement = doublons.classement_commerciaux(
+        fiches_filtrees, totaux_par_commercial(ids_filtres)
+    )
+    lignes_commerciaux = [
+        [
+            noms.get(c["user_id"], ""), c["total_fiches"], c["autre"], c["meme"],
+            c["resaisies"], f'{c["pourcentage"]} %',
+        ]
+        for c in classement
+    ]
+
+    classeur = classeur_multi_feuilles([
+        {"titre": "Doublons", "entetes": entetes, "lignes": lignes},
+        {
+            "titre": "Par commercial",
+            "entetes": [
+                "Commercial", "Fiches saisies", "Re-saisies : client d'un autre",
+                "Re-saisies : son propre client", "Total re-saisies", "% de re-saisies",
+            ],
+            "lignes": lignes_commerciaux,
+        },
+    ])
+    return reponse_xlsx(classeur, f"doublons_clients_{horodatage()}.xlsx")

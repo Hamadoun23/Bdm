@@ -50,6 +50,11 @@ urlpatterns = [
     ),
     # Clients — consultation admin / direction
     path("clients", views.clients_index, name="clients.index"),
+    path(
+        "clients/doublons/export",
+        exports.clients_doublons_export,
+        name="clients.doublons.export",
+    ),
     path("clients/<int:client>/export", exports.client_export, name="clients.export"),
     path("clients/<int:client>", views.clients_show, name="clients.show"),
     # Contrat de prestation

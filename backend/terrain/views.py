@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Q, Value
+from django.db.models import Count, Q, Value
 from django.db.models.functions import Coalesce, Replace
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -40,7 +40,7 @@ from core.partenaires import (
 from core.php import nombre_format, tableau
 from core.validation import ErreursValidation, Validateur
 
-from . import services
+from . import doublons, services
 from .models import (
     DELAI_MODIFICATION_COMMERCIAL_HEURES,
     Client,
@@ -509,13 +509,75 @@ def api_enrolement_store(request):
 def clients_index(request):
     partenaire = partenaire_courant(request)
     base = filtrer_saisies(Client.objects.all(), partenaire)
-    clients = base.select_related("user__agence", "type_carte").prefetch_related(
-        "ventes__agence", "ventes__campagne"
+    f = filtres_clients(request)
+    ids_filtres = set(
+        appliquer_filtres_clients(base, f).values_list("id", flat=True)
     )
+    critere = critere_doublons(f)
 
-    f = {cle: (request.GET.get(cle) or "").strip() for cle in FILTRES_CLIENTS}
-    par_numero = _fiches_par_numero(base)
+    props = {
+        "filters": tableau({cle: v for cle, v in f.items() if v}),
+        "choix": _choix_filtres_clients(base, partenaire),
+        "tableauDeBord": _tableau_de_bord_clients(ids_filtres),
+    }
 
+    if critere:
+        groupes, fiches_filtrees = analyser_doublons(base, ids_filtres, critere, f["cas"])
+        noms = noms_commerciaux({x.user_id for g in groupes for x in g.fiches})
+        classement = doublons.classement_commerciaux(
+            fiches_filtrees, totaux_par_commercial(ids_filtres)
+        )
+        for ligne in classement:
+            ligne["commercial"] = noms.get(ligne["user_id"], "—")
+        props["doublons"] = {
+            "critere": critere,
+            "stats": doublons.statistiques(groupes),
+            "classement": classement[:15],
+            "groupes": paginer(
+                request, groupes, 15, _formateur_groupes(ids_filtres, noms)
+            ),
+        }
+    else:
+        par_numero = {}
+        for pk, tel in base.values_list("id", "telephone"):
+            cle = doublons.cle_numero(tel)
+            if cle:
+                par_numero[cle] = par_numero.get(cle, 0) + 1
+        clients = (
+            Client.objects.filter(pk__in=ids_filtres)
+            .select_related("user__agence", "type_carte")
+            .prefetch_related("ventes__agence", "ventes__campagne")
+            .order_by("-created_at", "-id")
+        )
+
+        def formater(c):
+            ligne = ligne_client(c)
+            ligne["fiches_meme_numero"] = par_numero.get(doublons.cle_numero(c.telephone), 0)
+            return ligne
+
+        props["clients"] = paginer(request, clients, 20, formater)
+
+    return render(request, "Clients/Index", props)
+
+
+FILTRES_CLIENTS = (
+    "q", "type_carte_id", "user_id", "agence_id", "campagne_id", "statut",
+    "ville", "du", "au", "doublons", "cas",
+)
+
+
+def filtres_clients(request):
+    return {cle: (request.GET.get(cle) or "").strip() for cle in FILTRES_CLIENTS}
+
+
+def critere_doublons(f):
+    # « 1 » : ancienne case « Numéros en double », conservée pour les liens existants.
+    if f["doublons"] == "1":
+        return doublons.CRITERE_NUMERO
+    return f["doublons"] if f["doublons"] in doublons.CRITERES else None
+
+
+def appliquer_filtres_clients(clients, f):
     if f["q"]:
         # Les mots portent sur le nom, les chiffres sur le téléphone, quelle que
         # soit la façon dont il a été saisi (espaces, tirets, points).
@@ -540,104 +602,200 @@ def clients_index(request):
         clients = clients.filter(type_carte_id=int(f["type_carte_id"]))
     if f["user_id"].isdigit():
         clients = clients.filter(user_id=int(f["user_id"]))
-    if f["agence_id"].isdigit():
+    if f["agence_id"] == "aucune":
+        clients = clients.filter(ventes__agence_id__isnull=True)
+    elif f["agence_id"].isdigit():
         clients = clients.filter(ventes__agence_id=int(f["agence_id"]))
-    if f["campagne_id"].isdigit():
+    if f["campagne_id"] == "aucune":
+        clients = clients.filter(ventes__campagne_id__isnull=True)
+    elif f["campagne_id"].isdigit():
         clients = clients.filter(ventes__campagne_id=int(f["campagne_id"]))
     if f["statut"] in StatutCarte.values:
         clients = clients.filter(statut_carte=f["statut"])
-    if f["ville"]:
+    if f["ville"] == "aucune":
+        clients = clients.filter(Q(ville__isnull=True) | Q(ville=""))
+    elif f["ville"]:
         clients = clients.filter(ville__iexact=f["ville"])
     du, au = _date_iso(f["du"]), _date_iso(f["au"])
     if du:
         clients = clients.filter(created_at__date__gte=du)
     if au:
         clients = clients.filter(created_at__date__lte=au)
-    if f["doublons"] == "1":
-        # Même numéro sur au moins deux fiches, comparé sur les 8 derniers
-        # chiffres : « 76 12 34 56 » et « +223 76123456 » sont le même client.
-        ids = [pk for pks in par_numero.values() if len(pks) > 1 for pk in pks]
-        clients = clients.filter(pk__in=ids or [0])
+    return clients.distinct()
 
-    tri = "telephone" if f["doublons"] == "1" else "-created_at"
-    clients = clients.distinct().order_by(tri, "-created_at", "-id")
 
-    def formater(c):
-        vente = next(iter(c.ventes.all()), None)
-        agence = vente.agence if vente and vente.agence_id else c.user.agence
-        return {
-            "id": c.id,
-            "nom_complet": f"{c.prenom} {c.nom}".strip(),
-            "telephone": c.telephone,
-            "ville": c.ville,
-            "type_carte": c.type_carte.code if c.type_carte_id else "?",
-            "commercial": c.user.name if c.user_id else "—",
-            "agence": agence.nom if agence else None,
-            "campagne": vente.campagne.nom if vente and vente.campagne_id else None,
-            "statut_carte": c.statut_carte,
-            "date": c.created_at.strftime("%d/%m/%Y") if c.created_at else None,
-            "fiches_meme_numero": len(par_numero.get(_cle_numero(c.telephone), [])),
-        }
+def analyser_doublons(base, ids_filtres, critere, cas):
+    """
+    Groupes de doublons à afficher, et fiches du périmètre filtré qu'ils contiennent.
 
-    commerciaux = filtrer_users(
-        User.objects.filter(pk__in=base.values("user_id")), partenaire
-    ).order_by("name", "prenom")
+    L'analyse porte sur toutes les fiches du partenaire : filtrer sur un
+    commercial doit montrer qu'il a ressaisi le client d'un autre, même si la
+    fiche de l'autre n'entre pas dans le filtre. Un groupe est retenu dès
+    qu'une de ses fiches filtrées correspond au cas demandé.
+    """
+    fiches = [
+        doublons.Fiche(*valeurs)
+        for valeurs in base.values_list(
+            "id", "prenom", "nom", "telephone", "user_id", "created_at"
+        )
+    ]
+    statut_voulu = {
+        doublons.CAS_AUTRE: doublons.RESAISIE_AUTRE,
+        doublons.CAS_MEME: doublons.RESAISIE_MEME,
+    }.get(cas)
+    retenus, fiches_filtrees = [], []
+    for g in doublons.analyser(fiches, critere):
+        dans_filtre = [x for x in g.fiches if x.id in ids_filtres]
+        cibles = [x for x in dans_filtre if x.statut == statut_voulu] if statut_voulu else dans_filtre
+        if cibles:
+            retenus.append(g)
+            fiches_filtrees.extend(dans_filtre)
+    for i, g in enumerate(retenus, 1):
+        g.numero = i
+    return retenus, fiches_filtrees
 
-    return render(
-        request,
-        "Clients/Index",
-        {
-            "clients": paginer(request, clients, 20, formater),
-            "filters": tableau({cle: v for cle, v in f.items() if v}),
-            "choix": {
-                "types": [
-                    {"id": t.id, "nom": t.code}
-                    for t in filtrer_types_cartes(TypeCarte.objects, partenaire).order_by("code")
-                ],
-                "commerciaux": [
-                    {"id": u.id, "nom": f"{u.name or ''} {u.prenom or ''}".strip()}
-                    for u in commerciaux
-                ],
-                "agences": [
-                    {"id": a.id, "nom": a.nom}
-                    for a in filtrer_agences(Agence.objects, partenaire).order_by("nom")
-                ],
-                "campagnes": [
-                    {"id": c.id, "nom": c.nom}
-                    for c in filtrer_campagnes(Campagne.objects, partenaire).order_by("-date_debut")
-                ],
-                "villes": sorted(
-                    {v.strip() for v in base.values_list("ville", flat=True) if v and v.strip()},
-                    key=str.casefold,
-                ),
-                "statuts": [{"id": v, "nom": l} for v, l in StatutCarte.choices],
-            },
-        },
+
+def noms_commerciaux(user_ids):
+    return {u.id: _nom(u) or u.name for u in User.objects.filter(pk__in=user_ids)}
+
+
+def totaux_par_commercial(ids):
+    return dict(
+        Client.objects.filter(pk__in=ids)
+        .values_list("user_id")
+        .annotate(n=Count("id"))
+        .order_by()
     )
 
 
-FILTRES_CLIENTS = (
-    "q", "type_carte_id", "user_id", "agence_id", "campagne_id", "statut",
-    "ville", "du", "au", "doublons",
-)
+def ligne_client(c):
+    vente = next(iter(c.ventes.all()), None)
+    agence = vente.agence if vente and vente.agence_id else (c.user.agence if c.user_id else None)
+    return {
+        "id": c.id,
+        "nom_complet": f"{c.prenom} {c.nom}".strip(),
+        "telephone": c.telephone,
+        "ville": c.ville,
+        "type_carte": c.type_carte.code if c.type_carte_id else "?",
+        "commercial": c.user.name if c.user_id else "—",
+        "agence": agence.nom if agence else None,
+        "campagne": vente.campagne.nom if vente and vente.campagne_id else None,
+        "statut_carte": c.statut_carte,
+        "date": c.created_at.strftime("%d/%m/%Y") if c.created_at else None,
+    }
 
 
-def _cle_numero(telephone):
-    """
-    Clé de comparaison d'un numéro : ses 8 derniers chiffres, pour que
-    « 76 12 34 56 » et « +223 76123456 » désignent le même client.
-    """
-    cle = re.sub(r"\D", "", telephone or "")[-8:]
-    return cle if len(cle) == 8 else None
+def lignes_groupe(g, objets, ids_filtres, noms):
+    """Les fiches d'un groupe de doublons, prêtes à comparer."""
+    premiere = g.fiches[0]
+    lignes = []
+    for x in g.fiches:
+        ligne = ligne_client(objets[x.id])
+        ligne.update({
+            "commercial": noms.get(x.user_id, ligne["commercial"]),
+            "heure": x.created_at.strftime("%d/%m/%Y %H:%M") if x.created_at else "—",
+            "rang": x.rang,
+            "statut_saisie": x.statut,
+            "jours_apres": (x.created_at - premiere.created_at).days
+            if x.rang > 1 and x.created_at and premiere.created_at
+            else None,
+            "dans_filtre": x.id in ids_filtres,
+        })
+        lignes.append(ligne)
+    return lignes
 
 
-def _fiches_par_numero(queryset):
-    par_numero = {}
-    for pk, tel in queryset.values_list("id", "telephone"):
-        cle = _cle_numero(tel)
-        if cle:
-            par_numero.setdefault(cle, []).append(pk)
-    return par_numero
+def charger_clients(ids):
+    return {
+        c.id: c
+        for c in Client.objects.filter(pk__in=ids)
+        .select_related("user__agence", "type_carte")
+        .prefetch_related("ventes__agence", "ventes__campagne")
+    }
+
+
+def _formateur_groupes(ids_filtres, noms):
+    def formater(g):
+        objets = charger_clients([x.id for x in g.fiches])
+        return {
+            "numero": g.numero,
+            "cle": g.cle,
+            "nb_fiches": len(g.fiches),
+            "nb_commerciaux": len(g.commerciaux),
+            "premiere_par": noms.get(g.fiches[0].user_id, "—"),
+            "fiches": lignes_groupe(g, objets, ids_filtres, noms),
+        }
+
+    return formater
+
+
+def _tableau_de_bord_clients(ids):
+    """Répartition des clients filtrés : d'où ils viennent."""
+    qs = Client.objects.filter(pk__in=ids)
+
+    def repartition(champ_id, champ_nom, vide):
+        return [
+            {"id": i if i is not None else "aucune", "nom": n or vide, "total": t}
+            for i, n, t in qs.values_list(champ_id, champ_nom)
+            .annotate(t=Count("id", distinct=True))
+            .order_by("-t")
+        ]
+
+    villes = {}
+    for v in qs.values_list("ville", flat=True):
+        cle = (v or "").strip() or None
+        villes[cle] = villes.get(cle, 0) + 1
+    return {
+        "total": len(ids),
+        "commerciaux": qs.values("user_id").distinct().count(),
+        "parCampagne": repartition("ventes__campagne_id", "ventes__campagne__nom", "Sans campagne"),
+        "parAgence": repartition("ventes__agence_id", "ventes__agence__nom", "Sans agence"),
+        "parType": repartition("type_carte_id", "type_carte__code", "?"),
+        "parCommercial": [
+            {"id": i, "nom": f"{n or ''} {p or ''}".strip(), "total": t}
+            for i, n, p, t in qs.values_list("user_id", "user__name", "user__prenom")
+            .annotate(t=Count("id"))
+            .order_by("-t")[:15]
+        ],
+        "parVille": [
+            {"id": v if v else "aucune", "nom": v or "Ville non renseignée", "total": t}
+            for v, t in sorted(villes.items(), key=lambda x: -x[1])[:15]
+        ],
+    }
+
+
+def _choix_filtres_clients(base, partenaire):
+    commerciaux = filtrer_users(
+        User.objects.filter(pk__in=base.values("user_id")), partenaire
+    ).order_by("name", "prenom")
+    return {
+        "types": [
+            {"id": t.id, "nom": t.code}
+            for t in filtrer_types_cartes(TypeCarte.objects, partenaire).order_by("code")
+        ],
+        "commerciaux": [
+            {"id": u.id, "nom": f"{u.name or ''} {u.prenom or ''}".strip()}
+            for u in commerciaux
+        ],
+        "agences": [
+            {"id": a.id, "nom": a.nom}
+            for a in filtrer_agences(Agence.objects, partenaire).order_by("nom")
+        ],
+        "campagnes": [
+            {"id": c.id, "nom": c.nom}
+            for c in filtrer_campagnes(Campagne.objects, partenaire).order_by("-date_debut")
+        ],
+        "villes": sorted(
+            {v.strip() for v in base.values_list("ville", flat=True) if v and v.strip()},
+            key=str.casefold,
+        ),
+        "statuts": [{"id": v, "nom": l} for v, l in StatutCarte.choices],
+        "criteres": [{"id": k, "nom": v} for k, v in doublons.CRITERES.items()],
+        "cas": [{"id": k, "nom": v} for k, v in doublons.CAS.items()],
+    }
+
+
+_cle_numero = doublons.cle_numero
 
 
 def _date_iso(valeur):
