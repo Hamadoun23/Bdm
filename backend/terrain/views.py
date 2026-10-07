@@ -5,10 +5,13 @@ reporting téléphonique.
 Portage de app/Http/Controllers/{Commercial,Clients,Api}/*.php.
 """
 
+import re
 from datetime import date, datetime
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Q, Value
+from django.db.models.functions import Coalesce, Replace
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from inertia import render
@@ -24,14 +27,17 @@ from campagnes.articles_defaut import remuneration_dans_articles
 from campagnes.services import totaux_telephonique
 from core.decorators import http_methods, role_required
 from core.middleware import deposer_flash, retour_avec_erreurs
-from core.models import Role, TypeCarte
+from core.models import Agence, Role, TypeCarte, User
 from core.pagination import paginer
 from core.partenaires import (
+    filtrer_agences,
+    filtrer_campagnes,
     filtrer_saisies,
+    filtrer_users,
     filtrer_types_cartes,
     partenaire_courant,
 )
-from core.php import nombre_format
+from core.php import nombre_format, tableau
 from core.validation import ErreursValidation, Validateur
 
 from . import services
@@ -39,6 +45,7 @@ from .models import (
     DELAI_MODIFICATION_COMMERCIAL_HEURES,
     Client,
     EnrolementClient,
+    StatutCarte,
     TelephoniqueRapport,
     TypePieceIdentite,
     Vente,
@@ -500,14 +507,64 @@ def api_enrolement_store(request):
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def clients_index(request):
-    clients = filtrer_saisies(
-        Client.objects.select_related("user__agence", "type_carte").order_by(
-            "-created_at", "-id"
-        ),
-        partenaire_courant(request),
+    partenaire = partenaire_courant(request)
+    base = filtrer_saisies(Client.objects.all(), partenaire)
+    clients = base.select_related("user__agence", "type_carte").prefetch_related(
+        "ventes__agence", "ventes__campagne"
     )
 
+    f = {cle: (request.GET.get(cle) or "").strip() for cle in FILTRES_CLIENTS}
+    par_numero = _fiches_par_numero(base)
+
+    if f["q"]:
+        # Les mots portent sur le nom, les chiffres sur le téléphone, quelle que
+        # soit la façon dont il a été saisi (espaces, tirets, points).
+        for mot in f["q"].split():
+            if not mot.isdigit():
+                clients = clients.filter(
+                    Q(prenom__icontains=mot)
+                    | Q(nom__icontains=mot)
+                    | Q(quartier__icontains=mot)
+                    | Q(carte_identite__icontains=mot)
+                )
+        chiffres = "".join(m for m in f["q"].split() if m.isdigit())
+        if chiffres:
+            clients = clients.annotate(
+                tel_chiffres=Replace(
+                    Replace(Replace(Coalesce("telephone", Value("")), Value(" "), Value("")),
+                            Value("-"), Value("")),
+                    Value("."), Value(""),
+                )
+            ).filter(tel_chiffres__contains=chiffres)
+    if f["type_carte_id"].isdigit():
+        clients = clients.filter(type_carte_id=int(f["type_carte_id"]))
+    if f["user_id"].isdigit():
+        clients = clients.filter(user_id=int(f["user_id"]))
+    if f["agence_id"].isdigit():
+        clients = clients.filter(ventes__agence_id=int(f["agence_id"]))
+    if f["campagne_id"].isdigit():
+        clients = clients.filter(ventes__campagne_id=int(f["campagne_id"]))
+    if f["statut"] in StatutCarte.values:
+        clients = clients.filter(statut_carte=f["statut"])
+    if f["ville"]:
+        clients = clients.filter(ville__iexact=f["ville"])
+    du, au = _date_iso(f["du"]), _date_iso(f["au"])
+    if du:
+        clients = clients.filter(created_at__date__gte=du)
+    if au:
+        clients = clients.filter(created_at__date__lte=au)
+    if f["doublons"] == "1":
+        # Même numéro sur au moins deux fiches, comparé sur les 8 derniers
+        # chiffres : « 76 12 34 56 » et « +223 76123456 » sont le même client.
+        ids = [pk for pks in par_numero.values() if len(pks) > 1 for pk in pks]
+        clients = clients.filter(pk__in=ids or [0])
+
+    tri = "telephone" if f["doublons"] == "1" else "-created_at"
+    clients = clients.distinct().order_by(tri, "-created_at", "-id")
+
     def formater(c):
+        vente = next(iter(c.ventes.all()), None)
+        agence = vente.agence if vente and vente.agence_id else c.user.agence
         return {
             "id": c.id,
             "nom_complet": f"{c.prenom} {c.nom}".strip(),
@@ -515,12 +572,79 @@ def clients_index(request):
             "ville": c.ville,
             "type_carte": c.type_carte.code if c.type_carte_id else "?",
             "commercial": c.user.name if c.user_id else "—",
+            "agence": agence.nom if agence else None,
+            "campagne": vente.campagne.nom if vente and vente.campagne_id else None,
             "statut_carte": c.statut_carte,
+            "date": c.created_at.strftime("%d/%m/%Y") if c.created_at else None,
+            "fiches_meme_numero": len(par_numero.get(_cle_numero(c.telephone), [])),
         }
 
+    commerciaux = filtrer_users(
+        User.objects.filter(pk__in=base.values("user_id")), partenaire
+    ).order_by("name", "prenom")
+
     return render(
-        request, "Clients/Index", {"clients": paginer(request, clients, 20, formater)}
+        request,
+        "Clients/Index",
+        {
+            "clients": paginer(request, clients, 20, formater),
+            "filters": tableau({cle: v for cle, v in f.items() if v}),
+            "choix": {
+                "types": [
+                    {"id": t.id, "nom": t.code}
+                    for t in filtrer_types_cartes(TypeCarte.objects, partenaire).order_by("code")
+                ],
+                "commerciaux": [
+                    {"id": u.id, "nom": f"{u.name or ''} {u.prenom or ''}".strip()}
+                    for u in commerciaux
+                ],
+                "agences": [
+                    {"id": a.id, "nom": a.nom}
+                    for a in filtrer_agences(Agence.objects, partenaire).order_by("nom")
+                ],
+                "campagnes": [
+                    {"id": c.id, "nom": c.nom}
+                    for c in filtrer_campagnes(Campagne.objects, partenaire).order_by("-date_debut")
+                ],
+                "villes": sorted(
+                    {v.strip() for v in base.values_list("ville", flat=True) if v and v.strip()},
+                    key=str.casefold,
+                ),
+                "statuts": [{"id": v, "nom": l} for v, l in StatutCarte.choices],
+            },
+        },
     )
+
+
+FILTRES_CLIENTS = (
+    "q", "type_carte_id", "user_id", "agence_id", "campagne_id", "statut",
+    "ville", "du", "au", "doublons",
+)
+
+
+def _cle_numero(telephone):
+    """
+    Clé de comparaison d'un numéro : ses 8 derniers chiffres, pour que
+    « 76 12 34 56 » et « +223 76123456 » désignent le même client.
+    """
+    cle = re.sub(r"\D", "", telephone or "")[-8:]
+    return cle if len(cle) == 8 else None
+
+
+def _fiches_par_numero(queryset):
+    par_numero = {}
+    for pk, tel in queryset.values_list("id", "telephone"):
+        cle = _cle_numero(tel)
+        if cle:
+            par_numero.setdefault(cle, []).append(pk)
+    return par_numero
+
+
+def _date_iso(valeur):
+    try:
+        return datetime.strptime(valeur, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
 
 
 @role_required(Role.ADMIN, Role.DIRECTION)
@@ -534,6 +658,61 @@ def clients_show(request, client):
         pk=client,
     )
     ventes = client.ventes.select_related("agence", "type_carte", "user").all()
+    partenaire = partenaire_courant(request)
+
+    # Toutes les autres saisies portant le même numéro — ventes et
+    # enrôlements — pour repérer un client enregistré plusieurs fois.
+    meme_numero = []
+    cle = _cle_numero(client.telephone)
+    if cle:
+        autres_clients = filtrer_saisies(
+            Client.objects.select_related("user", "type_carte")
+            .prefetch_related("ventes__agence", "ventes__campagne")
+            .filter(telephone__contains=cle[-4:])
+            .exclude(pk=client.pk),
+            partenaire,
+        )
+        for c in autres_clients:
+            if _cle_numero(c.telephone) != cle:
+                continue
+            vente = next(iter(c.ventes.all()), None)
+            meme_numero.append({
+                "nature": "vente",
+                "id": c.id,
+                "nom_complet": f"{c.prenom} {c.nom}".strip(),
+                "telephone": c.telephone,
+                "detail": c.type_carte.code if c.type_carte_id else "?",
+                "commercial": _nom(c.user) or "—",
+                "meme_commercial": c.user_id == client.user_id,
+                "agence": vente.agence.nom if vente and vente.agence_id else None,
+                "campagne": vente.campagne.nom if vente and vente.campagne_id else None,
+                "horodatage": c.created_at,
+            })
+        enrolements = filtrer_saisies(
+            EnrolementClient.objects.select_related("user", "agence", "campagne")
+            .filter(telephone__contains=cle[-4:]),
+            partenaire,
+        )
+        for e in enrolements:
+            if _cle_numero(e.telephone) != cle:
+                continue
+            meme_numero.append({
+                "nature": "enrolement",
+                "id": e.id,
+                "nom_complet": e.nom_complet,
+                "telephone": e.telephone,
+                "detail": e.numero_compte or "—",
+                "commercial": _nom(e.user) or "—",
+                "meme_commercial": e.user_id == client.user_id,
+                "agence": e.agence.nom if e.agence_id else None,
+                "campagne": e.campagne.nom if e.campagne_id else None,
+                "horodatage": e.created_at,
+            })
+        meme_numero.sort(key=lambda x: x["horodatage"] or datetime.min)
+        for x in meme_numero:
+            h = x.pop("horodatage")
+            x["avant"] = bool(h and client.created_at and h < client.created_at)
+            x["date"] = h.strftime("%d/%m/%Y %H:%M") if h else "—"
 
     return render(
         request,
@@ -568,6 +747,7 @@ def clients_show(request, client):
                     }
                     for v in ventes
                 ],
+                "meme_numero": meme_numero,
             }
         },
     )
