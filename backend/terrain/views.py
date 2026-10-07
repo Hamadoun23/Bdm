@@ -40,7 +40,7 @@ from core.partenaires import (
 from core.php import nombre_format, tableau
 from core.validation import ErreursValidation, Validateur
 
-from . import doublons, services
+from . import doublons, services, telephones
 from .models import (
     DELAI_MODIFICATION_COMMERCIAL_HEURES,
     Client,
@@ -232,7 +232,7 @@ def api_vente_store(request):
     validateur = Validateur(request.POST)
     validateur.champ("prenom", "required|max:100")
     validateur.champ("nom", "required|max:100")
-    validateur.champ("telephone", "nullable|max:20")
+    validateur.champ("telephone", "required|max:25")
     validateur.champ("ville", "nullable|max:100")
     validateur.champ("quartier", "nullable|max:100")
     validateur.champ("type_carte_id", "required|integer")
@@ -260,6 +260,10 @@ def api_vente_store(request):
             },
             status=422,
         )
+
+    erreur_tel = _controler_telephone(donnees, user, "vente")
+    if erreur_tel:
+        return _refus_telephone(erreur_tel)
 
     if len(ids_ouvertes) == 1:
         donnees["campagne_id"] = ids_ouvertes[0]
@@ -297,6 +301,28 @@ def api_vente_store(request):
             "vente": {"id": vente.id, "campagne_id": vente.campagne_id},
         },
         status=201,
+    )
+
+
+def _controler_telephone(donnees, user, nature, exclure_id=None):
+    """
+    Met le numéro au format international dans `donnees` et vérifie qu'il
+    n'appartient pas déjà à quelqu'un d'autre. Renvoie le message de refus.
+    """
+    try:
+        donnees["telephone"] = telephones.normaliser(donnees.get("telephone"))
+    except telephones.NumeroInvalide as erreur:
+        return str(erreur)
+    return telephones.verifier(
+        donnees["telephone"], donnees["prenom"], donnees["nom"], user,
+        nature=nature, exclure_id=exclure_id,
+    )
+
+
+def _refus_telephone(message, champ="telephone"):
+    return JsonResponse(
+        {"success": False, "message": message, "errors": {champ: [message]}},
+        status=422,
     )
 
 
@@ -463,7 +489,7 @@ def api_enrolement_store(request):
     validateur.champ("nom", "required|max:255")
     validateur.champ("prenom", "required|max:255")
     validateur.champ("numero_compte", "required|max:50")
-    validateur.champ("telephone", "nullable|max:20")
+    validateur.champ("telephone", "required|max:25")
     validateur.champ("adresse", "nullable|max:255")
     validateur.champ("campagne_id", "nullable|integer")
     if len(ids_ouvertes) > 1 and not validateur.valeurs.get("campagne_id"):
@@ -480,6 +506,13 @@ def api_enrolement_store(request):
             },
             status=422,
         )
+
+    erreur_tel = _controler_telephone(donnees, user, "enrolement")
+    if erreur_tel:
+        return _refus_telephone(erreur_tel)
+    erreur_compte = telephones.verifier_compte(donnees["numero_compte"])
+    if erreur_compte:
+        return _refus_telephone(erreur_compte, champ="numero_compte")
 
     if len(ids_ouvertes) == 1:
         donnees["campagne_id"] = ids_ouvertes[0]
@@ -1066,13 +1099,17 @@ def commercial_client_update(request, client):
     validateur = Validateur(source)
     validateur.champ("prenom", "required|max:100")
     validateur.champ("nom", "required|max:100")
-    validateur.champ("telephone", "nullable|max:20")
+    validateur.champ("telephone", "required|max:25")
     validateur.champ("ville", "nullable|max:100")
     validateur.champ("quartier", "nullable|max:100")
     try:
         donnees = validateur.resultat()
     except ErreursValidation as erreur:
         return retour_avec_erreurs(request, erreur.erreurs)
+
+    erreur_tel = _controler_telephone(donnees, request.user, "vente", exclure_id=client.id)
+    if erreur_tel:
+        return retour_avec_erreurs(request, {"telephone": erreur_tel})
 
     for champ in ("prenom", "nom", "telephone", "ville", "quartier"):
         setattr(client, champ, donnees[champ])

@@ -6,6 +6,7 @@ import { Card, CardBody } from '@/Components/ui/Card';
 import { Input, Textarea, Label, FieldError } from '@/Components/ui/Input';
 import Button from '@/Components/ui/Button';
 import { cn } from '@/lib/cn';
+import { TelephoneInput } from '@/Components/ui/Telephone';
 
 function Chip({ selected, onClick, children }) {
     return (
@@ -138,8 +139,8 @@ export default function EnrolementsCreate({ campagnesOuvertes, peutEnroler, cont
                             </div>
 
                             <div>
-                                <Label htmlFor="telephone">Téléphone</Label>
-                                <Input id="telephone" type="tel" value={form.telephone} onChange={(e) => set('telephone', e.target.value)} error={errors.telephone} />
+                                <Label htmlFor="telephone">Téléphone (avec indicatif) *</Label>
+                                <TelephoneInput id="telephone" value={form.telephone} onChange={(v) => set('telephone', v)} error={errors.telephone} />
                                 <FieldError>{errors.telephone}</FieldError>
                             </div>
 

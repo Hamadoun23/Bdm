@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardBody } from '@/Components/ui/Card';
 import Badge from '@/Components/ui/Badge';
 import Button from '@/Components/ui/Button';
 import { Input, Label, FieldError } from '@/Components/ui/Input';
+import { TelephoneInput } from '@/Components/ui/Telephone';
 
 export default function ClientEdit({ client, delaiHeures }) {
     const { data, setData, post, processing, errors } = useForm({
@@ -63,8 +64,8 @@ export default function ClientEdit({ client, delaiHeures }) {
                             </div>
 
                             <div>
-                                <Label htmlFor="telephone">Téléphone</Label>
-                                <Input id="telephone" type="tel" value={data.telephone} onChange={(e) => setData('telephone', e.target.value)} maxLength={20} readOnly={client.verrouille} error={errors.telephone} />
+                                <Label htmlFor="telephone">Téléphone (avec indicatif) *</Label>
+                                <TelephoneInput id="telephone" value={data.telephone} onChange={(v) => setData('telephone', v)} readOnly={client.verrouille} error={errors.telephone} />
                                 <FieldError>{errors.telephone}</FieldError>
                             </div>
 
