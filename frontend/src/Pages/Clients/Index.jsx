@@ -13,6 +13,7 @@ import Pagination from '@/Components/ui/Pagination';
 const VIDE = {
     q: '', type_carte_id: '', user_id: '', agence_id: '', campagne_id: '',
     statut: '', ville: '', du: '', au: '', doublons: '', cas: '',
+    delai: '', campagne_resaisie: '', resaisie_du: '', resaisie_au: '', tri: '',
 };
 
 const SAISIE = {
@@ -161,18 +162,107 @@ function ListeClients({ clients }) {
     );
 }
 
-function Doublons({ doublons, filtrer }) {
-    const { stats, classement, groupes } = doublons;
+/** Petite liste chiffrée (commerciaux concernés, campagnes, délais, mois). */
+function Decompte({ titre, lignes, vide = 'Aucun.', onChoisir }) {
+    return (
+        <div>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-500">{titre}</p>
+            {lignes.length === 0 ? (
+                <p className="text-sm text-gray-400">{vide}</p>
+            ) : (
+                <ul className="space-y-1 text-sm">
+                    {lignes.map((l) => (
+                        <li key={l.id} className="flex items-baseline justify-between gap-3">
+                            {onChoisir ? (
+                                <button type="button" onClick={() => onChoisir(l)} className="truncate text-left text-gray-700 underline-offset-2 hover:text-gda-orange hover:underline">
+                                    {l.nom}
+                                </button>
+                            ) : (
+                                <span className="truncate text-gray-700">{l.nom}</span>
+                            )}
+                            <span className="shrink-0 tabular-nums font-medium text-gray-900">{nombre(l.total)}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+/** Bilan d'audit du commercial choisi dans le filtre « Commercial ». */
+function AuditCommercial({ audit, cas, filtrer }) {
+    const onglets = [
+        { id: 'autre', label: "A ressaisi le client d'un autre", total: audit.resaisies_autre, tone: 'text-red-700' },
+        { id: 'meme', label: 'A ressaisi son propre client', total: audit.resaisies_meme, tone: 'text-amber-700' },
+        { id: 'victime', label: 'Ses clients ressaisis par un autre', total: audit.clients_ressaisis_par_autres, tone: 'text-blue-700' },
+        { id: '', label: 'Tous ses doublons', total: null, tone: 'text-gray-900' },
+    ];
+    return (
+        <Card className="overflow-hidden border-orange-200">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-100 px-5 py-4">
+                <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Audit du commercial</p>
+                    <p className="text-lg font-semibold text-gray-900">{audit.commercial}</p>
+                </div>
+                <p className="text-sm text-gray-600">
+                    {nombre(audit.total_fiches)} fiches saisies · <strong className="text-gray-900">{audit.pourcentage} %</strong> de re-saisies
+                    {audit.premiere && <> · re-saisies du {audit.premiere} au {audit.derniere}</>}
+                </p>
+            </div>
+            <div className="grid gap-px bg-gray-100 sm:grid-cols-2 lg:grid-cols-4">
+                {onglets.map((o) => {
+                    const actif = (cas || '') === o.id;
+                    return (
+                        <button
+                            key={o.id || 'tous'}
+                            type="button"
+                            onClick={() => filtrer({ cas: o.id })}
+                            className={`bg-white px-5 py-3 text-left hover:bg-orange-50 ${actif ? 'ring-2 ring-inset ring-gda-orange' : ''}`}
+                        >
+                            <p className="text-xs text-gray-500">{o.label}</p>
+                            <p className={`text-2xl font-semibold tabular-nums ${o.tone}`}>{o.total === null ? '→' : nombre(o.total)}</p>
+                            <p className="text-xs text-gray-400">{actif ? 'affiché ci-dessous' : 'cliquer pour afficher'}</p>
+                        </button>
+                    );
+                })}
+            </div>
+            <div className="grid gap-6 px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
+                <Decompte
+                    titre="Clients repris à"
+                    lignes={audit.pris_a}
+                    onChoisir={() => filtrer({ cas: 'autre' })}
+                />
+                <Decompte
+                    titre="Ses clients repris par"
+                    lignes={audit.pris_par}
+                    onChoisir={() => filtrer({ cas: 'victime' })}
+                />
+                <Decompte titre="Re-saisies par campagne" lignes={audit.par_campagne} />
+                <Decompte
+                    titre="Délai après la 1ère saisie"
+                    lignes={audit.par_delai}
+                    onChoisir={(l) => filtrer({ delai: l.id })}
+                />
+                <Decompte titre="Re-saisies par mois" lignes={audit.par_mois} />
+            </div>
+        </Card>
+    );
+}
+
+function Doublons({ doublons, filters, filtrer }) {
+    const { stats, classement, groupes, audit } = doublons;
     return (
         <div className="space-y-4">
+            {audit && <AuditCommercial audit={audit} cas={filters.cas} filtrer={filtrer} />}
+
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard label="Clients en double" value={nombre(stats.groupes)} sub={`${nombre(stats.fiches)} fiches concernées`} icon={Copy} />
-                <StatCard label="Client d'un autre commercial" value={nombre(stats.resaisies_autre)} sub="re-saisies d'un client déjà enregistré" icon={AlertTriangle} tone="orange" />
+                <StatCard label="Client d'un autre commercial" value={nombre(stats.resaisies_autre)} sub="re-saisies retenues par les filtres" icon={AlertTriangle} tone="orange" />
                 <StatCard label="Re-saisies même commercial" value={nombre(stats.resaisies_meme)} sub="double saisie ou carte en plus" icon={Repeat} tone="gray" />
                 <StatCard label="Plusieurs commerciaux" value={nombre(stats.plusieurs_commerciaux)} sub="clients saisis par 2 commerciaux ou +" icon={Users} tone="blue" />
             </div>
 
-            {classement.length > 0 && (
+            {!audit && classement.length > 0 && (
                 <Card className="overflow-hidden">
                     <CardHeader><CardTitle>Commerciaux qui ressaisissent des clients</CardTitle></CardHeader>
                     <div className="overflow-x-auto">
@@ -197,7 +287,7 @@ function Doublons({ doublons, filtrer }) {
                                         <td className="px-5 py-2.5 text-right tabular-nums text-gray-900">{c.pourcentage} %</td>
                                         <td className="px-5 py-2.5 text-right">
                                             <Button type="button" size="sm" variant="outline" onClick={() => filtrer({ user_id: String(c.user_id) })}>
-                                                Voir ses doublons
+                                                Auditer
                                             </Button>
                                         </td>
                                     </tr>
@@ -222,46 +312,54 @@ function Doublons({ doublons, filtrer }) {
                         <span className="text-xs text-gray-500">
                             {g.nb_commerciaux > 1 ? `${g.nb_commerciaux} commerciaux différents` : 'un seul commercial'}
                             {' · '}1ère saisie par <strong className="text-gray-700">{g.premiere_par}</strong>
+                            {' le '}<strong className="text-gray-700">{g.fiches[0].heure}</strong>
                         </span>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                             <thead>
                                 <tr className="text-xs uppercase tracking-wide text-gray-500">
+                                    <th className="px-5 py-2 font-medium">Enregistré le</th>
                                     <th className="px-5 py-2 font-medium">Saisie</th>
+                                    <th className="px-5 py-2 font-medium">Commercial</th>
                                     <th className="px-5 py-2 font-medium">Client</th>
                                     <th className="px-5 py-2 font-medium">Téléphone</th>
                                     <th className="px-5 py-2 font-medium">Carte</th>
-                                    <th className="px-5 py-2 font-medium">Commercial</th>
                                     <th className="px-5 py-2 font-medium">Campagne</th>
-                                    <th className="px-5 py-2 font-medium">Enregistré le</th>
                                     <th className="px-5 py-2"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {g.fiches.map((x) => {
                                     const s = SAISIE[x.statut_saisie];
+                                    const fond = x.cible
+                                        ? (x.statut_saisie === 'resaisie_autre' ? 'bg-red-50' : 'bg-amber-50/70')
+                                        : '';
                                     return (
-                                        <tr key={x.id} className={x.statut_saisie === 'resaisie_autre' ? 'bg-red-50/60' : undefined}>
+                                        <tr key={x.id} className={fond}>
+                                            <td className={`whitespace-nowrap px-5 py-2.5 ${x.cible ? 'border-l-4 border-gda-orange' : 'border-l-4 border-transparent'}`}>
+                                                <span className="font-medium text-gray-900">{x.heure}</span>
+                                                {x.jours_apres !== null && (
+                                                    <div className={`text-xs ${x.jours_apres === 0 ? 'text-gray-500' : 'font-medium text-gray-700'}`}>
+                                                        {x.jours_apres === 0 ? 'le même jour que la 1ère' : `${x.jours_apres} j après la 1ère`}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="whitespace-nowrap px-5 py-2.5"><Badge tone={s.tone}>{s.label}</Badge></td>
-                                            <td className="px-5 py-2.5 font-medium text-gray-900">
+                                            <td className="min-w-[10rem] px-5 py-2.5 text-gray-700">
+                                                {x.commercial}
+                                                {x.agence && <div className="text-xs text-gray-400">{x.agence}</div>}
+                                            </td>
+                                            <td className="min-w-[10rem] px-5 py-2.5 font-medium text-gray-900">
                                                 {x.nom_complet}
                                                 {!x.dans_filtre && <div className="text-xs font-normal text-gray-400">hors filtres</div>}
                                             </td>
                                             <td className="whitespace-nowrap px-5 py-2.5 text-gray-600">{x.telephone ?? '—'}</td>
                                             <td className="px-5 py-2.5"><Badge tone="blue">{x.type_carte}</Badge></td>
-                                            <td className="px-5 py-2.5 text-gray-600">
-                                                {x.commercial}
-                                                {x.agence && <div className="text-xs text-gray-400">{x.agence}</div>}
-                                            </td>
-                                            <td className="px-5 py-2.5 text-gray-600">{x.campagne ?? '—'}</td>
-                                            <td className="whitespace-nowrap px-5 py-2.5 text-gray-600">
-                                                {x.heure}
-                                                {x.jours_apres !== null && (
-                                                    <div className="text-xs text-gray-400">
-                                                        {x.jours_apres === 0 ? 'le même jour' : `${x.jours_apres} j après la 1ère`}
-                                                    </div>
-                                                )}
+                                            <td className="min-w-[9rem] px-5 py-2.5 text-gray-600">
+                                                {x.campagne ?? '—'}
+                                                {x.meme_campagne === true && <div className="text-xs text-gray-400">même campagne que la 1ère</div>}
+                                                {x.meme_campagne === false && <div className="text-xs font-medium text-amber-700">autre campagne que la 1ère</div>}
                                             </td>
                                             <td className="px-5 py-2.5 text-right">
                                                 <Button href={route('clients.show', x.id)} size="sm" variant="outline">Détail</Button>
@@ -394,9 +492,25 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
                     <Champ label="Afficher" className="w-80">
                         <Liste value={f.cas} onChange={set('cas')} options={choix.cas} tous={null} />
                     </Champ>
-                    <p className="max-w-md pb-1 text-xs text-gray-500">
-                        Les numéros sont comparés sur leurs 8 derniers chiffres, les noms sans accents ni ordre des mots.
-                        « Même nom » peut inclure de vrais homonymes : vérifiez le numéro.
+                    <Champ label="Délai de la re-saisie" className="w-52">
+                        <Liste value={f.delai} onChange={set('delai')} options={choix.delais} tous="Tous les délais" />
+                    </Champ>
+                    <Champ label="Campagne de la re-saisie" className="w-72">
+                        <Liste value={f.campagne_resaisie} onChange={set('campagne_resaisie')} options={choix.campagnesResaisie} tous="Peu importe" />
+                    </Champ>
+                    <Champ label="Re-saisie du" className="w-40">
+                        <Input type="date" value={f.resaisie_du} onChange={(e) => set('resaisie_du')(e.target.value)} />
+                    </Champ>
+                    <Champ label="au" className="w-40">
+                        <Input type="date" value={f.resaisie_au} onChange={(e) => set('resaisie_au')(e.target.value)} />
+                    </Champ>
+                    <Champ label="Trier par" className="w-72">
+                        <Liste value={f.tri} onChange={set('tri')} options={choix.tris} tous={null} />
+                    </Champ>
+                    <p className="w-full text-xs text-gray-500">
+                        Choisissez un commercial dans « Commercial » pour obtenir son audit complet. Les numéros sont comparés sur
+                        leurs 8 derniers chiffres, les noms sans accents ni ordre des mots ; « Même nom » peut inclure de vrais
+                        homonymes. Les lignes marquées d'un trait orange sont les re-saisies qui correspondent aux filtres.
                     </p>
                 </div>
 
@@ -406,9 +520,9 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
                 </div>
             </form>
 
-            <TableauDeBord tdb={tableauDeBord} filters={actuels} filtrer={filtrer} />
+            {!modeDoublons && <TableauDeBord tdb={tableauDeBord} filters={actuels} filtrer={filtrer} />}
 
-            {modeDoublons ? <Doublons doublons={doublons} filtrer={filtrer} /> : <ListeClients clients={clients} />}
+            {modeDoublons ? <Doublons doublons={doublons} filters={actuels} filtrer={filtrer} /> : <ListeClients clients={clients} />}
         </AppLayout>
     );
 }

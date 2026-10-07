@@ -34,12 +34,35 @@ CRITERES = {
 #: Ce qu'on garde des groupes trouvés.
 CAS_TOUS = "tous"
 CAS_AUTRE = "autre"
+CAS_VICTIME = "victime"
 CAS_MEME = "meme"
 CAS = {
     CAS_TOUS: "Tous les doublons",
-    CAS_AUTRE: "Client déjà enregistré par un autre commercial",
-    CAS_MEME: "Client ressaisi par le même commercial",
+    CAS_AUTRE: "A ressaisi le client d'un autre commercial",
+    CAS_VICTIME: "Son client a été ressaisi par un autre commercial",
+    CAS_MEME: "A ressaisi son propre client",
 }
+
+#: Délai entre la 1ère saisie et la re-saisie, en jours calendaires.
+DELAIS = {
+    "0": ("Le même jour", 0, 0),
+    "1-7": ("1 à 7 jours après", 1, 7),
+    "8-30": ("8 à 30 jours après", 8, 30),
+    "31+": ("Plus de 30 jours après", 31, None),
+}
+
+CAMPAGNES_RESAISIE = {
+    "meme": "Dans la même campagne que la 1ère saisie",
+    "autre": "Dans une autre campagne que la 1ère saisie",
+}
+
+TRIS = {
+    "taille": "Clients les plus ressaisis d'abord",
+    "recent": "Re-saisies les plus récentes d'abord",
+    "ancien": "Re-saisies les plus anciennes d'abord",
+    "delai": "Plus long délai d'abord",
+}
+
 
 ORIGINALE = "originale"
 RESAISIE_AUTRE = "resaisie_autre"
@@ -68,10 +91,20 @@ class Fiche:
     telephone: str
     user_id: int
     created_at: datetime
+    campagne_id: int = None
     groupe: int = 0
     rang: int = 0
     statut: str = ORIGINALE
     premiere: "Fiche" = None
+    #: Re-saisie retenue par les filtres d'audit : c'est elle qu'on examine.
+    cible: bool = False
+
+    @property
+    def delai(self):
+        """Jours calendaires écoulés depuis la 1ère saisie du client."""
+        if self.rang <= 1 or not self.created_at or not self.premiere.created_at:
+            return None
+        return (self.created_at.date() - self.premiere.created_at.date()).days
 
 
 @dataclass
@@ -165,43 +198,76 @@ def analyser(fiches, critere=CRITERE_NUMERO):
     return groupes
 
 
-def garder(groupes, cas):
-    if cas == CAS_AUTRE:
-        return [g for g in groupes if g.contient(RESAISIE_AUTRE)]
-    if cas == CAS_MEME:
-        return [g for g in groupes if g.contient(RESAISIE_MEME)]
-    return groupes
-
-
 def statistiques(groupes):
-    fiches = [f for g in groupes for f in g.fiches]
+    resaisies = [f for g in groupes for f in g.fiches if f.cible]
     return {
         "groupes": len(groupes),
-        "fiches": len(fiches),
-        "resaisies_autre": sum(f.statut == RESAISIE_AUTRE for f in fiches),
-        "resaisies_meme": sum(f.statut == RESAISIE_MEME for f in fiches),
+        "fiches": sum(len(g.fiches) for g in groupes),
+        "resaisies_autre": sum(f.statut == RESAISIE_AUTRE for f in resaisies),
+        "resaisies_meme": sum(f.statut == RESAISIE_MEME for f in resaisies),
         "plusieurs_commerciaux": sum(len(g.commerciaux) > 1 for g in groupes),
     }
 
 
-def classement_commerciaux(fiches, totaux_par_user):
-    """Par commercial : ses re-saisies, rapportées à son total de fiches."""
+def classement_commerciaux(resaisies, totaux_par_user):
+    """Par auteur de re-saisie : combien, et rapporté à son total de fiches."""
     par_user = {}
-    for f in fiches:
+    for f in resaisies:
         ligne = par_user.setdefault(f.user_id, {"user_id": f.user_id, "autre": 0, "meme": 0})
-        if f.statut == RESAISIE_AUTRE:
-            ligne["autre"] += 1
-        elif f.statut == RESAISIE_MEME:
-            ligne["meme"] += 1
+        ligne["autre" if f.statut == RESAISIE_AUTRE else "meme"] += 1
     lignes = []
     for ligne in par_user.values():
-        resaisies = ligne["autre"] + ligne["meme"]
-        if not resaisies:
-            continue
         total = totaux_par_user.get(ligne["user_id"], 0)
         ligne["total_fiches"] = total
-        ligne["resaisies"] = resaisies
-        ligne["pourcentage"] = round(100 * resaisies / total, 1) if total else 0
+        ligne["resaisies"] = ligne["autre"] + ligne["meme"]
+        ligne["pourcentage"] = round(100 * ligne["resaisies"] / total, 1) if total else 0
         lignes.append(ligne)
     lignes.sort(key=lambda l: (-l["autre"], -l["resaisies"]))
     return lignes
+
+
+def tranche_delai(jours):
+    for code, (_, mini, maxi) in DELAIS.items():
+        if jours is not None and jours >= mini and (maxi is None or jours <= maxi):
+            return code
+    return None
+
+
+def audit_commercial(groupes, user_id):
+    """
+    Bilan d'un commercial sur tous ses doublons, quels que soient les filtres
+    d'affichage : ce qu'il a ressaisi, et ce que les autres lui ont ressaisi.
+    """
+    fait_autre, fait_meme, subi = [], [], []
+    for g in groupes:
+        premiere = g.fiches[0]
+        for f in g.fiches[1:]:
+            if f.user_id == user_id:
+                (fait_autre if f.statut == RESAISIE_AUTRE else fait_meme).append(f)
+            elif premiere.user_id == user_id:
+                subi.append(f)
+
+    def compter(fiches, cle):
+        c = {}
+        for f in fiches:
+            k = cle(f)
+            c[k] = c.get(k, 0) + 1
+        return sorted(c.items(), key=lambda x: -x[1])
+
+    faites = fait_autre + fait_meme
+    return {
+        "resaisies_autre": len(fait_autre),
+        "resaisies_meme": len(fait_meme),
+        "clients_ressaisis_par_autres": len(subi),
+        # user_id des commerciaux dont il a repris les clients, et inversement.
+        "pris_a": compter(fait_autre, lambda f: f.premiere.user_id),
+        "pris_par": compter(subi, lambda f: f.user_id),
+        "par_campagne": compter(faites, lambda f: f.campagne_id),
+        "par_delai": compter(faites, lambda f: tranche_delai(f.delai)),
+        "par_mois": sorted(
+            compter(faites, lambda f: f.created_at.strftime("%Y-%m") if f.created_at else None),
+            key=lambda x: x[0] or "",
+        ),
+        "premiere": min((f.created_at for f in faites if f.created_at), default=None),
+        "derniere": max((f.created_at for f in faites if f.created_at), default=None),
+    }

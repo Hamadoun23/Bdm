@@ -522,20 +522,19 @@ def clients_index(request):
     }
 
     if critere:
-        groupes, fiches_filtrees = analyser_doublons(base, ids_filtres, critere, f["cas"])
-        noms = noms_commerciaux({x.user_id for g in groupes for x in g.fiches})
-        classement = doublons.classement_commerciaux(
-            fiches_filtrees, totaux_par_commercial(ids_filtres)
-        )
+        tous_groupes, groupes = analyser_doublons(base, ids_filtres, critere, f)
+        noms = noms_commerciaux({x.user_id for g in tous_groupes for x in g.fiches})
+        totaux = totaux_par_commercial(base)
+        resaisies = [x for g in groupes for x in g.fiches if x.cible]
+        classement = doublons.classement_commerciaux(resaisies, totaux)
         for ligne in classement:
             ligne["commercial"] = noms.get(ligne["user_id"], "—")
         props["doublons"] = {
             "critere": critere,
             "stats": doublons.statistiques(groupes),
-            "classement": classement[:15],
-            "groupes": paginer(
-                request, groupes, 15, _formateur_groupes(ids_filtres, noms)
-            ),
+            "classement": classement[:20],
+            "audit": _audit_commercial(tous_groupes, f, noms, totaux),
+            "groupes": paginer(request, groupes, 15, _formateur_groupes(ids_filtres, noms)),
         }
     else:
         par_numero = {}
@@ -562,7 +561,8 @@ def clients_index(request):
 
 FILTRES_CLIENTS = (
     "q", "type_carte_id", "user_id", "agence_id", "campagne_id", "statut",
-    "ville", "du", "au", "doublons", "cas",
+    "ville", "du", "au", "doublons", "cas", "delai", "campagne_resaisie",
+    "resaisie_du", "resaisie_au", "tri",
 )
 
 
@@ -624,45 +624,131 @@ def appliquer_filtres_clients(clients, f):
     return clients.distinct()
 
 
-def analyser_doublons(base, ids_filtres, critere, cas):
+def analyser_doublons(base, ids_filtres, critere, f):
     """
-    Groupes de doublons à afficher, et fiches du périmètre filtré qu'ils contiennent.
+    Renvoie (tous les groupes, groupes retenus par les filtres d'audit).
 
     L'analyse porte sur toutes les fiches du partenaire : filtrer sur un
     commercial doit montrer qu'il a ressaisi le client d'un autre, même si la
-    fiche de l'autre n'entre pas dans le filtre. Un groupe est retenu dès
-    qu'une de ses fiches filtrées correspond au cas demandé.
+    fiche de l'autre n'entre pas dans le filtre. Chaque re-saisie (fiche de
+    rang 2 ou plus) est examinée ; un groupe est retenu dès qu'une re-saisie
+    correspond au cas, au délai, à la campagne et à la période demandés. Ces
+    re-saisies sont marquées `cible` pour être mises en évidence.
     """
+    campagnes = dict(
+        Vente.objects.filter(client_id__in=base.values("id")).values_list(
+            "client_id", "campagne_id"
+        )
+    )
     fiches = [
-        doublons.Fiche(*valeurs)
-        for valeurs in base.values_list(
+        doublons.Fiche(i, p, n, t, u, c, campagne_id=campagnes.get(i))
+        for i, p, n, t, u, c in base.values_list(
             "id", "prenom", "nom", "telephone", "user_id", "created_at"
         )
     ]
-    statut_voulu = {
-        doublons.CAS_AUTRE: doublons.RESAISIE_AUTRE,
-        doublons.CAS_MEME: doublons.RESAISIE_MEME,
-    }.get(cas)
-    retenus, fiches_filtrees = [], []
-    for g in doublons.analyser(fiches, critere):
-        dans_filtre = [x for x in g.fiches if x.id in ids_filtres]
-        cibles = [x for x in dans_filtre if x.statut == statut_voulu] if statut_voulu else dans_filtre
-        if cibles:
+    tous = doublons.analyser(fiches, critere)
+    du, au = _date_iso(f["resaisie_du"]), _date_iso(f["resaisie_au"])
+
+    def correspond(x, premiere):
+        cas = f["cas"]
+        if cas == doublons.CAS_AUTRE:
+            ok = x.id in ids_filtres and x.statut == doublons.RESAISIE_AUTRE
+        elif cas == doublons.CAS_MEME:
+            ok = x.id in ids_filtres and x.statut == doublons.RESAISIE_MEME
+        elif cas == doublons.CAS_VICTIME:
+            ok = premiere.id in ids_filtres and x.user_id != premiere.user_id
+        else:
+            ok = x.id in ids_filtres or premiere.id in ids_filtres
+        if not ok:
+            return False
+        if f["delai"] in doublons.DELAIS and doublons.tranche_delai(x.delai) != f["delai"]:
+            return False
+        if f["campagne_resaisie"] == "meme" and x.campagne_id != premiere.campagne_id:
+            return False
+        if f["campagne_resaisie"] == "autre" and x.campagne_id == premiere.campagne_id:
+            return False
+        jour = x.created_at.date() if x.created_at else None
+        if du and (not jour or jour < du):
+            return False
+        if au and (not jour or jour > au):
+            return False
+        return True
+
+    retenus = []
+    for g in tous:
+        premiere = g.fiches[0]
+        for x in g.fiches[1:]:
+            x.cible = correspond(x, premiere)
+        if any(x.cible for x in g.fiches):
             retenus.append(g)
-            fiches_filtrees.extend(dans_filtre)
+
+    def derniere(g):
+        return max(x.created_at or datetime.min for x in g.fiches if x.cible)
+
+    tri = f["tri"]
+    if tri == "recent":
+        retenus.sort(key=derniere, reverse=True)
+    elif tri == "ancien":
+        retenus.sort(key=derniere)
+    elif tri == "delai":
+        retenus.sort(key=lambda g: -max(x.delai or 0 for x in g.fiches if x.cible))
     for i, g in enumerate(retenus, 1):
         g.numero = i
-    return retenus, fiches_filtrees
+    return tous, retenus
+
+
+def _audit_commercial(groupes, f, noms, totaux):
+    """Bilan du commercial filtré, ou None si aucun commercial n'est choisi."""
+    if not f["user_id"].isdigit():
+        return None
+    user_id = int(f["user_id"])
+    a = doublons.audit_commercial(groupes, user_id)
+    campagnes = dict(Campagne.objects.values_list("id", "nom"))
+    resaisies = a["resaisies_autre"] + a["resaisies_meme"]
+    total = totaux.get(user_id, 0)
+    ordre_delais = list(doublons.DELAIS)
+    return {
+        "commercial": noms.get(user_id) or _nom(User.objects.filter(pk=user_id).first()) or "—",
+        "total_fiches": total,
+        "resaisies_autre": a["resaisies_autre"],
+        "resaisies_meme": a["resaisies_meme"],
+        "pourcentage": round(100 * resaisies / total, 1) if total else 0,
+        "clients_ressaisis_par_autres": a["clients_ressaisis_par_autres"],
+        "pris_a": [{"id": u, "nom": noms.get(u, "—"), "total": n} for u, n in a["pris_a"]],
+        "pris_par": [{"id": u, "nom": noms.get(u, "—"), "total": n} for u, n in a["pris_par"]],
+        "par_campagne": [
+            {"id": c or "aucune", "nom": campagnes.get(c, "Sans campagne"), "total": n}
+            for c, n in a["par_campagne"]
+        ],
+        "par_delai": [
+            {"id": d, "nom": doublons.DELAIS[d][0], "total": n}
+            for d, n in sorted(
+                (x for x in a["par_delai"] if x[0] in doublons.DELAIS),
+                key=lambda x: ordre_delais.index(x[0]),
+            )
+        ],
+        "par_mois": [{"id": m, "nom": _mois_fr(m), "total": n} for m, n in a["par_mois"] if m],
+        "premiere": a["premiere"].strftime("%d/%m/%Y") if a["premiere"] else None,
+        "derniere": a["derniere"].strftime("%d/%m/%Y") if a["derniere"] else None,
+    }
+
+
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
+        "septembre", "octobre", "novembre", "décembre"]
+
+
+def _mois_fr(cle):
+    annee, mois = cle.split("-")
+    return f"{MOIS[int(mois) - 1].capitalize()} {annee}"
 
 
 def noms_commerciaux(user_ids):
     return {u.id: _nom(u) or u.name for u in User.objects.filter(pk__in=user_ids)}
 
 
-def totaux_par_commercial(ids):
+def totaux_par_commercial(clients):
     return dict(
-        Client.objects.filter(pk__in=ids)
-        .values_list("user_id")
+        clients.values_list("user_id")
         .annotate(n=Count("id"))
         .order_by()
     )
@@ -696,10 +782,10 @@ def lignes_groupe(g, objets, ids_filtres, noms):
             "heure": x.created_at.strftime("%d/%m/%Y %H:%M") if x.created_at else "—",
             "rang": x.rang,
             "statut_saisie": x.statut,
-            "jours_apres": (x.created_at - premiere.created_at).days
-            if x.rang > 1 and x.created_at and premiere.created_at
-            else None,
+            "jours_apres": x.delai,
             "dans_filtre": x.id in ids_filtres,
+            "cible": x.cible,
+            "meme_campagne": x.campagne_id == premiere.campagne_id if x.rang > 1 else None,
         })
         lignes.append(ligne)
     return lignes
@@ -792,6 +878,9 @@ def _choix_filtres_clients(base, partenaire):
         "statuts": [{"id": v, "nom": l} for v, l in StatutCarte.choices],
         "criteres": [{"id": k, "nom": v} for k, v in doublons.CRITERES.items()],
         "cas": [{"id": k, "nom": v} for k, v in doublons.CAS.items()],
+        "delais": [{"id": k, "nom": v[0]} for k, v in doublons.DELAIS.items()],
+        "campagnesResaisie": [{"id": k, "nom": v} for k, v in doublons.CAMPAGNES_RESAISIE.items()],
+        "tris": [{"id": k, "nom": v} for k, v in doublons.TRIS.items()],
     }
 
 

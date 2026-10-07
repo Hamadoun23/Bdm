@@ -376,7 +376,7 @@ LIBELLES_SAISIE = {
 @role_required(Role.ADMIN, Role.DIRECTION)
 @http_methods("GET", "HEAD")
 def clients_doublons_export(request):
-    """Les doublons de l'écran Clients, avec les mêmes filtres."""
+    """Les doublons de l'écran Clients, avec les mêmes filtres d'audit."""
     from .views import (
         analyser_doublons,
         appliquer_filtres_clients,
@@ -392,29 +392,35 @@ def clients_doublons_export(request):
     f = filtres_clients(request)
     critere = critere_doublons(f) or doublons.CRITERE_NUMERO
     ids_filtres = set(appliquer_filtres_clients(base, f).values_list("id", flat=True))
-    groupes, fiches_filtrees = analyser_doublons(base, ids_filtres, critere, f["cas"])
+    _, groupes = analyser_doublons(base, ids_filtres, critere, f)
     noms = noms_commerciaux({x.user_id for g in groupes for x in g.fiches})
     objets = charger_clients([x.id for g in groupes for x in g.fiches])
 
     entetes = [
-        "Groupe", "Nb fiches du groupe", "Saisie", "Client", "Téléphone", "Type carte",
-        "Ville", "Commercial", "Agence", "Campagne", "Date d'enregistrement",
-        "1ère saisie par", "Jours après la 1ère saisie",
+        "Groupe", "Nb fiches du groupe", "Saisie", "Re-saisie examinée", "Client",
+        "Téléphone", "Type carte", "Ville", "Commercial", "Agence", "Campagne",
+        "Date d'enregistrement", "1ère saisie par", "Date 1ère saisie",
+        "Jours après la 1ère saisie", "Même campagne que la 1ère saisie",
     ]
     lignes = []
     for g in groupes:
+        premiere = g.fiches[0]
+        date_premiere = (
+            premiere.created_at.strftime("%d/%m/%Y %H:%M") if premiere.created_at else ""
+        )
         for x in lignes_groupe(g, objets, ids_filtres, noms):
+            meme_campagne = {True: "Oui", False: "Non"}.get(x["meme_campagne"], "")
             lignes.append([
                 g.numero, len(g.fiches), LIBELLES_SAISIE[x["statut_saisie"]],
-                x["nom_complet"], x["telephone"] or "", x["type_carte"], x["ville"] or "",
-                x["commercial"], x["agence"] or "", x["campagne"] or "", x["heure"],
-                noms.get(g.fiches[0].user_id, ""),
-                "" if x["jours_apres"] is None else x["jours_apres"],
+                "Oui" if x["cible"] else "", x["nom_complet"], x["telephone"] or "",
+                x["type_carte"], x["ville"] or "", x["commercial"], x["agence"] or "",
+                x["campagne"] or "", x["heure"], noms.get(premiere.user_id, ""),
+                date_premiere, "" if x["jours_apres"] is None else x["jours_apres"],
+                meme_campagne,
             ])
 
-    classement = doublons.classement_commerciaux(
-        fiches_filtrees, totaux_par_commercial(ids_filtres)
-    )
+    resaisies = [x for g in groupes for x in g.fiches if x.cible]
+    classement = doublons.classement_commerciaux(resaisies, totaux_par_commercial(base))
     lignes_commerciaux = [
         [
             noms.get(c["user_id"], ""), c["total_fiches"], c["autre"], c["meme"],
@@ -428,7 +434,7 @@ def clients_doublons_export(request):
         {
             "titre": "Par commercial",
             "entetes": [
-                "Commercial", "Fiches saisies", "Re-saisies : client d'un autre",
+                "Commercial", "Fiches saisies (total)", "Re-saisies : client d'un autre",
                 "Re-saisies : son propre client", "Total re-saisies", "% de re-saisies",
             ],
             "lignes": lignes_commerciaux,
