@@ -230,7 +230,9 @@ def classement_commerciaux(resaisies, totaux_par_user):
         ligne["resaisies"] = ligne["autre"] + ligne["meme"]
         ligne["pourcentage"] = round(100 * ligne["resaisies"] / total, 1) if total else 0
         lignes.append(ligne)
-    lignes.sort(key=lambda l: (-l["autre"], -l["resaisies"]))
+    # Du plus fort pourcentage de re-saisies au plus faible ; à égalité, celui
+    # qui a repris le plus de clients à d'autres commerciaux d'abord.
+    lignes.sort(key=lambda l: (-l["pourcentage"], -l["autre"], -l["resaisies"]))
     return lignes
 
 
