@@ -641,8 +641,10 @@ def clients_index(request):
     if critere:
         tous_groupes, groupes = analyser_doublons(base, ids_filtres, critere, f)
         noms = noms_commerciaux({x.user_id for g in tous_groupes for x in g.fiches})
-        totaux = totaux_par_commercial(base)
-        resaisies = [x for g in groupes for x in g.fiches if x.cible]
+        # Les totaux suivent les filtres : avec une campagne choisie, « Fiches
+        # saisies » compte les fiches du commercial dans cette campagne.
+        totaux = totaux_par_commercial(base.filter(pk__in=ids_filtres))
+        resaisies = [x for g in groupes for x in g.fiches if x.cible and x.id in ids_filtres]
         classement = doublons.classement_commerciaux(resaisies, totaux)
         for ligne in classement:
             ligne["commercial"] = noms.get(ligne["user_id"], "—")
@@ -650,7 +652,7 @@ def clients_index(request):
             "critere": critere,
             "stats": doublons.statistiques(groupes),
             "classement": classement[:20],
-            "audit": _audit_commercial(tous_groupes, f, noms, totaux),
+            "audit": _audit_commercial(tous_groupes, f, noms, totaux, ids_filtres),
             "avecNom": noms.get(int(f["avec"])) if f["avec"].isdigit() else None,
             "groupes": paginer(request, groupes, 15, _formateur_groupes(ids_filtres, noms)),
         }
@@ -819,12 +821,12 @@ def analyser_doublons(base, ids_filtres, critere, f):
     return tous, retenus
 
 
-def _audit_commercial(groupes, f, noms, totaux):
+def _audit_commercial(groupes, f, noms, totaux, ids_filtres):
     """Bilan du commercial filtré, ou None si aucun commercial n'est choisi."""
     if not f["user_id"].isdigit():
         return None
     user_id = int(f["user_id"])
-    a = doublons.audit_commercial(groupes, user_id)
+    a = doublons.audit_commercial(groupes, user_id, ids_filtres)
     campagnes = dict(Campagne.objects.values_list("id", "nom"))
     resaisies = a["resaisies_autre"] + a["resaisies_meme"]
     total = totaux.get(user_id, 0)

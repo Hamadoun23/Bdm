@@ -241,18 +241,20 @@ def tranche_delai(jours):
     return None
 
 
-def audit_commercial(groupes, user_id):
+def audit_commercial(groupes, user_id, ids_filtres):
     """
-    Bilan d'un commercial sur tous ses doublons, quels que soient les filtres
-    d'affichage : ce qu'il a ressaisi, et ce que les autres lui ont ressaisi.
+    Bilan d'un commercial : ce qu'il a ressaisi, et ce que les autres lui ont
+    ressaisi. Seules comptent ses fiches du périmètre filtré (campagne,
+    période, agence…) ; les filtres propres aux re-saisies (cas, délai) n'y
+    entrent pas, pour que les cases du bilan restent comparables.
     """
     fait_autre, fait_meme, subi = [], [], []
     for g in groupes:
         premiere = g.fiches[0]
         for f in g.fiches[1:]:
-            if f.user_id == user_id:
+            if f.user_id == user_id and f.id in ids_filtres:
                 (fait_autre if f.statut == RESAISIE_AUTRE else fait_meme).append(f)
-            elif premiere.user_id == user_id:
+            elif premiere.user_id == user_id and premiere.id in ids_filtres and f.user_id != user_id:
                 subi.append(f)
 
     def compter(fiches, cle):

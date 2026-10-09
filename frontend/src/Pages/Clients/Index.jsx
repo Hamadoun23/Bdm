@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
-import { Search, Download, Users, UserCheck, Copy, AlertTriangle, Repeat } from 'lucide-react';
+import { Download, Users, UserCheck, Copy, AlertTriangle, Repeat } from 'lucide-react';
 import AppLayout from '@/Layouts/AppLayout';
 import { Card, CardHeader, CardTitle } from '@/Components/ui/Card';
 import Badge from '@/Components/ui/Badge';
@@ -441,8 +441,11 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
     const set = (cle) => (valeur) => setF((p) => ({ ...p, [cle]: valeur }));
 
     const nettoyer = (valeurs) => Object.fromEntries(Object.entries(valeurs).filter(([, v]) => v !== ''));
+    // Derniers filtres envoyés : évite de renvoyer la même requête.
+    const dernier = useRef(JSON.stringify(nettoyer(actuels)));
 
     function envoyer(valeurs, defiler = false) {
+        dernier.current = JSON.stringify(nettoyer(valeurs));
         router.get(route('clients.index'), nettoyer(valeurs), {
             preserveState: true,
             preserveScroll: true,
@@ -454,10 +457,13 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
         });
     }
 
-    function appliquer(e) {
-        e?.preventDefault();
-        envoyer(f);
-    }
+    // Les filtres s'appliquent d'eux-mêmes ; le délai laisse finir la saisie
+    // d'un nom ou d'une date avant d'interroger le serveur.
+    useEffect(() => {
+        if (JSON.stringify(nettoyer(f)) === dernier.current) return undefined;
+        const minuterie = setTimeout(() => envoyer(f), 450);
+        return () => clearTimeout(minuterie);
+    }, [f]);
 
     // Clic sur une barre du tableau de bord ou sur un commercial du classement.
     function filtrer(changement) {
@@ -468,7 +474,7 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
 
     function reinitialiser() {
         setF(VIDE);
-        router.get(route('clients.index'));
+        envoyer(VIDE);
     }
 
     const actifs = Object.values(filters).some(Boolean);
@@ -489,7 +495,7 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
         >
             <Head title="Clients" />
 
-            <form onSubmit={appliquer} className="mb-5 space-y-3">
+            <form onSubmit={(e) => e.preventDefault()} className="mb-5 space-y-3">
                 <div className="flex flex-wrap items-end gap-3">
                     <Champ label="Recherche" className="w-full max-w-xs">
                         <Input
@@ -576,8 +582,7 @@ export default function ClientsIndex({ clients, doublons, tableauDeBord, filters
                 </div>
 
                 <div className="flex gap-2">
-                    <Button type="submit"><Search size={14} /> Filtrer</Button>
-                    {actifs && <Button type="button" variant="ghost" onClick={reinitialiser}>Réinitialiser</Button>}
+                    {actifs && <Button type="button" variant="outline" size="sm" onClick={reinitialiser}>Réinitialiser les filtres</Button>}
                 </div>
             </form>
 

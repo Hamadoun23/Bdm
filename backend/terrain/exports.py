@@ -419,8 +419,10 @@ def clients_doublons_export(request):
                 meme_campagne,
             ])
 
-    resaisies = [x for g in groupes for x in g.fiches if x.cible]
-    classement = doublons.classement_commerciaux(resaisies, totaux_par_commercial(base))
+    resaisies = [x for g in groupes for x in g.fiches if x.cible and x.id in ids_filtres]
+    classement = doublons.classement_commerciaux(
+        resaisies, totaux_par_commercial(base.filter(pk__in=ids_filtres))
+    )
     lignes_commerciaux = [
         [
             noms.get(c["user_id"], ""), c["total_fiches"], c["autre"], c["meme"],
