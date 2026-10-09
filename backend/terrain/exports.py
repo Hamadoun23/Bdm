@@ -65,14 +65,14 @@ def ventes_export_excel(request):
         partenaire,
     )
 
-    agence_id = None
     if user.is_commercial:
-        ventes = ventes.filter(user_id=user.id)
-        agence_id = int(user.agence_id) if user.agence_id else None
-
-    ventes = services.restreindre_aux_campagnes_vente(
-        ventes, agence_id, partenaire.id if partenaire else None
-    ).order_by("-created_at", "-id")
+        en_cours = services.campagnes_en_cours_commercial(user, TypeCampagne.VENTE_CARTE)
+        ventes = ventes.filter(user_id=user.id, campagne_id__in=[c.id for c in en_cours])
+    else:
+        ventes = services.restreindre_aux_campagnes_vente(
+            ventes, None, partenaire.id if partenaire else None
+        )
+    ventes = ventes.order_by("-created_at", "-id")
 
     # Le commercial ne voit pas les colonnes qui désignent d'autres vendeurs.
     avec_commercial = user.is_admin or user.is_direction
@@ -175,14 +175,11 @@ def totaux_fiches_telephoniques(rapports):
 def telephonique_export_excel(request):
     user = request.user
     agence_id = int(user.agence_id) if user.agence_id else None
+    en_cours = services.campagnes_en_cours_commercial(user, TypeCampagne.VENTE_CARTE)
     rapports = list(
-        services.restreindre_aux_campagnes_vente(
-            TelephoniqueRapport.objects.select_related("user__agence", "campagne").filter(
-                user_id=user.id
-            ),
-            agence_id,
-            user.partenaire_id,
-        ).order_by("-date_rapport", "-id")
+        TelephoniqueRapport.objects.select_related("user__agence", "campagne")
+        .filter(user_id=user.id, campagne_id__in=[c.id for c in en_cours])
+        .order_by("-date_rapport", "-id")
     )
 
     meta = [

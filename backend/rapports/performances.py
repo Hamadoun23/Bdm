@@ -91,9 +91,10 @@ def _resoudre_campagne_filtre(request, user):
         return None
     if user.is_admin or user.is_direction:
         return campagne
-    if user.is_commercial_ou_telephonique and campagne.concerne_agence(
-        int(user.agence_id) if user.agence_id else None
-    ):
+    # Un commercial ne peut choisir qu'une campagne en cours.
+    if user.is_commercial_ou_telephonique and campagne.id in {
+        c.id for c in Campagne.actives_pour_commercial(user)
+    }:
         return campagne
     return None
 
@@ -123,7 +124,13 @@ def _contexte_performance(request):
         type_campagne = campagne_filtre.type
         campagnes_du_type = [campagne_filtre]
     else:
-        stats = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
+        # Le commercial ne voit que les campagnes en cours ; admin et
+        # direction se rabattent sur la dernière campagne s'il n'y en a pas.
+        stats = (
+            list(Campagne.actives_pour_commercial(user))
+            if user.is_commercial_ou_telephonique
+            else Campagne.campagnes_pour_stats(agence_id, partenaire_id)
+        )
         vente = [c for c in stats if c.type == TypeCampagne.VENTE_CARTE]
         enrolement = [c for c in stats if c.type == TypeCampagne.ENROLEMENT_APP]
         if vente:
@@ -474,8 +481,12 @@ def index(request):
         if est_enrolement
         else (
             contexte["campagneRef"]
-            or Campagne.campagne_pour_performances(
-                contexte["agenceId"], contexte.get("partenaireId")
+            or (
+                None
+                if vue_commerciale
+                else Campagne.campagne_pour_performances(
+                    contexte["agenceId"], contexte.get("partenaireId")
+                )
             )
         )
     )
@@ -600,6 +611,9 @@ def _campagnes_select(agence_id, user, partenaire=None):
 
     if user.is_admin or user.is_direction:
         campagnes = qs
+    elif user.is_commercial_ou_telephonique:
+        actives = {c.id for c in Campagne.actives_pour_commercial(user)}
+        campagnes = qs.filter(id__in=actives)
     elif agence_id:
         from django.db.models import Q
 

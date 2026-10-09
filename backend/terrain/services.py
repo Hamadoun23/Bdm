@@ -50,6 +50,29 @@ def restreindre_aux_campagnes_vente(queryset, agence_id=None, partenaire_id=None
     return queryset.filter(campagne_id__in=ids) if ids else queryset.none()
 
 
+def campagnes_en_cours_commercial(user, type_campagne=None):
+    """
+    Campagnes que l'espace d'un commercial affiche : uniquement celles en
+    cours de son périmètre.
+
+    Une campagne terminée disparaît de son espace — ventes, enrôlements,
+    reporting, tableau de bord, performances — même quand une nouvelle
+    campagne commence : il ne revoit jamais ses saisies passées. L'admin et
+    la direction, eux, gardent tout l'historique.
+    """
+    campagnes = list(Campagne.actives_pour_commercial(user))
+    if type_campagne is not None:
+        campagnes = [c for c in campagnes if c.type == type_campagne]
+    return campagnes
+
+
+def libelle_campagnes(campagnes):
+    if not campagnes:
+        return "Aucune campagne en cours"
+    noms = [f"« {c.nom} »" for c in campagnes]
+    return noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
+
+
 def libelle_stats(agence_id=None, type_campagne=None, partenaire_id=None):
     campagnes = campagnes_pour_stats(agence_id, type_campagne, partenaire_id)
     if not campagnes:

@@ -89,14 +89,20 @@ def ventes_index(request):
 
     agence_id = None
     if user.is_commercial:
-        ventes = ventes.filter(user_id=user.id)
-        agence_id = int(user.agence_id) if user.agence_id else None
-    # Admin et direction voient toutes les ventes du client courant, bornées au
-    # périmètre de campagne.
-
-    ventes = services.restreindre_aux_campagnes_vente(
-        ventes, agence_id, partenaire.id if partenaire else None
-    ).order_by("-created_at", "-id")
+        # Le commercial ne voit que les campagnes en cours : rien après la fin.
+        en_cours = services.campagnes_en_cours_commercial(user, TypeCampagne.VENTE_CARTE)
+        ventes = ventes.filter(user_id=user.id, campagne_id__in=[c.id for c in en_cours])
+        libelle = services.libelle_campagnes(en_cours)
+    else:
+        # Admin et direction voient toutes les ventes du client courant,
+        # bornées au périmètre de campagne.
+        ventes = services.restreindre_aux_campagnes_vente(
+            ventes, agence_id, partenaire.id if partenaire else None
+        )
+        libelle = services.libelle_stats(
+            agence_id, TypeCampagne.VENTE_CARTE, partenaire.id if partenaire else None
+        )
+    ventes = ventes.order_by("-created_at", "-id")
 
     def formater(v):
         return {
@@ -117,10 +123,7 @@ def ventes_index(request):
         request,
         "Ventes/Index",
         {
-            "libelleStatsCampagne": services.libelle_stats(
-                agence_id, TypeCampagne.VENTE_CARTE,
-                partenaire.id if partenaire else None,
-            ),
+            "libelleStatsCampagne": libelle,
             "canManage": bool(user.is_commercial),
             "canSeeCommercial": bool(user.is_admin or user.is_direction),
             "aDesAgences": partenaire is None or partenaire.a_des_agences,
@@ -472,7 +475,10 @@ def enrolements_index(request):
         partenaire,
     )
     if user.is_commercial:
-        enrolements = enrolements.filter(user_id=user.id)
+        en_cours = services.campagnes_en_cours_commercial(user, TypeCampagne.ENROLEMENT_APP)
+        enrolements = enrolements.filter(
+            user_id=user.id, campagne_id__in=[c.id for c in en_cours]
+        )
     enrolements = enrolements.order_by("-created_at", "-id")
 
     def formater(e):
@@ -1446,10 +1452,9 @@ def versement_accuser(request, versement):
 def telephonique_index(request):
     user = request.user
     agence_id = int(user.agence_id) if user.agence_id else None
-    base = services.restreindre_aux_campagnes_vente(
-        TelephoniqueRapport.objects.filter(user_id=user.id),
-        agence_id,
-        user.partenaire_id,
+    en_cours = services.campagnes_en_cours_commercial(user, TypeCampagne.VENTE_CARTE)
+    base = TelephoniqueRapport.objects.filter(
+        user_id=user.id, campagne_id__in=[c.id for c in en_cours]
     )
 
     def formater(r):
@@ -1471,9 +1476,7 @@ def telephonique_index(request):
         request,
         "Commercial/Telephonique/Index",
         {
-            "libelleStatsCampagne": services.libelle_stats(
-                agence_id, TypeCampagne.VENTE_CARTE, user.partenaire_id
-            ),
+            "libelleStatsCampagne": services.libelle_campagnes(en_cours),
             "totauxListe": totaux_telephonique(base),
             "rapports": paginer(
                 request, base.order_by("-date_rapport", "-id"), 20, formater

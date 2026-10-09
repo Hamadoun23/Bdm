@@ -246,7 +246,9 @@ def _dashboard_commercial(request, user):
     vente_ouvertes = [c for c in engagees if c.type == TypeCampagne.VENTE_CARTE]
     enrolement_ouvertes = [c for c in engagees if c.type == TypeCampagne.ENROLEMENT_APP]
 
-    stats = Campagne.campagnes_pour_stats(agence_id, partenaire_id)
+    # Uniquement les campagnes en cours : une fois la campagne finie, le
+    # commercial ne revoit plus ses chiffres, même si une autre commence.
+    stats = list(Campagne.actives_pour_commercial(user))
 
     campagnes_vente = [c for c in stats if c.type == TypeCampagne.VENTE_CARTE]
     ids_vente = [c.id for c in campagnes_vente]

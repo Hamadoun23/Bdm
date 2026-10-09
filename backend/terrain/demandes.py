@@ -210,7 +210,10 @@ def demandes_refuser(request, demande):
 @role_required(Role.COMMERCIAL)
 @http_methods("GET", "HEAD")
 def mes_demandes(request):
-    demandes = DemandeClientExistant.objects.filter(user=request.user).select_related(
+    en_cours = services.campagnes_en_cours_commercial(request.user)
+    demandes = DemandeClientExistant.objects.filter(
+        user=request.user, campagne_id__in=[c.id for c in en_cours]
+    ).select_related(
         "user__agence", "type_carte", "campagne", "traite_par"
     )
     return render(
